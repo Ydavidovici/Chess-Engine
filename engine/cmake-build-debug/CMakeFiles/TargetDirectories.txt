@@ -1,0 +1,2 @@
+/Users/yaakovdavidovici/CLionProjects/Chess-Engine/engine/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/yaakovdavidovici/CLionProjects/Chess-Engine/engine/cmake-build-debug/CMakeFiles/rebuild_cache.dir
