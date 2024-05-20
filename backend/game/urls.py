@@ -1,10 +1,10 @@
 # backend/game/urls.py
 
-from django.urls import path
-from .views import create_game, make_move, game_status
+from flask import Blueprint
+from .views import start_game, make_move, game_status
 
-urlpatterns = [
-    path('create/', create_game, name='create_game'),
-    path('move/<int:game_id>/', make_move, name='make_move'),
-    path('status/<int:game_id>/', game_status, name='game_status'),
-]
+game_bp = Blueprint('game', __name__)
+
+game_bp.route('/start/', methods=['POST'])(start_game)
+game_bp.route('/move/', methods=['POST'])(make_move)
+game_bp.route('/status/<int:game_id>/', methods=['GET'])(game_status)

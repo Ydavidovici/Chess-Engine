@@ -1,8 +1,8 @@
 # backend/analysis/urls.py
 
-from django.urls import path
+from flask import Blueprint
 from .views import analyze_game
 
-urlpatterns = [
-    path('analyze/<int:game_id>/', analyze_game, name='analyze_game'),
-]
+analysis_bp = Blueprint('analysis', __name__)
+
+analysis_bp.route('/analyze/<int:game_id>', methods=['GET'])(analyze_game)

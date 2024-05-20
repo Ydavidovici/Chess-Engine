@@ -1,8 +1,12 @@
 # backend/analysis/models.py
 
-from django.db import models
+from flask_sqlalchemy import SQLAlchemy
 
-class Analysis(models.Model):
-    game = models.ForeignKey('game.Game', on_delete=models.CASCADE)
-    analysis_data = models.JSONField()
-    created_at = models.DateTimeField(auto_now_add=True)
+db = SQLAlchemy()
+
+class Analysis(db.Model):
+    __tablename__ = 'analysis'
+    id = db.Column(db.Integer, primary_key=True)
+    game_id = db.Column(db.Integer, db.ForeignKey('games.game_id'))
+    analysis_data = db.Column(db.JSON)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())

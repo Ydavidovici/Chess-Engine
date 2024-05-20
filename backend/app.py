@@ -1,12 +1,20 @@
-# backend/game/views.py
+# backend/app.py
 
-from flask import jsonify, request
-from .models import db, Game, GameMove
+from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
+from models import db, PlayerStats, Game, GameMove
 from game_manager import GameManager
 from datetime import datetime
 
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://your_username:your_password@localhost/chess_db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
+
+# Initialize the game manager with your Lichess API token
 game_manager = GameManager('your_lichess_token')
 
+@app.route('/start_game', methods=['POST'])
 def start_game():
     data = request.get_json()
     player1_id = data.get('player1_id')
@@ -19,6 +27,7 @@ def start_game():
         'board': game_manager.eng.getBoardState()
     }), 201
 
+@app.route('/make_move', methods=['POST'])
 def make_move():
     data = request.get_json()
     game_id = data.get('game_id')
@@ -31,6 +40,7 @@ def make_move():
 
     return jsonify({'board': board_state}), 200
 
+@app.route('/game_status/<int:game_id>', methods=['GET'])
 def game_status(game_id):
     try:
         status = game_manager.get_game_status(game_id)
@@ -38,3 +48,6 @@ def game_status(game_id):
         return jsonify({'error': str(e)}), 404
 
     return jsonify(status), 200
+
+if __name__ == '__main__':
+    app.run(debug=True)

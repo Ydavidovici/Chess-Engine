@@ -1,8 +1,10 @@
 # backend/user/urls.py
 
-from django.urls import path
-from .views import user_profile
+from flask import Blueprint
+from .views import register, login, logout
 
-urlpatterns = [
-    path('profile/', user_profile, name='user_profile'),
-]
+user_bp = Blueprint('user', __name__)
+
+user_bp.route('/register/', methods=['POST'])(register)
+user_bp.route('/login/', methods=['POST'])(login)
+user_bp.route('/logout/', methods=['POST'])(logout)

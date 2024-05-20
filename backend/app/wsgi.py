@@ -1,7 +1,6 @@
 # backend/app/wsgi.py
 
-import os
-from django.core.wsgi import get_wsgi_application
+from app import app
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'app.settings')
-application = get_wsgi_application()
+if __name__ == "__main__":
+    app.run()
