@@ -1,6 +1,6 @@
 # backend/game_manager.py
 
-import engine  # Import the C++ engine bindings
+from engine import Engine
 from lichess_api import LichessAPI
 from models import db, PlayerStats, Game, GameMove
 from datetime import datetime
@@ -8,7 +8,7 @@ from datetime import datetime
 class GameManager:
     def __init__(self, token):
         self.lichess_api = LichessAPI(token)
-        self.eng = engine.Engine()
+        self.eng = Engine()
         self.eng.initialize()
 
     def start_game(self, player1_id, player2_id):

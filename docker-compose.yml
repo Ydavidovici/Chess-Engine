@@ -4,27 +4,24 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
     ports:
       - "5000:5000"
     environment:
       - FLASK_APP=backend/app.py
       - FLASK_RUN_HOST=0.0.0.0
       - SQLALCHEMY_DATABASE_URI=postgresql://yaakov:Ydavidovici35@db:5432/chess_db
-      - PIP_NO_SSL_VERIFY=1
     depends_on:
       - db
 
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: frontend/Dockerfile
     ports:
-      - "3005:3000"
+      - "3000:3000"
     environment:
       - NODE_ENV=development
-    working_dir: /app/frontend
-    command: ["npm", "run", "dev"]
 
   db:
     image: postgres:13

@@ -11,20 +11,24 @@ const PlayerForm = ({ onStartGame }) => {
     };
 
     return (
-        <div>
+        <div className="flex flex-col items-center space-y-2">
             <input
                 type="text"
                 placeholder="Player 1 ID"
                 value={player1Id}
                 onChange={(e) => setPlayer1Id(e.target.value)}
+                className="border p-2"
             />
             <input
                 type="text"
                 placeholder="Player 2 ID"
                 value={player2Id}
                 onChange={(e) => setPlayer2Id(e.target.value)}
+                className="border p-2"
             />
-            <button onClick={handleStartGame}>Start Game</button>
+            <button onClick={handleStartGame} className="bg-green-500 text-white px-4 py-2 rounded">
+                Start Game
+            </button>
         </div>
     );
 };

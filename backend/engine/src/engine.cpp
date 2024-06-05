@@ -1,5 +1,3 @@
-// backend/engine/src/engine.cpp
-
 #include "engine.h"
 
 Engine::Engine() : whitePlayer(Player::WHITE), blackPlayer(Player::BLACK) {}

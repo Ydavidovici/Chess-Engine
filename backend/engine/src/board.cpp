@@ -1,5 +1,3 @@
-// backend/engine/src/board.cpp
-
 #include "board.h"
 #include <iostream>
 
@@ -38,4 +36,17 @@ void Board::printBoard() {
         }
         std::cout << std::endl;
     }
+}
+
+std::string Board::getBoardState() const {
+    // Implement the method to return the board state as a string
+    std::string state;
+    for (const auto& row : board) {
+        for (const auto& piece : row) {
+            state += (piece ? piece->getSymbol() : '.');
+            state += ' ';
+        }
+        state += '\n';
+    }
+    return state;
 }

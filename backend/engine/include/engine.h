@@ -1,8 +1,7 @@
-// backend/engine/include/engine.h
-
 #ifndef ENGINE_H
 #define ENGINE_H
 
+#include <string>
 #include "board.h"
 #include "evaluator.h"
 #include "player.h"

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000'; // Adjust if your backend runs on a different port
+const API_URL = 'http://localhost:5000';
 
 export const startGame = async (player1_id, player2_id) => {
     const response = await axios.post(`${API_URL}/start_game`, { player1_id, player2_id });
