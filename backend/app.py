@@ -1,11 +1,11 @@
-# backend/app.py
-
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from models import db, PlayerStats, Game, GameMove
 from game_manager import GameManager
 from datetime import datetime
 import os
+import sys
+print(sys.path)
 
 app = Flask(__name__)
 
