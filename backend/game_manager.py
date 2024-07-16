@@ -1,15 +1,12 @@
-# backend/game_manager.py
-
-from engine import Engine
 from lichess_api import LichessAPI
 from models import db, PlayerStats, Game, GameMove
 from datetime import datetime
+import chess_engine  # Import the new chess engine module
 
 class GameManager:
     def __init__(self, token):
         self.lichess_api = LichessAPI(token)
-        self.eng = Engine()
-        self.eng.initialize()
+        self.eng = chess_engine.initialize_engine()
 
     def start_game(self, player1_id, player2_id):
         new_game = Game(
@@ -20,7 +17,7 @@ class GameManager:
         db.session.add(new_game)
         db.session.commit()
 
-        self.eng.initialize()
+        self.eng = chess_engine.initialize_engine()
 
         return new_game
 
@@ -32,14 +29,14 @@ class GameManager:
         # Replay all moves to reach the current state
         moves = GameMove.query.filter_by(game_id=game_id).order_by(GameMove.move_number).all()
         for game_move in moves:
-            self.eng.makeMove(game_move.move_notation)
+            chess_engine.make_move(self.eng, game_move.move_notation)
 
-        self.eng.makeMove(move)
+        chess_engine.make_move(self.eng, move)
         new_move = GameMove(game_id=game_id, move_number=len(moves) + 1, move_notation=move)
         db.session.add(new_move)
         db.session.commit()
 
-        return self.eng.getBoardState()
+        return chess_engine.get_board_state(self.eng)
 
     def get_game_status(self, game_id):
         game = Game.query.get(game_id)
@@ -49,13 +46,13 @@ class GameManager:
         # Replay all moves to reach the current state
         moves = GameMove.query.filter_by(game_id=game_id).order_by(GameMove.move_number).all()
         for game_move in moves:
-            self.eng.makeMove(game_move.move_notation)
+            chess_engine.make_move(self.eng, game_move.move_notation)
 
         return {
             'game_id': game.game_id,
             'start_time': game.start_time,
             'end_time': game.end_time,
             'result': game.result,
-            'board': self.eng.getBoardState(),
+            'board': chess_engine.get_board_state(self.eng),
             'moves': [{'move_number': m.move_number, 'move_notation': m.move_notation} for m in moves]
         }

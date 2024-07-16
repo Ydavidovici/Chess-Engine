@@ -1,13 +1,9 @@
-# backend/engine/CMakeLists.txt
-
 cmake_minimum_required(VERSION 3.10)
 project(ChessEngine)
 
-find_package(pybind11 REQUIRED)
+include_directories(${CMAKE_SOURCE_DIR}/backend/engine/include)
 
-include_directories(include)
-
-add_library(engine SHARED
+set(SOURCES
         src/bindings.cpp
         src/board.cpp
         src/engine.cpp
@@ -17,4 +13,12 @@ add_library(engine SHARED
         src/player.cpp
 )
 
-target_link_libraries(engine PRIVATE pybind11::module)
+# Find Python
+find_package(Python3 COMPONENTS Development REQUIRED)
+
+# Create the shared library for the Python module
+add_library(chess_engine MODULE ${SOURCES})
+set_target_properties(chess_engine PROPERTIES PREFIX "" SUFFIX ".so")
+
+# Link against Python libraries
+target_link_libraries(chess_engine PRIVATE Python3::Python)

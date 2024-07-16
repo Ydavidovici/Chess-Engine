@@ -5,6 +5,7 @@ from game_manager import GameManager
 from datetime import datetime
 import os
 import sys
+import chess_engine  # Import the new chess engine module
 print(sys.path)
 
 app = Flask(__name__)
@@ -30,7 +31,7 @@ def start_game():
         new_game = game_manager.start_game(player1_id, player2_id)
         return jsonify({
             'game_id': new_game.game_id,
-            'board': game_manager.eng.getBoardState()
+            'board': chess_engine.get_board_state(new_game.board)
         }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
