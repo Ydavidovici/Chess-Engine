@@ -1,15 +1,14 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS  # Import CORS
+from flask_cors import CORS
 from models import db, PlayerStats, Game, GameMove
 from game_manager import GameManager
 from datetime import datetime
 import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS
+CORS(app)
 
-# Load database URI and Lichess token from environment variables
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://yaakov:Ydavidovici35@localhost/chess_db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
@@ -27,10 +26,10 @@ def start_game():
         return jsonify({'error': 'Player IDs are required'}), 400
 
     try:
-        new_game = game_manager.start_game(player1_id, player2_id)
+        new_game, initial_fen = game_manager.start_game(player1_id, player2_id)
         return jsonify({
             'game_id': new_game.game_id,
-            'board': game_manager.eng.getBoardState()
+            'fen': initial_fen
         }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -45,8 +44,8 @@ def make_move():
         return jsonify({'error': 'Game ID and move are required'}), 400
 
     try:
-        board_state = game_manager.make_move(game_id, move)
-        return jsonify({'board': board_state}), 200
+        new_fen = game_manager.make_move(game_id, move)
+        return jsonify({'fen': new_fen}), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 404
     except Exception as e:

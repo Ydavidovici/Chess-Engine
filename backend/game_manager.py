@@ -19,7 +19,7 @@ class GameManager:
 
         self.eng = chess_engine.initialize_engine()
 
-        return new_game
+        return new_game, chess_engine.get_board_state(self.eng)
 
     def make_move(self, game_id, move):
         game = Game.query.get(game_id)
