@@ -1,39 +1,32 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useRouter } from 'next/router';
-import { getGameStatus, makeMove } from '../../services/api';
-import Board from '../../components/Board';
-import GameControls from '../../components/GameControls';
+import ChessboardComponent from '../../components/Chessboard';
 
-const Game = () => {
+export default function Game() {
     const router = useRouter();
     const { id } = router.query;
-    const [game, setGame] = useState(null);
+    const [board, setBoard] = useState('');
 
     useEffect(() => {
         if (id) {
-            fetchGameStatus(id);
+            getGameStatus();
         }
     }, [id]);
 
-    const fetchGameStatus = async (gameId) => {
-        const gameStatus = await getGameStatus(gameId);
-        setGame(gameStatus);
+    const getGameStatus = async () => {
+        try {
+            const response = await axios.get(`http://127.0.0.1:5000/game_status/${id}`);
+            setBoard(response.data.board);
+        } catch (error) {
+            console.error('Error fetching game status:', error);
+        }
     };
-
-    const handleMakeMove = async (gameId, move) => {
-        const gameState = await makeMove(gameId, move);
-        setGame({ ...game, board: gameState.board });
-    };
-
-    if (!game) return <div>Loading...</div>;
 
     return (
-        <div>
-            <h1>Game ID: {game.game_id}</h1>
-            <Board board={game.board} />
-            <GameControls gameId={game.game_id} onMakeMove={handleMakeMove} />
+        <div className="container mx-auto">
+            <h1 className="text-3xl font-bold">Game {id}</h1>
+            <ChessboardComponent />
         </div>
     );
-};
-
-export default Game;
+}
