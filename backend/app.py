@@ -1,14 +1,13 @@
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS  # Import CORS
 from models import db, PlayerStats, Game, GameMove
 from game_manager import GameManager
 from datetime import datetime
 import os
-import sys
-import chess_engine  # Import the new chess engine module
-print(sys.path)
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS
 
 # Load database URI and Lichess token from environment variables
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI', 'postgresql://yaakov:Ydavidovici35@localhost/chess_db')
@@ -31,7 +30,7 @@ def start_game():
         new_game = game_manager.start_game(player1_id, player2_id)
         return jsonify({
             'game_id': new_game.game_id,
-            'board': chess_engine.get_board_state(new_game.board)
+            'board': game_manager.eng.getBoardState()
         }), 201
     except Exception as e:
         return jsonify({'error': str(e)}), 500
