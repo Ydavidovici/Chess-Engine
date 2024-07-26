@@ -18,8 +18,9 @@ class GameManager:
         db.session.commit()
 
         self.eng = chess_engine.initialize_engine()
+        initial_fen = chess_engine.get_board_state(self.eng)
 
-        return new_game, chess_engine.get_board_state(self.eng)
+        return new_game, initial_fen
 
     def make_move(self, game_id, move):
         game = Game.query.get(game_id)

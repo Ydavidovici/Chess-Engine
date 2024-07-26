@@ -1,16 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
-project(ChessEngine)
+project(ChessEngineEngine)
 
 include_directories(${CMAKE_SOURCE_DIR}/backend/engine/include)
 
 set(SOURCES
-        src/bindings.cpp
-        src/board.cpp
-        src/engine.cpp
-        src/evaluator.cpp
-        src/move.cpp
-        src/piece.cpp
-        src/player.cpp
+    src/bindings.cpp
+    src/board.cpp
+    src/engine.cpp
+    src/evaluator.cpp
+    src/move.cpp
+    src/piece.cpp
+    src/player.cpp
 )
 
 # Find Python
