@@ -2,18 +2,19 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 import os
 from dotenv import load_dotenv
+import pg8000
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URI').replace('postgresql', 'postgresql+pg8000')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 def init_db():
     try:
-        connection_uri = os.getenv('DATABASE_URI')
+        connection_uri = os.getenv('DATABASE_URI').replace('postgresql', 'postgresql+pg8000')
         print(f"Connecting to database using URI: {connection_uri}")
 
         result = db.engine.execute("SELECT current_database()")
@@ -48,11 +49,14 @@ def init_db():
 
     except Exception as e:
         print(f"An error occurred while initializing the database: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
     with app.app_context():
         print("Creating all tables defined in the models...")
         db.create_all()  # Ensure the tables are created with the correct schema
+        db.session.commit()  # Commit changes
         print("All tables created successfully.")
         init_db()
         print("Database initialization complete.")
