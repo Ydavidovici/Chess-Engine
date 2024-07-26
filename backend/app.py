@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -7,6 +8,7 @@ from models import db, PlayerStats, Game, GameMove
 from game_manager import GameManager
 from datetime import datetime
 from dotenv import load_dotenv
+from init_db import init_db
 
 # Load environment variables from .env file
 load_dotenv()
@@ -37,6 +39,14 @@ db.init_app(app)
 lichess_token = os.getenv('LICHESS_TOKEN')
 game_manager = GameManager(lichess_token)
 
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+# Initialize the database if needed
+with app.app_context():
+    init_db()
+
 @app.route('/start_game', methods=['POST'])
 def start_game():
     data = request.get_json()
@@ -53,6 +63,7 @@ def start_game():
             'fen': initial_fen
         }), 201
     except Exception as e:
+        logger.exception("Error starting game")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/make_move', methods=['POST'])
@@ -68,8 +79,10 @@ def make_move():
         new_fen = game_manager.make_move(game_id, move)
         return jsonify({'fen': new_fen}), 200
     except ValueError as e:
+        logger.exception("Error making move")
         return jsonify({'error': str(e)}), 404
     except Exception as e:
+        logger.exception("Error making move")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/game_status/<int:game_id>', methods=['GET'])
@@ -78,8 +91,10 @@ def game_status(game_id):
         status = game_manager.get_game_status(game_id)
         return jsonify(status), 200
     except ValueError as e:
+        logger.exception("Error fetching game status")
         return jsonify({'error': str(e)}), 404
     except Exception as e:
+        logger.exception("Error fetching game status")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
