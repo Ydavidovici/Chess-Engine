@@ -8,7 +8,6 @@ from models import db, PlayerStats, Game, GameMove
 from game_manager import GameManager
 from datetime import datetime
 from dotenv import load_dotenv
-from init_db import init_db
 
 # Load environment variables from .env file
 load_dotenv()
@@ -50,14 +49,14 @@ with app.app_context():
 @app.route('/start_game', methods=['POST'])
 def start_game():
     data = request.get_json()
-    player1_id = data.get('player1_id')
-    player2_id = data.get('player2_id')
+    player1_name = data.get('player1_name')
+    player2_name = data.get('player2_name')
 
-    if not player1_id or not player2_id:
-        return jsonify({'error': 'Player IDs are required'}), 400
+    if not player1_name or not player2_name:
+        return jsonify({'error': 'Player names are required'}), 400
 
     try:
-        new_game, initial_fen = game_manager.start_game(player1_id, player2_id)
+        new_game, initial_fen = game_manager.start_game(player1_name, player2_name)
         return jsonify({
             'game_id': new_game.game_id,
             'fen': initial_fen

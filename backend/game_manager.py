@@ -8,11 +8,23 @@ class GameManager:
         self.lichess_api = LichessAPI(token)
         self.eng = chess_engine.initialize_engine()
 
-    def start_game(self, player1_id, player2_id):
+    def start_game(self, player1_name, player2_name):
+        player1 = PlayerStats.query.filter_by(name=player1_name).first()
+        if not player1:
+            player1 = PlayerStats(name=player1_name)
+            db.session.add(player1)
+            db.session.commit()
+
+        player2 = PlayerStats.query.filter_by(name=player2_name).first()
+        if not player2:
+            player2 = PlayerStats(name=player2_name)
+            db.session.add(player2)
+            db.session.commit()
+
         new_game = Game(
             start_time=datetime.utcnow(),
-            player1_id=player1_id,
-            player2_id=player2_id
+            player1_name=player1_name,
+            player2_name=player2_name
         )
         db.session.add(new_game)
         db.session.commit()
@@ -54,6 +66,8 @@ class GameManager:
             'start_time': game.start_time,
             'end_time': game.end_time,
             'result': game.result,
+            'player1_name': game.player1_name,
+            'player2_name': game.player2_name,
             'board': chess_engine.get_board_state(self.eng),
             'moves': [{'move_number': m.move_number, 'move_notation': m.move_notation} for m in moves]
         }

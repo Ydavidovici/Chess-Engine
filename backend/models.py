@@ -1,5 +1,3 @@
-# backend/models.py
-
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -7,7 +5,7 @@ db = SQLAlchemy()
 class PlayerStats(db.Model):
     __tablename__ = 'player_stats'
     player_id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(100), nullable=False, unique=True)
     wins = db.Column(db.Integer, default=0)
     losses = db.Column(db.Integer, default=0)
     draws = db.Column(db.Integer, default=0)
@@ -18,8 +16,8 @@ class Game(db.Model):
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime)
     result = db.Column(db.String)
-    player1_id = db.Column(db.Integer, db.ForeignKey('player_stats.player_id'))
-    player2_id = db.Column(db.Integer, db.ForeignKey('player_stats.player_id'))
+    player1_name = db.Column(db.String(100), nullable=False)
+    player2_name = db.Column(db.String(100), nullable=False)
 
 class GameMove(db.Model):
     __tablename__ = 'game_moves'
