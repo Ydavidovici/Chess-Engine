@@ -1,22 +1,29 @@
-// backend/engine/src/engine.cpp
-
 #include "engine.h"
 #include "player.h"
+#include <iostream>
 
-Engine::Engine() : whitePlayer(Player::WHITE), blackPlayer(Player::BLACK) {}
+Engine::Engine()
+        : whitePlayer(Player::Color::WHITE),  // Correctly scoped Color enum
+          blackPlayer(Player::Color::BLACK)  // Correctly scoped Color enum
+{
+    board.initializeBoard();
+}
+
 
 void Engine::initialize() {
     board.initializeBoard();
 }
 
-bool Engine::makeMove(const std::string& move) {
-    // For simplicity, assume the move string is in algebraic notation and is valid
-    // Implement move validation and application logic here
-    return true;
-}
-
 std::string Engine::getBoardState() const {
     return board.getBoardState();
+}
+
+bool Engine::makeMove(const Move& move) {
+    if (!board.makeMove(move.getMove())) {
+        std::cerr << "Invalid move: " << move.getMove() << std::endl;
+        return false;
+    }
+    return true;
 }
 
 int Engine::evaluateBoard() const {

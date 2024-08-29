@@ -1,5 +1,3 @@
-// backend/engine/src/piece.cpp
-
 #include "piece.h"
 
 Piece::Piece(Type type, Color color) : type(type), color(color) {}
@@ -14,4 +12,13 @@ char Piece::getSymbol() const {
         case KING: return color == WHITE ? 'K' : 'k';
         default: return '?';
     }
+}
+
+// New methods to get type and color
+Piece::Type Piece::getType() const {
+    return type;
+}
+
+Piece::Color Piece::getColor() const {
+    return color;
 }

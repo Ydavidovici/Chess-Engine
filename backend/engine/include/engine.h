@@ -4,21 +4,22 @@
 #include <string>
 #include "board.h"
 #include "evaluator.h"
+#include "move.h"
 #include "player.h"
 
 class Engine {
 public:
     Engine();
     void initialize();
-    bool makeMove(const std::string& move);
     std::string getBoardState() const;
+    bool makeMove(const Move& move);
     int evaluateBoard() const;
 
 private:
     Board board;
     Evaluator evaluator;
-    Player whitePlayer;
-    Player blackPlayer;
+    Player whitePlayer; // Player for the white pieces
+    Player blackPlayer; // Player for the black pieces
 };
 
 #endif // ENGINE_H
