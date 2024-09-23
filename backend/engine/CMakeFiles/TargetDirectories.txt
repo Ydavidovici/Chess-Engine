@@ -1,3 +1,0 @@
-C:/Users/ydavi/Coding/C++_Projects/Chess-Engine/backend/engine/CMakeFiles/engine.dir
-C:/Users/ydavi/Coding/C++_Projects/Chess-Engine/backend/engine/CMakeFiles/ALL_BUILD.dir
-C:/Users/ydavi/Coding/C++_Projects/Chess-Engine/backend/engine/CMakeFiles/ZERO_CHECK.dir

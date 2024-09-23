@@ -123,4 +123,7 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # Custom
-build/
+/build/
+/cmake-build-debug/
+/CMakeFiles/
+
