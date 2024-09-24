@@ -16,6 +16,7 @@ add_executable(test_engine
         engine/src/move.cpp
         engine/src/piece.cpp
         engine/src/player.cpp
+        engine/src/main.cpp
 )
 
 # Optionally, link libraries if needed

@@ -6,12 +6,18 @@
 #include <vector>
 #include "move.h"
 
+enum Color {
+    WHITE,
+    BLACK
+};
+
 class Board {
 public:
     Board();
     void initializeBoard();
     std::string getBoardState() const;
-    bool makeMove(const Move& move);
+    bool makeMove(const Move& move, Color color);
+    int getPieceCount() const;
 
     // Public accessors for bitboards
     uint64_t getWhitePawns() const { return whitePawns; }
@@ -28,18 +34,30 @@ public:
     uint64_t getBlackQueens() const { return blackQueens; }
     uint64_t getBlackKings() const { return blackKings; }
 
-    uint64_t generatePawnMoves(int square, bool isWhite) const;
-    uint64_t generateKnightMoves(int square) const;
-    uint64_t generateKingMoves(int square) const;
+    // Move generation functions
+    std::vector<Move> generateLegalMoves(Color color) const;
 
 private:
+    // Bitboards for each piece type
     uint64_t whitePawns, whiteKnights, whiteBishops, whiteRooks, whiteQueens, whiteKings;
     uint64_t blackPawns, blackKnights, blackBishops, blackRooks, blackQueens, blackKings;
 
+    // Helper functions for bit manipulation
     bool isBitSet(uint64_t bitboard, int position) const;
     void setBit(uint64_t& bitboard, int position);
     void clearBit(uint64_t& bitboard, int position);
     int getPosition(int rank, int file) const;
+
+    // Move generation helpers
+    uint64_t generatePawnMoves(int square, bool isWhite) const;
+    uint64_t generateKnightMoves(int square) const;
+    uint64_t generateKingMoves(int square) const;
+    // Add similar functions for sliding pieces (bishops, rooks, queens)
+
+    // Special move handling
+    bool handleCastling(const Move& move, Color color);
+    bool handlePromotion(const Move& move, Color color);
+    bool handleEnPassant(const Move& move, Color color);
 };
 
 #endif // BOARD_H

@@ -15,9 +15,11 @@ enum MoveType {
 
 class Move {
 public:
-    Move(const std::string& move, MoveType type = MoveType::NORMAL);
-    Move(int start, int end, MoveType type = MoveType::NORMAL);
+    // Constructors
+    Move(const std::string& moveStr, MoveType type = NORMAL);
+    Move(int start, int end, MoveType type = NORMAL);
 
+    // Getters
     int getStartPosition() const;
     int getEndPosition() const;
     std::string getMove() const;
@@ -26,18 +28,25 @@ public:
     int getEndRow() const;
     int getEndCol() const;
     MoveType getMoveType() const;
+    char getPromotionPiece() const;
+
+    // Setters
     void setMoveType(MoveType type);
     void setPromotionPiece(char promotionPiece);
-    char getPromotionPiece() const;
+
+    // Validation
     bool isValid() const;
     bool isValidPromotion() const;
     bool isValidCastling() const;
+    bool isCapture() const;
 
 private:
-    int startPosition;
-    int endPosition;
+    int startPosition;    // 0-63 index
+    int endPosition;      // 0-63 index
     MoveType moveType;
-    char promotionPiece;
+    char promotionPiece;  // 'Q', 'R', 'B', 'N' for promotions
+
+    // Helper functions
     bool isInBounds(int position) const;
     bool isValidMoveType() const;
 };
