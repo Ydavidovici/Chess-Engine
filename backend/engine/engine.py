@@ -6,7 +6,7 @@ from typing import List, Optional
 import random
 import math
 import sys
-import chess
+
 
 # ------------------------------------------------------------------------------
 # Enums and Constants
@@ -68,8 +68,6 @@ class Move:
 class Board:
     def __init__(self):
         self.initialize_board()
-        # Track FEN for move generation
-        self._fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
     def initialize_board(self):
         # Bitboards represented as Python integers.
@@ -89,8 +87,7 @@ class Board:
 
     def load_fen(self, fen: str):
         """Load a position from FEN (only piece placement is supported)."""
-        # Store FEN for later move generation
-        self._fen = fen
+
         # Clear all bitboards
         self.white_pawns = self.white_knights = self.white_bishops = 0
         self.white_rooks = self.white_queens = self.white_kings = 0
@@ -154,11 +151,6 @@ class Board:
         return rank * 8 + file
 
     def make_move(self, move: Move, color: Color) -> bool:
-        """
-        Makes a move on the board.
-        Currently supports pawn moves and a basic promotion (auto-promoting to queen).
-        Extend this method for full move support.
-        """
         if not move.is_valid():
             return False
 
@@ -174,8 +166,7 @@ class Board:
                     self.white_pawns = self._clear_bit(self.white_pawns, end)
                     self.white_queens = self._set_bit(self.white_queens, end)
                 return True
-            # (Extend for other white pieces)
-        else:  # Color.BLACK
+        else:
             if self._is_bit_set(self.black_pawns, start):
                 self.black_pawns = self._clear_bit(self.black_pawns, start)
                 self.black_pawns = self._set_bit(self.black_pawns, end)
@@ -183,26 +174,24 @@ class Board:
                     self.black_pawns = self._clear_bit(self.black_pawns, end)
                     self.black_queens = self._set_bit(self.black_queens, end)
                 return True
-            # (Extend for other black pieces)
         return False
 
     def generate_legal_moves(self, color: Color) -> List[Move]:
-        """
-        Generates legal moves for the given color.
-        (For simplicity, currently only single forward pawn moves are generated.)
-        """
-        """
-        Generates legal moves for the given color by delegating to python-chess.
-        Requires that self._fen has been set by initialize or load_fen.
-        """
-        board = chess.Board(self._fen)
-        # If color mismatch in side-to-move, adjust it
-        board.turn = chess.WHITE if color == Color.WHITE else chess.BLACK
-
-        moves: List[Move] = []
-        for m in board.legal_moves:
-            move_type = MoveType.CAPTURE if board.is_capture(m) else MoveType.NORMAL
-            moves.append(Move(start=m.from_square, end=m.to_square, move_type=move_type))
+        moves = []
+        if color == Color.WHITE:
+            bitboard = self.white_pawns
+            while bitboard:
+                square = (bitboard & -bitboard).bit_length() - 1
+                bitboard &= bitboard - 1
+                target = square + 8
+                moves.append(Move(start=square, end=target))
+        else:
+            bitboard = self.black_pawns
+            while bitboard:
+                square = (bitboard & -bitboard).bit_length() - 1
+                bitboard &= bitboard - 1
+                target = square - 8
+                moves.append(Move(start=square, end=target))
         return moves
 
     def get_piece_count(self) -> int:
