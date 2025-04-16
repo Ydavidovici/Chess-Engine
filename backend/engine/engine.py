@@ -151,65 +151,179 @@ class Board:
         return rank * 8 + file
 
     def make_move(self, move: Move, color: Color) -> bool:
+        """
+        Apply a pseudo‑legal move by updating the appropriate bitboards.
+        Does not handle castling or en passant.
+        """
         if not move.is_valid():
             return False
 
-        start = move.start
-        end = move.end
-        mtype = move.move_type
+        start, end = move.start, move.end
+        my_prefix = 'white_' if color == Color.WHITE else 'black_'
+        op_prefix = 'black_' if color == Color.WHITE else 'white_'
 
-        if color == Color.WHITE:
-            if self._is_bit_set(self.white_pawns, start):
-                self.white_pawns = self._clear_bit(self.white_pawns, start)
-                self.white_pawns = self._set_bit(self.white_pawns, end)
-                if mtype == MoveType.PROMOTION and move.promotion_piece:
-                    self.white_pawns = self._clear_bit(self.white_pawns, end)
-                    self.white_queens = self._set_bit(self.white_queens, end)
+        # 1) Remove any captured piece
+        for piece in ['pawns', 'knights', 'bishops', 'rooks', 'queens', 'kings']:
+            bb_attr = op_prefix + piece
+            if getattr(self, bb_attr) & (1 << end):
+                setattr(self, bb_attr, getattr(self, bb_attr) & ~(1 << end))
+                move.move_type = MoveType.CAPTURE
+                break
+
+        # 2) Handle promotions
+        if move.move_type == MoveType.PROMOTION and move.promotion_piece:
+            # Clear pawn from start
+            self._clear_bitboard(my_prefix + 'pawns', start)
+            # Set promoted piece
+            self._set_bitboard(my_prefix + move.promotion_piece.lower() + 's', end)
+            return True
+
+        # 3) Move the piece that lives on start
+        for piece in ['pawns', 'knights', 'bishops', 'rooks', 'queens', 'kings']:
+            bb_attr = my_prefix + piece
+            if getattr(self, bb_attr) & (1 << start):
+                # clear start, set end
+                self._clear_bitboard(bb_attr, start)
+                self._set_bitboard(bb_attr, end)
                 return True
-        else:
-            if self._is_bit_set(self.black_pawns, start):
-                self.black_pawns = self._clear_bit(self.black_pawns, start)
-                self.black_pawns = self._set_bit(self.black_pawns, end)
-                if mtype == MoveType.PROMOTION and move.promotion_piece:
-                    self.black_pawns = self._clear_bit(self.black_pawns, end)
-                    self.black_queens = self._set_bit(self.black_queens, end)
-                return True
+
         return False
 
-    def generate_legal_moves(self, color: Color) -> List[Move]:
-        moves = []
-        if color == Color.WHITE:
-            bitboard = self.white_pawns
-            while bitboard:
-                square = (bitboard & -bitboard).bit_length() - 1
-                bitboard &= bitboard - 1
-                target = square + 8
-                moves.append(Move(start=square, end=target))
-        else:
-            bitboard = self.black_pawns
-            while bitboard:
-                square = (bitboard & -bitboard).bit_length() - 1
-                bitboard &= bitboard - 1
-                target = square - 8
-                moves.append(Move(start=square, end=target))
-        return moves
+    def _clear_bitboard(self, bb_attr: str, pos: int):
+        setattr(self, bb_attr, getattr(self, bb_attr) & ~(1 << pos))
 
-    def get_piece_count(self) -> int:
-        """Returns the total count of pieces on the board."""
-        count = 0
-        count += bin(self.white_pawns).count("1")
-        count += bin(self.white_knights).count("1")
-        count += bin(self.white_bishops).count("1")
-        count += bin(self.white_rooks).count("1")
-        count += bin(self.white_queens).count("1")
-        count += bin(self.white_kings).count("1")
-        count += bin(self.black_pawns).count("1")
-        count += bin(self.black_knights).count("1")
-        count += bin(self.black_bishops).count("1")
-        count += bin(self.black_rooks).count("1")
-        count += bin(self.black_queens).count("1")
-        count += bin(self.black_kings).count("1")
-        return count
+    def _set_bitboard(self, bb_attr: str, pos: int):
+        setattr(self, bb_attr, getattr(self, bb_attr) | (1 << pos))
+
+    def generate_legal_moves(self, color: Color) -> List[Move]:
+        """
+        Create pseudo-legal moves for every piece type:
+        pawns (push, double, caps, promotions), knights, bishops,
+        rooks, queens, and kings.
+        (No en passant or castling yet.)
+        """
+        moves: List[Move] = []
+
+        # Build occupancy masks using bitwise OR
+        white_occ = (
+                self.white_pawns | self.white_knights | self.white_bishops |
+                self.white_rooks | self.white_queens | self.white_kings
+        )
+        black_occ = (
+                self.black_pawns | self.black_knights | self.black_bishops |
+                self.black_rooks | self.black_queens | self.black_kings
+        )
+        all_occ = white_occ | black_occ
+        own_occ = white_occ if color == Color.WHITE else black_occ
+        opp_occ = black_occ if color == Color.WHITE else white_occ
+
+        # Direction vectors
+        knight_dirs = [-17, -15, -10, -6, 6, 10, 15, 17]
+        king_dirs = [-9, -8, -7, -1, 1, 7, 8, 9]
+        bishop_dirs = [-9, -7, 7, 9]
+        rook_dirs = [-8, -1, 1, 8]
+
+        prefix = 'white_' if color == Color.WHITE else 'black_'
+        pawn_dir = 8 if color == Color.WHITE else -8
+        start_rank = 1 if color == Color.WHITE else 6
+        promo_rank = 7 if color == Color.WHITE else 0
+        pawn_bb = getattr(self, prefix + 'pawns')
+
+        # --- Pawn moves ---
+        tmp = pawn_bb
+        while tmp:
+            sq = (tmp & -tmp).bit_length() - 1
+            tmp &= tmp - 1
+
+            # single push
+            t1 = sq + pawn_dir
+            if 0 <= t1 < 64 and not (all_occ & (1 << t1)):
+                if t1 // 8 == promo_rank:
+                    for promo in ['Q', 'R', 'B', 'N']:
+                        moves.append(Move(sq, t1, MoveType.PROMOTION, promo))
+                else:
+                    moves.append(Move(sq, t1))
+                # double push
+                if sq // 8 == start_rank:
+                    t2 = sq + 2 * pawn_dir
+                    if 0 <= t2 < 64 and not (all_occ & (1 << t2)):
+                        moves.append(Move(sq, t2))
+
+            # captures
+            for d in (pawn_dir - 1, pawn_dir + 1):
+                tc = sq + d
+                if 0 <= tc < 64 and (opp_occ & (1 << tc)):
+                    if tc // 8 == promo_rank:
+                        for promo in ['Q', 'R', 'B', 'N']:
+                            moves.append(Move(sq, tc, MoveType.CAPTURE, promo))
+                    else:
+                        moves.append(Move(sq, tc, MoveType.CAPTURE))
+
+        # --- Knight moves ---
+        tmp = getattr(self, prefix + 'knights')
+        while tmp:
+            sq = (tmp & -tmp).bit_length() - 1
+            tmp &= tmp - 1
+            for d in knight_dirs:
+                tgt = sq + d
+                if 0 <= tgt < 64 and not (own_occ & (1 << tgt)):
+                    mtype = MoveType.CAPTURE if (opp_occ & (1 << tgt)) else MoveType.NORMAL
+                    moves.append(Move(sq, tgt, mtype))
+
+        # --- Sliding pieces (bishop, rook) ---
+        for dirs, name in [(bishop_dirs, 'bishops'), (rook_dirs, 'rooks')]:
+            tmp = getattr(self, prefix + name)
+            while tmp:
+                sq = (tmp & -tmp).bit_length() - 1
+                tmp &= tmp - 1
+                for d in dirs:
+                    t = sq
+                    while True:
+                        t += d
+                        if not (0 <= t < 64):
+                            break
+                        # Prevent wrap-around
+                        if abs((sq % 8) - (t % 8)) > 2 and d in (-1, 1, -9, -7, 7, 9):
+                            break
+                        if own_occ & (1 << t):
+                            break
+                        mtype = MoveType.CAPTURE if (opp_occ & (1 << t)) else MoveType.NORMAL
+                        moves.append(Move(sq, t, mtype))
+                        if all_occ & (1 << t):
+                            break
+
+        # --- Queen moves (bishop + rook) ---
+        tmp = getattr(self, prefix + 'queens')
+        while tmp:
+            sq = (tmp & -tmp).bit_length() - 1
+            tmp &= tmp - 1
+            for d in bishop_dirs + rook_dirs:
+                t = sq
+                while True:
+                    t += d
+                    if not (0 <= t < 64):
+                        break
+                    if abs((sq % 8) - (t % 8)) > 2 and d in (-1, 1, -9, -7, 7, 9):
+                        break
+                    if own_occ & (1 << t):
+                        break
+                    mtype = MoveType.CAPTURE if (opp_occ & (1 << t)) else MoveType.NORMAL
+                    moves.append(Move(sq, t, mtype))
+                    if all_occ & (1 << t):
+                        break
+
+        # --- King moves ---
+        tmp = getattr(self, prefix + 'kings')
+        while tmp:
+            sq = (tmp & -tmp).bit_length() - 1
+            tmp &= tmp - 1
+            for d in king_dirs:
+                tgt = sq + d
+                if 0 <= tgt < 64 and not (own_occ & (1 << tgt)):
+                    mtype = MoveType.CAPTURE if (opp_occ & (1 << tgt)) else MoveType.NORMAL
+                    moves.append(Move(sq, tgt, mtype))
+
+        return moves
 
 # ------------------------------------------------------------------------------
 # Evaluator Class (with Search, Transposition Table, and Iterative Deepening)
@@ -450,25 +564,33 @@ class Evaluator:
     # --------------------------------------------------------------------------
     # Alpha-Beta Search with Transposition Table
     # --------------------------------------------------------------------------
+    # In class Evaluator:
+
     def search(self, board: Board, depth: int, alpha: int, beta: int, maximizing_player: bool) -> tuple[int, Optional[Move]]:
         alpha_orig = alpha
         best_move: Optional[Move] = None
         board_hash = self.generate_zobrist_hash(board, maximizing_player)
+
+        # Transposition table lookup
         if board_hash in self.transposition_table:
             entry = self.transposition_table[board_hash]
             if entry['depth'] >= depth:
                 if entry['flag'] == EXACT:
                     return entry['score'], None
-                elif entry['flag'] == ALPHA_FLAG and entry['score'] <= alpha:
+                if entry['flag'] == ALPHA_FLAG and entry['score'] <= alpha:
                     return alpha, None
-                elif entry['flag'] == BETA_FLAG and entry['score'] >= beta:
+                if entry['flag'] == BETA_FLAG and entry['score'] >= beta:
                     return beta, None
+
+        # Leaf node: static evaluation only
         if depth == 0:
-            return self.quiescence_search(board, alpha, beta, maximizing_player), None
+            return self.evaluate(board), None
+
         moves = board.generate_legal_moves(Color.WHITE if maximizing_player else Color.BLACK)
         if not moves:
-            # Terminal condition: assume checkmate/stalemate score.
+            # Checkmate or stalemate
             return (-100000, None) if maximizing_player else (100000, None)
+
         best_score = -math.inf if maximizing_player else math.inf
         for move in moves:
             new_board = self._copy_board(board)
@@ -476,6 +598,7 @@ class Evaluator:
                 continue
             score, _ = self.search(new_board, depth - 1, -beta, -alpha, not maximizing_player)
             score = -score
+
             if maximizing_player:
                 if score > best_score:
                     best_score = score
@@ -488,26 +611,38 @@ class Evaluator:
                     best_move = move
                 if score < beta:
                     beta = score
+
             if alpha >= beta:
                 break
-        # Determine transposition table flag.
+
+        # Store result in transposition table
         if best_score <= alpha_orig:
             flag = BETA_FLAG
         elif best_score >= beta:
             flag = ALPHA_FLAG
         else:
             flag = EXACT
-        self.transposition_table[board_hash] = {'depth': depth, 'score': best_score, 'flag': flag}
+
+        self.transposition_table[board_hash] = {
+            'depth': depth,
+            'score': best_score,
+            'flag': flag
+        }
         return best_score, best_move
 
+
     def iterative_deepening(self, board: Board, max_depth: int, maximizing_player: bool) -> tuple[int, Optional[Move]]:
-        best_move = None
+        """
+        Repeatedly deepen from 1 to max_depth and keep the best move found.
+        """
+        best_move: Optional[Move] = None
         best_score = 0
-        for depth in range(1, max_depth + 1):
-            best_score, move = self.search(board, depth, -math.inf, math.inf, maximizing_player)
+        for d in range(1, max_depth + 1):
+            score, move = self.search(board, d, -math.inf, math.inf, maximizing_player)
             if move:
                 best_move = move
-            print(f"Depth {depth} completed: Best score {best_score}, Best move: {best_move.get_move_str() if best_move else 'None'}")
+            print(f"Depth {d} completed: Best score {score}, Best move: {best_move.get_move_str() if best_move else 'None'}")
+            best_score = score
         return best_score, best_move
 
 # ------------------------------------------------------------------------------
