@@ -6,6 +6,7 @@ from typing import List, Optional
 import random
 import math
 import sys
+import chess
 
 # ------------------------------------------------------------------------------
 # Enums and Constants
@@ -67,6 +68,8 @@ class Move:
 class Board:
     def __init__(self):
         self.initialize_board()
+        # Track FEN for move generation
+        self._fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
     def initialize_board(self):
         # Bitboards represented as Python integers.
@@ -83,6 +86,37 @@ class Board:
         self.black_rooks   = 0x8100000000000000
         self.black_queens  = 0x0800000000000000
         self.black_kings   = 0x1000000000000000
+
+    def load_fen(self, fen: str):
+        """Load a position from FEN (only piece placement is supported)."""
+        # Store FEN for later move generation
+        self._fen = fen
+        # Clear all bitboards
+        self.white_pawns = self.white_knights = self.white_bishops = 0
+        self.white_rooks = self.white_queens = self.white_kings = 0
+        self.black_pawns = self.black_knights = self.black_bishops = 0
+        self.black_rooks = self.black_queens = self.black_kings = 0
+
+        # Map FEN symbols to bitboards
+        piece_map = {
+            'P': 'white_pawns', 'N': 'white_knights', 'B': 'white_bishops',
+            'R': 'white_rooks', 'Q': 'white_queens', 'K': 'white_kings',
+            'p': 'black_pawns', 'n': 'black_knights', 'b': 'black_bishops',
+            'r': 'black_rooks', 'q': 'black_queens', 'k': 'black_kings',
+        }
+
+        # Only parse piece placement (before first space)
+        rows = fen.split()[0].split('/')
+        for rank_index, row in enumerate(rows):
+            file_index = 0
+            for ch in row:
+                if ch.isdigit():
+                    file_index += int(ch)
+                else:
+                    square = (7 - rank_index) * 8 + file_index
+                    bb_name = piece_map[ch]
+                    setattr(self, bb_name, getattr(self, bb_name) | (1 << square))
+                    file_index += 1
 
     def get_board_state(self) -> str:
         """Return a human-readable string representation of the board."""
@@ -157,21 +191,18 @@ class Board:
         Generates legal moves for the given color.
         (For simplicity, currently only single forward pawn moves are generated.)
         """
-        moves = []
-        if color == Color.WHITE:
-            bitboard = self.white_pawns
-            while bitboard:
-                square = (bitboard & -bitboard).bit_length() - 1
-                bitboard &= bitboard - 1
-                target = square + 8
-                moves.append(Move(start=square, end=target))
-        else:
-            bitboard = self.black_pawns
-            while bitboard:
-                square = (bitboard & -bitboard).bit_length() - 1
-                bitboard &= bitboard - 1
-                target = square - 8
-                moves.append(Move(start=square, end=target))
+        """
+        Generates legal moves for the given color by delegating to python-chess.
+        Requires that self._fen has been set by initialize or load_fen.
+        """
+        board = chess.Board(self._fen)
+        # If color mismatch in side-to-move, adjust it
+        board.turn = chess.WHITE if color == Color.WHITE else chess.BLACK
+
+        moves: List[Move] = []
+        for m in board.legal_moves:
+            move_type = MoveType.CAPTURE if board.is_capture(m) else MoveType.NORMAL
+            moves.append(Move(start=m.from_square, end=m.to_square, move_type=move_type))
         return moves
 
     def get_piece_count(self) -> int:
@@ -340,8 +371,36 @@ class Evaluator:
         return material
 
     def evaluate(self, board: Board) -> int:
-        # For now, evaluation is based solely on material.
-        return self.evaluate_material(board)
+        material_score = self.evaluate_material(board)
+        positional_score = self.evaluate_positional(board)
+        return material_score + positional_score
+
+    def evaluate_positional(self, board: Board) -> int:
+        score = 0
+
+        piece_tables = [
+            (board.white_pawns, self.white_pawn_table, 1),
+            (board.white_knights, self.white_knight_table, 1),
+            (board.white_bishops, self.white_bishop_table, 1),
+            (board.white_rooks, self.white_rook_table, 1),
+            (board.white_queens, self.white_queen_table, 1),
+            (board.white_kings, self.white_king_table_mg, 1),
+            (board.black_pawns, self.black_pawn_table, -1),
+            (board.black_knights, self.black_knight_table, -1),
+            (board.black_bishops, self.black_bishop_table, -1),
+            (board.black_rooks, self.black_rook_table, -1),
+            (board.black_queens, self.black_queen_table, -1),
+            (board.black_kings, self.black_king_table_mg, -1),
+        ]
+
+        for bitboard, table, sign in piece_tables:
+            temp_board = bitboard
+            while temp_board:
+                square = (temp_board & -temp_board).bit_length() - 1
+                score += sign * table[square]
+                temp_board &= temp_board - 1
+
+        return score
 
     def _copy_board(self, board: Board) -> Board:
         new_board = Board()
@@ -402,38 +461,42 @@ class Evaluator:
     # --------------------------------------------------------------------------
     # Alpha-Beta Search with Transposition Table
     # --------------------------------------------------------------------------
-    def search(self, board: Board, depth: int, alpha: int, beta: int, maximizing_player: bool) -> int:
+    def search(self, board: Board, depth: int, alpha: int, beta: int, maximizing_player: bool) -> tuple[int, Optional[Move]]:
         alpha_orig = alpha
+        best_move: Optional[Move] = None
         board_hash = self.generate_zobrist_hash(board, maximizing_player)
         if board_hash in self.transposition_table:
             entry = self.transposition_table[board_hash]
             if entry['depth'] >= depth:
                 if entry['flag'] == EXACT:
-                    return entry['score']
+                    return entry['score'], None
                 elif entry['flag'] == ALPHA_FLAG and entry['score'] <= alpha:
-                    return alpha
+                    return alpha, None
                 elif entry['flag'] == BETA_FLAG and entry['score'] >= beta:
-                    return beta
+                    return beta, None
         if depth == 0:
-            return self.quiescence_search(board, alpha, beta, maximizing_player)
+            return self.quiescence_search(board, alpha, beta, maximizing_player), None
         moves = board.generate_legal_moves(Color.WHITE if maximizing_player else Color.BLACK)
         if not moves:
             # Terminal condition: assume checkmate/stalemate score.
-            return -100000 if maximizing_player else 100000
+            return (-100000, None) if maximizing_player else (100000, None)
         best_score = -math.inf if maximizing_player else math.inf
         for move in moves:
             new_board = self._copy_board(board)
             if not new_board.make_move(move, Color.WHITE if maximizing_player else Color.BLACK):
                 continue
-            score = -self.search(new_board, depth - 1, -beta, -alpha, not maximizing_player)
+            score, _ = self.search(new_board, depth - 1, -beta, -alpha, not maximizing_player)
+            score = -score
             if maximizing_player:
                 if score > best_score:
                     best_score = score
+                    best_move = move
                 if score > alpha:
                     alpha = score
             else:
                 if score < best_score:
                     best_score = score
+                    best_move = move
                 if score < beta:
                     beta = score
             if alpha >= beta:
@@ -446,19 +509,21 @@ class Evaluator:
         else:
             flag = EXACT
         self.transposition_table[board_hash] = {'depth': depth, 'score': best_score, 'flag': flag}
-        return best_score
+        return best_score, best_move
 
-    def iterative_deepening(self, board: Board, max_depth: int, maximizing_player: bool) -> int:
+    def iterative_deepening(self, board: Board, max_depth: int, maximizing_player: bool) -> tuple[int, Optional[Move]]:
+        best_move = None
         best_score = 0
         for depth in range(1, max_depth + 1):
-            best_score = self.search(board, depth, -math.inf, math.inf, maximizing_player)
-            print(f"Depth {depth} completed with score: {best_score}")
-        return best_score
+            best_score, move = self.search(board, depth, -math.inf, math.inf, maximizing_player)
+            if move:
+                best_move = move
+            print(f"Depth {depth} completed: Best score {best_score}, Best move: {best_move.get_move_str() if best_move else 'None'}")
+        return best_score, best_move
 
 # ------------------------------------------------------------------------------
 # Engine Class
 # ------------------------------------------------------------------------------
-
 class Engine:
     def __init__(self):
         self.board = Board()
@@ -483,14 +548,10 @@ class Engine:
     def evaluate_board(self) -> int:
         return self.evaluator.evaluate(self.board)
 
-    def search_best_move(self, max_depth: int, color: Color) -> int:
-        """
-        Uses iterative deepening to search for the best move evaluation.
-        (In a full implementation, you would extract the actual move.)
-        """
-        maximizing = True if color == Color.WHITE else False
-        return self.evaluator.iterative_deepening(self.board, max_depth, maximizing)
-
+    def find_best_move(self, max_depth: int, color: Color) -> Optional[Move]:
+        maximizing = (color == Color.WHITE)
+        _, best_move = self.evaluator.iterative_deepening(self.board, max_depth, maximizing)
+        return best_move
 # ------------------------------------------------------------------------------
 # Example Usage (for testing)
 # ------------------------------------------------------------------------------
@@ -506,7 +567,7 @@ if __name__ == "__main__":
         print(engine.get_board_state())
         print("Board evaluation:", engine.evaluate_board())
         print("Searching best move for white (up to depth 3):")
-        best_score = engine.search_best_move(max_depth=3, color=Color.WHITE)
-        print("Best evaluation found:", best_score)
+        best_move = engine.find_best_move(max_depth=3, color=Color.WHITE)
+        print("Best move found:", best_move.get_move_str() if best_move else "None")
     else:
         print("Move was invalid.")

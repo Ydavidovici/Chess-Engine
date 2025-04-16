@@ -11,3 +11,4 @@ python-dotenv==1.0.0
 
 # HTTP Requests (for Lichess API)
 requests==2.25.1
+python-chess

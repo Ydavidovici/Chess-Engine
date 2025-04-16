@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
-import chess_engine  # Import the Python chess engine module
+from engine import Engine
 import requests
 
 # Load environment variables
@@ -92,7 +92,7 @@ class LichessAPI:
 class GameManager:
     def __init__(self, token: str):
         self.lichess_api = LichessAPI(token)
-        self.eng = chess_engine.Engine()
+        self.eng = Engine()
         logging.debug("Chess engine initialized")
 
     def start_game(self, db: Session, player1_name: str, player2_name: str):
