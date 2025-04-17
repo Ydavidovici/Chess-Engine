@@ -335,6 +335,8 @@ class Evaluator:
         self.zobrist_keys = [[random.getrandbits(64) for _ in range(64)] for _ in range(12)]
         self.zobrist_side = random.getrandbits(64)
         self.transposition_table = {}  # Maps board hash to {'depth': d, 'score': s, 'flag': flag}
+        # maximum quiescence search depth
+        self.max_q_depth = 2
 
     def initialize_piece_square_tables(self):
         # White Piece-Square Tables
@@ -521,10 +523,52 @@ class Evaluator:
         new_board.black_kings = board.black_kings
         return new_board
 
+    def _get_piece_char(self, board: Board, square: int) -> Optional[str]:
+        # Return the single-character piece on 'square', or None.
+        mapping = [
+            ('P', board.white_pawns),
+            ('N', board.white_knights),
+            ('B', board.white_bishops),
+            ('R', board.white_rooks),
+            ('Q', board.white_queens),
+            ('K', board.white_kings),
+            ('p', board.black_pawns),
+            ('n', board.black_knights),
+            ('b', board.black_bishops),
+            ('r', board.black_rooks),
+            ('q', board.black_queens),
+            ('k', board.black_kings),
+        ]
+        for char, bb in mapping:
+            if bb & (1 << square):
+                return char
+        return None
+
+    def _piece_value(self, piece: Optional[str]) -> int:
+        values = {'P':100,'N':320,'B':330,'R':500,'Q':900,'K':20000,
+                  'p':100,'n':320,'b':330,'r':500,'q':900,'k':20000}
+        return values.get(piece, 0)
+
+    def _order_moves(self, moves: List[Move], board: Board, maximizing_player: bool) -> List[Move]:
+        # MVV-LVA move ordering: capture moves first, sorted by victim-attacker value
+        scored = []
+        for m in moves:
+            score = 0
+            if m.is_capture():
+                victim = self._get_piece_char(board, m.end)
+                attacker = self._get_piece_char(board, m.start)
+                score = self._piece_value(victim) - self._piece_value(attacker)
+            scored.append((score, m))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [m for _, m in scored]
+
     # --------------------------------------------------------------------------
     # Quiescence Search
     # --------------------------------------------------------------------------
-    def quiescence_search(self, board: Board, alpha: int, beta: int, maximizing_player: bool) -> int:
+    def quiescence_search(self, board: Board, alpha: int, beta: int, maximizing_player: bool, qs_depth: int = 0) -> int:
+        # limit quiescence recursion
+        if qs_depth >= self.max_q_depth:
+            return self.evaluate(board)
         stand_pat = self.evaluate(board)
         if maximizing_player:
             if stand_pat >= beta:
@@ -534,10 +578,13 @@ class Evaluator:
             for move in board.generate_legal_moves(Color.WHITE):
                 if not move.is_capture():
                     continue
+                victim = self._get_piece_char(board, move.end)
+                if victim in ('K', 'k'):
+                    continue
                 new_board = self._copy_board(board)
                 if not new_board.make_move(move, Color.WHITE):
                     continue
-                score = -self.quiescence_search(new_board, -beta, -alpha, False)
+                score = -self.quiescence_search(new_board, -beta, -alpha, False, qs_depth + 1)
                 if score >= beta:
                     return beta
                 if score > alpha:
@@ -551,10 +598,13 @@ class Evaluator:
             for move in board.generate_legal_moves(Color.BLACK):
                 if not move.is_capture():
                     continue
+                victim = self._get_piece_char(board, move.end)
+                if victim in ('K', 'k'):
+                    continue
                 new_board = self._copy_board(board)
                 if not new_board.make_move(move, Color.BLACK):
                     continue
-                score = -self.quiescence_search(new_board, -beta, -alpha, True)
+                score = -self.quiescence_search(new_board, -beta, -alpha, True, qs_depth + 1)
                 if score <= alpha:
                     return alpha
                 if score < beta:
@@ -582,11 +632,13 @@ class Evaluator:
                 if entry['flag'] == BETA_FLAG and entry['score'] >= beta:
                     return beta, None
 
-        # Leaf node: static evaluation only
+        # Leaf node: switch to quiescence search
         if depth == 0:
-            return self.evaluate(board), None
+            return self.quiescence_search(board, alpha, beta, maximizing_player, 0), None
 
         moves = board.generate_legal_moves(Color.WHITE if maximizing_player else Color.BLACK)
+        # Order moves to improve alpha-beta pruning
+        moves = self._order_moves(moves, board, maximizing_player)
         if not moves:
             # Checkmate or stalemate
             return (-100000, None) if maximizing_player else (100000, None)

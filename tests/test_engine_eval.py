@@ -52,7 +52,7 @@ def test_middlegame():
     eval_score = engine.evaluate_board()
     print("Evaluation:", eval_score)
 
-    best_move = engine.find_best_move(max_depth=3, color=Color.WHITE)
+    best_move = engine.find_best_move(max_depth=10, color=Color.WHITE)
     print("Best move (White):", best_move.get_move_str() if best_move else "None")
 
 

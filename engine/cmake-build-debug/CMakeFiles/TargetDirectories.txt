@@ -1,0 +1,3 @@
+/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/cmake-build-debug/CMakeFiles/chess.dir
+/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/cmake-build-debug/CMakeFiles/rebuild_cache.dir
