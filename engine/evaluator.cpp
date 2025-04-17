@@ -1,14 +1,15 @@
 // evaluator.cpp
 #include "evaluator.h"
-#include <random>
-#include <limits>
 #include <algorithm>
 #include <iostream>
 
+constexpr int Evaluator::pieceValues[12];
+
 Evaluator::Evaluator() : maxQDepth(2) {
+    // 1) build piece‑square tables
     initializePieceSquareTables();
 
-    // initialize Zobrist keys
+    // 2) init Zobrist
     std::mt19937_64 rng{std::random_device{}()};
     std::uniform_int_distribution<uint64_t> dist;
     zobristKeys.assign(12, std::vector<uint64_t>(64));
@@ -19,15 +20,92 @@ Evaluator::Evaluator() : maxQDepth(2) {
 }
 
 void Evaluator::initializePieceSquareTables() {
-    // ... copy the tables exactly as you had them for whitePawnTable, etc. ...
-    // Then mirror them for black:
-    blackPawnTable   = std::vector<int>(whitePawnTable.rbegin(),   whitePawnTable.rend());
-    blackKnightTable = std::vector<int>(whiteKnightTable.rbegin(), whiteKnightTable.rend());
-    blackBishopTable = std::vector<int>(whiteBishopTable.rbegin(), whiteBishopTable.rend());
-    blackRookTable   = std::vector<int>(whiteRookTable.rbegin(),   whiteRookTable.rend());
-    blackQueenTable  = std::vector<int>(whiteQueenTable.rbegin(),  whiteQueenTable.rend());
-    blackKingTableMG = std::vector<int>(whiteKingTableMG.rbegin(), whiteKingTableMG.rend());
-    blackKingTableEG = std::vector<int>(whiteKingTableEG.rbegin(), whiteKingTableEG.rend());
+    // Pawn
+    whitePawnTable = {
+            0,   0,   0,   0,   0,   0,   0,   0,
+            50,  50,  50,  50,  50,  50,  50,  50,
+            10,  10,  20,  30,  30,  20,  10,  10,
+            5,   5,  10,  25,  25,  10,   5,   5,
+            0,   0,   0,  20,  20,   0,   0,   0,
+            5,  -5, -10,   0,   0, -10,  -5,   5,
+            5,  10,  10, -20, -20,  10,  10,   5,
+            0,   0,   0,   0,   0,   0,   0,   0
+    };
+    // Knight
+    whiteKnightTable = {
+            -50,-40,-30,-30,-30,-30,-40,-50,
+            -40,-20,  0,  0,  0,  0,-20,-40,
+            -30,  0, 10, 15, 15, 10,  0,-30,
+            -30,  5, 15, 20, 20, 15,  5,-30,
+            -30,  0, 15, 20, 20, 15,  0,-30,
+            -30,  5, 10, 15, 15, 10,  5,-30,
+            -40,-20,  0,  5,  5,  0,-20,-40,
+            -50,-40,-30,-30,-30,-30,-40,-50
+    };
+    // Bishop
+    whiteBishopTable = {
+            -20,-10,-10,-10,-10,-10,-10,-20,
+            -10,  0,  0,  0,  0,  0,  0,-10,
+            -10,  0,  5, 10, 10,  5,  0,-10,
+            -10,  5,  5, 10, 10,  5,  5,-10,
+            -10,  0, 10, 10, 10, 10,  0,-10,
+            -10, 10, 10, 10, 10, 10, 10,-10,
+            -10,  5,  0,  0,  0,  0,  5,-10,
+            -20,-10,-10,-10,-10,-10,-10,-20
+    };
+    // Rook
+    whiteRookTable = {
+            0,  0,  0,  0,  0,  0,  0,  0,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            0,  0,  0,  5,  5,  0,  0,  0
+    };
+    // Queen
+    whiteQueenTable = {
+            -20,-10,-10, -5, -5,-10,-10,-20,
+            -10,  0,  0,  0,  0,  0,  0,-10,
+            -10,  0,  5,  5,  5,  5,  0,-10,
+            -5,  0,  5,  5,  5,  5,  0, -5,
+            0,  0,  5,  5,  5,  5,  0, -5,
+            -10,  5,  5,  5,  5,  5,  0,-10,
+            -10,  0,  5,  0,  0,  0,  0,-10,
+            -20,-10,-10, -5, -5,-10,-10,-20
+    };
+    // King middle-game
+    whiteKingTableMG = {
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -20,-30,-30,-40,-40,-30,-30,-20,
+            -10,-20,-20,-20,-20,-20,-20,-10,
+            20, 20,  0,  0,  0,  0, 20, 20,
+            20, 30, 10,  0,  0, 10, 30, 20
+    };
+    // King end‑game
+    whiteKingTableEG = {
+            -50,-40,-30,-20,-20,-30,-40,-50,
+            -30,-20,-10,  0,  0,-10,-20,-30,
+            -30,-10, 20, 30, 30, 20,-10,-30,
+            -30,-10, 30, 40, 40, 30,-10,-30,
+            -30,-10, 30, 40, 40, 30,-10,-30,
+            -30,-10, 20, 30, 30, 20,-10,-30,
+            -30,-30,  0,  0,  0,  0,-30,-30,
+            -50,-30,-30,-30,-30,-30,-30,-50
+    };
+
+    // mirror for Black
+    blackPawnTable   = { whitePawnTable.rbegin(),   whitePawnTable.rend() };
+    blackKnightTable = { whiteKnightTable.rbegin(), whiteKnightTable.rend() };
+    blackBishopTable = { whiteBishopTable.rbegin(), whiteBishopTable.rend() };
+    blackRookTable   = { whiteRookTable.rbegin(),   whiteRookTable.rend() };
+    blackQueenTable  = { whiteQueenTable.rbegin(),  whiteQueenTable.rend() };
+    blackKingTableMG = { whiteKingTableMG.rbegin(), whiteKingTableMG.rend() };
+    blackKingTableEG = { whiteKingTableEG.rbegin(), whiteKingTableEG.rend() };
 }
 
 uint64_t Evaluator::generateZobristHash(const Board& board,
@@ -85,6 +163,7 @@ int Evaluator::evaluatePositional(const Board& board) const {
     scan(board.getWhiteRooks(),   whiteRookTable,   +1);
     scan(board.getWhiteQueens(),  whiteQueenTable,  +1);
     scan(board.getWhiteKings(),   whiteKingTableMG, +1);
+
     scan(board.getBlackPawns(),   blackPawnTable,   -1);
     scan(board.getBlackKnights(), blackKnightTable, -1);
     scan(board.getBlackBishops(), blackBishopTable, -1);
@@ -101,7 +180,6 @@ int Evaluator::evaluate(const Board& board) const {
 std::vector<Move> Evaluator::orderMoves(std::vector<Move> moves,
                                         const Board& /*board*/,
                                         bool /*maximizingPlayer*/) const {
-    // simple: capturing moves first
     std::stable_sort(moves.begin(), moves.end(),
                      [](auto &a, auto &b){
                          return a.isCapture() && !b.isCapture();
@@ -123,8 +201,7 @@ int Evaluator::quiescenceSearch(Board board,
         auto moves = board.generateLegalMoves(Color::WHITE);
         for (auto &m : moves) {
             if (!m.isCapture()) continue;
-            Board nb = board;
-            nb.makeMove(m, Color::WHITE);
+            Board nb = board; nb.makeMove(m, Color::WHITE);
             int score = -quiescenceSearch(nb, -beta, -alpha, false, depth+1);
             if (score >= beta) return beta;
             alpha = std::max(alpha, score);
@@ -136,8 +213,7 @@ int Evaluator::quiescenceSearch(Board board,
         auto moves = board.generateLegalMoves(Color::BLACK);
         for (auto &m : moves) {
             if (!m.isCapture()) continue;
-            Board nb = board;
-            nb.makeMove(m, Color::BLACK);
+            Board nb = board; nb.makeMove(m, Color::BLACK);
             int score = -quiescenceSearch(nb, -beta, -alpha, true, depth+1);
             if (score <= alpha) return alpha;
             beta = std::min(beta, score);
@@ -152,14 +228,13 @@ std::pair<int, Move> Evaluator::alphaBeta(Board board,
                                           int beta,
                                           bool maximizingPlayer) {
     int alphaOrig = alpha;
-    Move bestMove;  // defaults to invalid
+    Move bestMove;
     int bestScore = maximizingPlayer
                     ? std::numeric_limits<int>::min()
                     : std::numeric_limits<int>::max();
 
     uint64_t h = generateZobristHash(board, maximizingPlayer);
-    auto it = transpositionTable.find(h);
-    if (it != transpositionTable.end()) {
+    if (auto it = transpositionTable.find(h); it != transpositionTable.end()) {
         auto &e = it->second;
         if (e.depth >= depth) {
             if (e.flag == EXACT)      return {e.score, {}};
@@ -169,7 +244,8 @@ std::pair<int, Move> Evaluator::alphaBeta(Board board,
     }
 
     if (depth == 0) {
-        return { quiescenceSearch(board, alpha, beta, maximizingPlayer, 0), {} };
+        return { quiescenceSearch(board, alpha, beta,
+                                  maximizingPlayer, 0), {} };
     }
 
     auto moves = board.generateLegalMoves(
@@ -177,7 +253,6 @@ std::pair<int, Move> Evaluator::alphaBeta(Board board,
     );
     moves = orderMoves(moves, board, maximizingPlayer);
     if (moves.empty()) {
-        // no moves => mate or stalemate
         return maximizingPlayer
                ? std::make_pair(-100000, Move())
                : std::make_pair( 100000, Move());
@@ -186,9 +261,10 @@ std::pair<int, Move> Evaluator::alphaBeta(Board board,
     for (auto &m : moves) {
         Board nb = board;
         nb.makeMove(m, maximizingPlayer ? Color::WHITE : Color::BLACK);
-        int score = -alphaBeta(nb, depth-1, -beta, -alpha, !maximizingPlayer).first;
-        if ( (maximizingPlayer && score > bestScore)
-             || (!maximizingPlayer && score < bestScore) ) {
+        int score = -alphaBeta(nb, depth-1, -beta, -alpha,
+                               !maximizingPlayer).first;
+        if ((maximizingPlayer && score > bestScore) ||
+            (!maximizingPlayer && score < bestScore)) {
             bestScore = score;
             bestMove  = m;
         }
@@ -197,10 +273,10 @@ std::pair<int, Move> Evaluator::alphaBeta(Board board,
         if (alpha >= beta) break;
     }
 
-    TTEntry e{depth, bestScore,
-              bestScore <= alphaOrig ? BETA_FLAG :
-              bestScore >= beta      ? ALPHA_FLAG :
-              EXACT};
+    TTEntry e{ depth, bestScore,
+               bestScore <= alphaOrig ? BETA_FLAG :
+               bestScore >= beta      ? ALPHA_FLAG :
+               EXACT };
     transpositionTable[h] = e;
     return {bestScore, bestMove};
 }

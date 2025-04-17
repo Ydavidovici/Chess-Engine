@@ -6,7 +6,7 @@ CXX_DEFINES = -Dpyengine_EXPORTS
 
 CXX_INCLUDES = -I/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine -isystem /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/backend/venv/lib/python3.13/site-packages/pybind11/include -isystem /opt/homebrew/opt/python@3.13/Frameworks/Python.framework/Versions/3.13/include/python3.13
 
-CXX_FLAGSarm64 = -std=gnu++17 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk -fPIC -fvisibility=hidden -flto
+CXX_FLAGSarm64 =  -g -g -std=gnu++17 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk -fPIC -fvisibility=hidden -fsanitize=address -fno-omit-frame-pointer
 
-CXX_FLAGS = -std=gnu++17 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk -fPIC -fvisibility=hidden -flto
+CXX_FLAGS =  -g -g -std=gnu++17 -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk -fPIC -fvisibility=hidden -fsanitize=address -fno-omit-frame-pointer
 

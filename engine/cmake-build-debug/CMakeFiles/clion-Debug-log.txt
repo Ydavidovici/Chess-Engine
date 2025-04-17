@@ -8,7 +8,7 @@ CMake Deprecation Warning:
   use the cmake-file-api(7) to view CMake-generated project build trees.
 
 
-CMake Error at CMakeLists.txt:17 (find_package):
+CMake Error at CMakeLists.txt:7 (find_package):
   By not providing "Findpybind11.cmake" in CMAKE_MODULE_PATH this project has
   asked CMake to find a package configuration file provided by "pybind11",
   but CMake did not find one.

@@ -251,7 +251,8 @@ std::vector<Move> Board::generateLegalMoves(Color c) const {
     };
     slide((c==Color::WHITE?whiteBishops:blackBishops), bishopDirs, 4);
     slide((c==Color::WHITE?whiteRooks  :blackRooks  ), rookDirs,   4);
-    slide((c==Color::WHITE?whiteQueens :blackQueens ), bishopDirs, 4), slide((c==Color::WHITE?whiteQueens:blackQueens), rookDirs, 4);
+    slide((c==Color::WHITE?whiteQueens :blackQueens ), bishopDirs, 4);
+    slide((c==Color::WHITE?whiteQueens:blackQueens), rookDirs, 4);
 
     // King moves
     tmp = (c == Color::WHITE ? whiteKings : blackKings);

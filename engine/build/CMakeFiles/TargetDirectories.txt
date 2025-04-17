@@ -3,6 +3,7 @@
 /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles/evaluator.dir
 /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles/core_engine.dir
 /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles/pyengine.dir
+/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles/test_engine.dir
 /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles/edit_cache.dir
 /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles/rebuild_cache.dir
 /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles/list_install_components.dir

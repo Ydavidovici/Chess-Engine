@@ -226,6 +226,19 @@ pyengine/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/pyengine.dir/build.make CMakeFiles/pyengine.dir/build
 .PHONY : pyengine/fast
 
+#=============================================================================
+# Target rules for targets named test_engine
+
+# Build rule for target.
+test_engine: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_engine
+.PHONY : test_engine
+
+# fast build rule for target.
+test_engine/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/build
+.PHONY : test_engine/fast
+
 board.o: board.cpp.o
 .PHONY : board.o
 
@@ -346,6 +359,30 @@ move.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/move.dir/build.make CMakeFiles/move.dir/move.cpp.s
 .PHONY : move.cpp.s
 
+test_engine.o: test_engine.cpp.o
+.PHONY : test_engine.o
+
+# target to build an object file
+test_engine.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/test_engine.cpp.o
+.PHONY : test_engine.cpp.o
+
+test_engine.i: test_engine.cpp.i
+.PHONY : test_engine.i
+
+# target to preprocess a source file
+test_engine.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/test_engine.cpp.i
+.PHONY : test_engine.cpp.i
+
+test_engine.s: test_engine.cpp.s
+.PHONY : test_engine.s
+
+# target to generate assembly for a file
+test_engine.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/test_engine.cpp.s
+.PHONY : test_engine.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -363,6 +400,7 @@ help:
 	@echo "... evaluator"
 	@echo "... move"
 	@echo "... pyengine"
+	@echo "... test_engine"
 	@echo "... board.o"
 	@echo "... board.i"
 	@echo "... board.s"
@@ -378,6 +416,9 @@ help:
 	@echo "... move.o"
 	@echo "... move.i"
 	@echo "... move.s"
+	@echo "... test_engine.o"
+	@echo "... test_engine.i"
+	@echo "... test_engine.s"
 .PHONY : help
 
 

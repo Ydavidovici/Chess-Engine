@@ -1,5 +1,7 @@
 // board.h
 #pragma once
+#include <cstdint>
+#include "types.h"
 #include <vector>
 #include <string>
 #include "move.h"

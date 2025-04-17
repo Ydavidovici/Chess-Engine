@@ -9,13 +9,13 @@ namespace py = pybind11;
 PYBIND11_MODULE(pyengine, m) {
 m.doc() = "Chess engine bindings";
 
-// Color enum
+// --- Color enum ---
 py::enum_<Color>(m, "Color")
 .value("WHITE", Color::WHITE)
 .value("BLACK", Color::BLACK)
 .export_values();
 
-// MoveType enum
+// --- MoveType enum ---
 py::enum_<MoveType>(m, "MoveType")
 .value("NORMAL",           MoveType::NORMAL)
 .value("CAPTURE",          MoveType::CAPTURE)
@@ -26,9 +26,13 @@ py::enum_<MoveType>(m, "MoveType")
 .value("INVALID",          MoveType::INVALID)
 .export_values();
 
-// Move struct
+// --- Move struct ---
 py::class_<Move>(m, "Move")
-.def(py::init<>())                           // default ctor
+.def(py::init<>())  // default constructor
+.def(py::init<int, int, MoveType, char>(),
+        py::arg("start"), py::arg("end"),
+        py::arg("type") = MoveType::NORMAL,
+py::arg("promo") = '\0')
 .def_readwrite("start", &Move::start)
 .def_readwrite("end",   &Move::end)
 .def_readwrite("type",  &Move::type)
@@ -37,19 +41,18 @@ py::class_<Move>(m, "Move")
 .def("is_capture", &Move::isCapture)
 .def("to_string",  &Move::toString);
 
-// Engine class
+// --- Engine class ---
 py::class_<Engine>(m, "Engine")
 .def(py::init<>())
-// reset to starting position, returns void
-.def("new_game",   &Engine::newGame)
-// print board to stdout
-.def("print_board",&Engine::printBoard)
-// apply a move
-.def("make_move",  &Engine::makeMove, py::arg("move"), py::arg("color"))
-// static eval
+// Reset to starting position
+.def("new_game",    &Engine::newGame)
+// Print board to stdout
+.def("print_board", &Engine::printBoard)
+// Apply a move (Move, Color)
+.def("make_move",   &Engine::makeMove, py::arg("move"), py::arg("color"))
+// Static evaluation of the current position
 .def("evaluate_board", &Engine::evaluateBoard)
-// best move search
-.def("find_best_move",
-&Engine::findBestMove,
+// Search for best move up to max_depth
+.def("find_best_move", &Engine::findBestMove,
 py::arg("max_depth"), py::arg("color"));
 }

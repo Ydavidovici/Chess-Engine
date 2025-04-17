@@ -68,6 +68,7 @@ all: CMakeFiles/move.dir/all
 all: CMakeFiles/evaluator.dir/all
 all: CMakeFiles/core_engine.dir/all
 all: CMakeFiles/pyengine.dir/all
+all: CMakeFiles/test_engine.dir/all
 .PHONY : all
 
 # The main recursive "codegen" target.
@@ -76,6 +77,7 @@ codegen: CMakeFiles/move.dir/codegen
 codegen: CMakeFiles/evaluator.dir/codegen
 codegen: CMakeFiles/core_engine.dir/codegen
 codegen: CMakeFiles/pyengine.dir/codegen
+codegen: CMakeFiles/test_engine.dir/codegen
 .PHONY : codegen
 
 # The main recursive "preinstall" target.
@@ -88,6 +90,7 @@ clean: CMakeFiles/move.dir/clean
 clean: CMakeFiles/evaluator.dir/clean
 clean: CMakeFiles/core_engine.dir/clean
 clean: CMakeFiles/pyengine.dir/clean
+clean: CMakeFiles/test_engine.dir/clean
 .PHONY : clean
 
 #=============================================================================
@@ -254,6 +257,41 @@ CMakeFiles/pyengine.dir/codegen:
 CMakeFiles/pyengine.dir/clean:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/pyengine.dir/build.make CMakeFiles/pyengine.dir/clean
 .PHONY : CMakeFiles/pyengine.dir/clean
+
+#=============================================================================
+# Target rules for target CMakeFiles/test_engine.dir
+
+# All Build rule for target.
+CMakeFiles/test_engine.dir/all: CMakeFiles/board.dir/all
+CMakeFiles/test_engine.dir/all: CMakeFiles/move.dir/all
+CMakeFiles/test_engine.dir/all: CMakeFiles/evaluator.dir/all
+CMakeFiles/test_engine.dir/all: CMakeFiles/core_engine.dir/all
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/depend
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles --progress-num=11,12 "Built target test_engine"
+.PHONY : CMakeFiles/test_engine.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/test_engine.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles 10
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/test_engine.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles 0
+.PHONY : CMakeFiles/test_engine.dir/rule
+
+# Convenience name for target.
+test_engine: CMakeFiles/test_engine.dir/rule
+.PHONY : test_engine
+
+# codegen rule for target.
+CMakeFiles/test_engine.dir/codegen:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/codegen
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine/build/CMakeFiles --progress-num=11,12 "Finished codegen for target test_engine"
+.PHONY : CMakeFiles/test_engine.dir/codegen
+
+# clean rule for target.
+CMakeFiles/test_engine.dir/clean:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_engine.dir/build.make CMakeFiles/test_engine.dir/clean
+.PHONY : CMakeFiles/test_engine.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.

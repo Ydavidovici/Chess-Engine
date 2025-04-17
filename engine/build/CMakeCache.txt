@@ -22,7 +22,7 @@ CMAKE_AR:FILEPATH=/Library/Developer/CommandLineTools/usr/bin/ar
 
 //Choose the type of build, options are: None Debug Release RelWithDebInfo
 // MinSizeRel ...
-CMAKE_BUILD_TYPE:STRING=
+CMAKE_BUILD_TYPE:STRING=Debug
 
 //Enable/Disable color output during build.
 CMAKE_COLOR_MAKEFILE:BOOL=ON
@@ -91,7 +91,7 @@ CMAKE_FIND_PACKAGE_REDIRECTS_DIR:STATIC=/Users/yaakovdavidovici/Coding/Python_Pr
 CMAKE_INSTALL_NAME_TOOL:FILEPATH=/usr/bin/install_name_tool
 
 //Install path prefix, prepended onto install directories.
-CMAKE_INSTALL_PREFIX:PATH=/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/backend/venv/lib/python3.13/site-packages
+CMAKE_INSTALL_PREFIX:PATH=/usr/local
 
 //Path to a program.
 CMAKE_LINKER:FILEPATH=/Library/Developer/CommandLineTools/usr/bin/ld
@@ -383,9 +383,9 @@ CMAKE_UNAME:INTERNAL=/usr/bin/uname
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
 //Details about finding PYTHON
-FIND_PACKAGE_MESSAGE_DETAILS_PYTHON:INTERNAL=/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/backend/venv/bin/python3.13.2
+FIND_PACKAGE_MESSAGE_DETAILS_PYTHON:INTERNAL=/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/backend/venv/bin/python3.13.3
 //Details about finding PythonInterp
-FIND_PACKAGE_MESSAGE_DETAILS_PythonInterp:INTERNAL=[/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/backend/venv/bin/python][v3.13.2(3.7)]
+FIND_PACKAGE_MESSAGE_DETAILS_PythonInterp:INTERNAL=[/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/backend/venv/bin/python][v3.13.3(3.7)]
 //Test HAS_FLTO_THIN
 HAS_FLTO_THIN:INTERNAL=1
 //ADVANCED property for variable: PYTHON_EXECUTABLE
@@ -398,7 +398,7 @@ PYTHON_LIBRARY-ADVANCED:INTERNAL=1
 PYTHON_MODULE_DEBUG_POSTFIX:INTERNAL=
 PYTHON_MODULE_EXTENSION:INTERNAL=.cpython-313-darwin.so
 PYTHON_MODULE_PREFIX:INTERNAL=
-PYTHON_VERSION:INTERNAL=3.13.2
+PYTHON_VERSION:INTERNAL=3.13.3
 PYTHON_VERSION_MAJOR:INTERNAL=3
 PYTHON_VERSION_MINOR:INTERNAL=13
 Python_ADDITIONAL_VERSIONS:INTERNAL=3.12;3.11;3.10;3.9;3.8;3.7
