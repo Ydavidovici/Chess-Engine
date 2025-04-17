@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libcore_engine.a CMakeFiles/core_engine.dir/engine.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libcore_engine.a

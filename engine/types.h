@@ -10,4 +10,4 @@ enum class MoveType {
 // Transposition‐table flags:
 constexpr int EXACT      = 0;
 constexpr int ALPHA_FLAG = 1;
-constexpr int BETA_FLAG  = 2;
+constexpr int BETA_FLAG = 2;

@@ -1,0 +1,2 @@
+/Library/Developer/CommandLineTools/usr/bin/ar qc libmove.a CMakeFiles/move.dir/move.cpp.o
+/Library/Developer/CommandLineTools/usr/bin/ranlib libmove.a

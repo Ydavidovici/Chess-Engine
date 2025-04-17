@@ -236,6 +236,9 @@ chess_engine_IS_TOP_LEVEL:STATIC=ON
 //Value Computed by CMake
 chess_engine_SOURCE_DIR:STATIC=/Users/yaakovdavidovici/Coding/Python_Projects/Chess-Engine/engine
 
+//The directory containing a CMake configuration file for pybind11.
+pybind11_DIR:PATH=pybind11_DIR-NOTFOUND
+
 
 ########################
 # INTERNAL cache entries
