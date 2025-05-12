@@ -1,1 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/c++  -g -g -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names -fsanitize=address CMakeFiles/test_engine.dir/test_engine.cpp.o -o test_engine  libcore_engine.a libboard.a libmove.a libevaluator.a
