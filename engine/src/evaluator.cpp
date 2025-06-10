@@ -108,46 +108,50 @@ void Evaluator::initializePieceSquareTables() {
     blackKingTableEG = { whiteKingTableEG.rbegin(), whiteKingTableEG.rend() };
 }
 
+// 1) Zobrist hashing
 uint64_t Evaluator::generateZobristHash(const Board& board,
                                         bool sideToMove) const {
-    uint64_t h = 0, bit;
+    uint64_t h = 0;
     for (int sq = 0; sq < 64; ++sq) {
-        bit = (1ULL << sq);
-        if (board.getWhitePawns()   & bit) h ^= zobristKeys[0][sq];
-        if (board.getWhiteKnights() & bit) h ^= zobristKeys[1][sq];
-        if (board.getWhiteBishops() & bit) h ^= zobristKeys[2][sq];
-        if (board.getWhiteRooks()   & bit) h ^= zobristKeys[3][sq];
-        if (board.getWhiteQueens()  & bit) h ^= zobristKeys[4][sq];
-        if (board.getWhiteKings()   & bit) h ^= zobristKeys[5][sq];
-        if (board.getBlackPawns()   & bit) h ^= zobristKeys[6][sq];
-        if (board.getBlackKnights() & bit) h ^= zobristKeys[7][sq];
-        if (board.getBlackBishops() & bit) h ^= zobristKeys[8][sq];
-        if (board.getBlackRooks()   & bit) h ^= zobristKeys[9][sq];
-        if (board.getBlackQueens()  & bit) h ^= zobristKeys[10][sq];
-        if (board.getBlackKings()   & bit) h ^= zobristKeys[11][sq];
+        uint64_t bit = (1ULL << sq);
+        if (board.pieceBB(Color::WHITE, Board::PAWN)   & bit) h ^= zobristKeys[0][sq];
+        if (board.pieceBB(Color::WHITE, Board::KNIGHT) & bit) h ^= zobristKeys[1][sq];
+        if (board.pieceBB(Color::WHITE, Board::BISHOP) & bit) h ^= zobristKeys[2][sq];
+        if (board.pieceBB(Color::WHITE, Board::ROOK)   & bit) h ^= zobristKeys[3][sq];
+        if (board.pieceBB(Color::WHITE, Board::QUEEN)  & bit) h ^= zobristKeys[4][sq];
+        if (board.pieceBB(Color::WHITE, Board::KING)   & bit) h ^= zobristKeys[5][sq];
+        if (board.pieceBB(Color::BLACK, Board::PAWN)   & bit) h ^= zobristKeys[6][sq];
+        if (board.pieceBB(Color::BLACK, Board::KNIGHT) & bit) h ^= zobristKeys[7][sq];
+        if (board.pieceBB(Color::BLACK, Board::BISHOP) & bit) h ^= zobristKeys[8][sq];
+        if (board.pieceBB(Color::BLACK, Board::ROOK)   & bit) h ^= zobristKeys[9][sq];
+        if (board.pieceBB(Color::BLACK, Board::QUEEN)  & bit) h ^= zobristKeys[10][sq];
+        if (board.pieceBB(Color::BLACK, Board::KING)   & bit) h ^= zobristKeys[11][sq];
     }
     if (sideToMove) h ^= zobristSide;
     return h;
 }
 
+
+// 2) Material evaluation
 int Evaluator::evaluateMaterial(const Board& board) const {
     auto pop = [](uint64_t b){ return __builtin_popcountll(b); };
     int m = 0;
-    m += 100 * pop(board.getWhitePawns());
-    m += 320 * pop(board.getWhiteKnights());
-    m += 330 * pop(board.getWhiteBishops());
-    m += 500 * pop(board.getWhiteRooks());
-    m += 900 * pop(board.getWhiteQueens());
-    m += 20000 * pop(board.getWhiteKings());
-    m -= 100 * pop(board.getBlackPawns());
-    m -= 320 * pop(board.getBlackKnights());
-    m -= 330 * pop(board.getBlackBishops());
-    m -= 500 * pop(board.getBlackRooks());
-    m -= 900 * pop(board.getBlackQueens());
-    m -= 20000 * pop(board.getBlackKings());
+    m += 100 * pop(board.pieceBB(Color::WHITE, Board::PAWN));
+    m += 320 * pop(board.pieceBB(Color::WHITE, Board::KNIGHT));
+    m += 330 * pop(board.pieceBB(Color::WHITE, Board::BISHOP));
+    m += 500 * pop(board.pieceBB(Color::WHITE, Board::ROOK));
+    m += 900 * pop(board.pieceBB(Color::WHITE, Board::QUEEN));
+    m += 20000 * pop(board.pieceBB(Color::WHITE, Board::KING));
+    m -= 100 * pop(board.pieceBB(Color::BLACK, Board::PAWN));
+    m -= 320 * pop(board.pieceBB(Color::BLACK, Board::KNIGHT));
+    m -= 330 * pop(board.pieceBB(Color::BLACK, Board::BISHOP));
+    m -= 500 * pop(board.pieceBB(Color::BLACK, Board::ROOK));
+    m -= 900 * pop(board.pieceBB(Color::BLACK, Board::QUEEN));
+    m -= 20000 * pop(board.pieceBB(Color::BLACK, Board::KING));
     return m;
 }
 
+// 3) Positional evaluation
 int Evaluator::evaluatePositional(const Board& board) const {
     int score = 0;
     auto scan = [&](uint64_t bb, const std::vector<int>& tbl, int sign){
@@ -157,19 +161,21 @@ int Evaluator::evaluatePositional(const Board& board) const {
             bb &= bb - 1;
         }
     };
-    scan(board.getWhitePawns(),   whitePawnTable,   +1);
-    scan(board.getWhiteKnights(), whiteKnightTable, +1);
-    scan(board.getWhiteBishops(), whiteBishopTable, +1);
-    scan(board.getWhiteRooks(),   whiteRookTable,   +1);
-    scan(board.getWhiteQueens(),  whiteQueenTable,  +1);
-    scan(board.getWhiteKings(),   whiteKingTableMG, +1);
 
-    scan(board.getBlackPawns(),   blackPawnTable,   -1);
-    scan(board.getBlackKnights(), blackKnightTable, -1);
-    scan(board.getBlackBishops(), blackBishopTable, -1);
-    scan(board.getBlackRooks(),   blackRookTable,   -1);
-    scan(board.getBlackQueens(),  blackQueenTable,  -1);
-    scan(board.getBlackKings(),   blackKingTableMG, -1);
+    scan(board.pieceBB(Color::WHITE, Board::PAWN),   whitePawnTable,   +1);
+    scan(board.pieceBB(Color::WHITE, Board::KNIGHT), whiteKnightTable, +1);
+    scan(board.pieceBB(Color::WHITE, Board::BISHOP), whiteBishopTable, +1);
+    scan(board.pieceBB(Color::WHITE, Board::ROOK),   whiteRookTable,   +1);
+    scan(board.pieceBB(Color::WHITE, Board::QUEEN),  whiteQueenTable,  +1);
+    scan(board.pieceBB(Color::WHITE, Board::KING),   whiteKingTableMG, +1);
+
+    scan(board.pieceBB(Color::BLACK, Board::PAWN),   blackPawnTable,   -1);
+    scan(board.pieceBB(Color::BLACK, Board::KNIGHT), blackKnightTable, -1);
+    scan(board.pieceBB(Color::BLACK, Board::BISHOP), blackBishopTable, -1);
+    scan(board.pieceBB(Color::BLACK, Board::ROOK),   blackRookTable,   -1);
+    scan(board.pieceBB(Color::BLACK, Board::QUEEN),  blackQueenTable,  -1);
+    scan(board.pieceBB(Color::BLACK, Board::KING),   blackKingTableMG, -1);
+
     return score;
 }
 
@@ -187,6 +193,7 @@ std::vector<Move> Evaluator::orderMoves(std::vector<Move> moves,
     return moves;
 }
 
+// 4) Quiescence search (removed Color args; uses one-arg makeMove)
 int Evaluator::quiescenceSearch(Board board,
                                 int alpha, int beta,
                                 bool maximizingPlayer,
@@ -198,34 +205,33 @@ int Evaluator::quiescenceSearch(Board board,
     if (maximizingPlayer) {
         if (standPat >= beta) return beta;
         alpha = std::max(alpha, standPat);
-        auto moves = board.generateLegalMoves(Color::WHITE);
-        for (auto &m : moves) {
-            if (!m.isCapture()) continue;
-            Board nb = board; nb.makeMove(m, Color::WHITE);
-            int score = -quiescenceSearch(nb, -beta, -alpha, false, depth+1);
-            if (score >= beta) return beta;
-            alpha = std::max(alpha, score);
-        }
-        return alpha;
     } else {
         if (standPat <= alpha) return alpha;
         beta = std::min(beta, standPat);
-        auto moves = board.generateLegalMoves(Color::BLACK);
-        for (auto &m : moves) {
-            if (!m.isCapture()) continue;
-            Board nb = board; nb.makeMove(m, Color::BLACK);
-            int score = -quiescenceSearch(nb, -beta, -alpha, true, depth+1);
+    }
+
+    auto moves = board.generateLegalMoves();
+    for (auto &m : moves) {
+        if (!m.isCapture()) continue;
+        board.makeMove(m);
+        int score = -quiescenceSearch(board, -beta, -alpha,
+                                      !maximizingPlayer, depth+1);
+        board.unmakeMove();
+        if (maximizingPlayer) {
+            if (score >= beta) return beta;
+            alpha = std::max(alpha, score);
+        } else {
             if (score <= alpha) return alpha;
             beta = std::min(beta, score);
         }
-        return beta;
     }
+    return maximizingPlayer ? alpha : beta;
 }
 
+// 5) Alpha-beta search (no Color parameter; one-arg makeMove/unmakeMove)
 std::pair<int, Move> Evaluator::alphaBeta(Board board,
                                           int depth,
-                                          int alpha,
-                                          int beta,
+                                          int alpha, int beta,
                                           bool maximizingPlayer) {
     int alphaOrig = alpha;
     Move bestMove;
@@ -248,21 +254,20 @@ std::pair<int, Move> Evaluator::alphaBeta(Board board,
                                   maximizingPlayer, 0), {} };
     }
 
-    auto moves = board.generateLegalMoves(
-            maximizingPlayer ? Color::WHITE : Color::BLACK
-    );
-    moves = orderMoves(moves, board, maximizingPlayer);
+    auto moves = orderMoves(board.generateLegalMoves(), board, maximizingPlayer);
     if (moves.empty()) {
-        return maximizingPlayer
-               ? std::make_pair(-100000, Move())
-               : std::make_pair( 100000, Move());
+        int mateScore = maximizingPlayer ? -100000 : 100000;
+        return {mateScore, {}};
     }
 
     for (auto &m : moves) {
-        Board nb = board;
-        nb.makeMove(m, maximizingPlayer ? Color::WHITE : Color::BLACK);
-        int score = -alphaBeta(nb, depth-1, -beta, -alpha,
-                               !maximizingPlayer).first;
+        board.makeMove(m);
+        auto [score, _] = alphaBeta(board, depth-1,
+                                    -beta, -alpha,
+                                    !maximizingPlayer);
+        score = -score;
+        board.unmakeMove();
+
         if ((maximizingPlayer && score > bestScore) ||
             (!maximizingPlayer && score < bestScore)) {
             bestScore = score;
@@ -273,11 +278,12 @@ std::pair<int, Move> Evaluator::alphaBeta(Board board,
         if (alpha >= beta) break;
     }
 
-    TTEntry e{ depth, bestScore,
-               bestScore <= alphaOrig ? BETA_FLAG :
-               bestScore >= beta      ? ALPHA_FLAG :
-               EXACT };
+    TTEntry e{depth, bestScore,
+              bestScore <= alphaOrig ? BETA_FLAG :
+              bestScore >= beta      ? ALPHA_FLAG :
+              EXACT };
     transpositionTable[h] = e;
+
     return {bestScore, bestMove};
 }
 
