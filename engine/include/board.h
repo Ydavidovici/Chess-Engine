@@ -23,6 +23,22 @@ public:
     bool makeMove(const Move& m);
     void unmakeMove();
 
+    // --- endgame detection ---
+    /** Is `c`’s king currently attacked? */
+    bool inCheck(Color c) const;
+    /** Does `c` have at least one legal move? */
+    bool hasLegalMoves(Color c) const;
+    /** True if `c` is in check and has no legal moves */
+    bool isCheckmate(Color c) const;
+    /** True if `c` is not in check and has no legal moves */
+    bool isStalemate(Color c) const;
+    /** 50-move rule: no pawn move or capture in last 100 half-moves */
+    bool isFiftyMoveDraw() const;
+    /** threefold repetition: current position (ignoring move-counters) occurred at least 3× */
+    bool isThreefoldRepetition() const;
+    /** insufficient material: only kings, or king+single minor vs king, etc. */
+    bool isInsufficientMaterial() const;
+
     // Inspectors
     uint64_t occupancy(Color c) const;
     uint64_t pieceBB(Color c, PieceIndex pi) const;
@@ -56,9 +72,17 @@ private:
     };
     std::vector<Undo> history;
 
+    std::vector<std::string> positionHistory;
+
     // Bitboard helpers
     static bool inBounds(int sq) { return sq >= 0 && sq < 64; }
     static inline void setBit(uint64_t& bb, int sq)   { bb |= (1ULL << sq); }
     static inline void clearBit(uint64_t& bb, int sq) { bb &= ~(1ULL << sq); }
     static inline bool testBit(uint64_t bb, int sq)   { return (bb >> sq) & 1ULL; }
+
+ /** Is the given square attacked by side `by`? */
+    bool isSquareAttacked(int sq, Color by) const;
+
+    /** Return the square (0-63) of the king of color `c`. */
+    int findKing(Color c) const;
 };

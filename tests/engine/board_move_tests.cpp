@@ -80,14 +80,13 @@ void testFENRoundTrip() {
 
 // generate & dump helper
 static vector<string> gen(const Board& b) {
-    auto mv=b.generateLegalMoves();
+    auto mv = b.generateLegalMoves();
     vector<string> out; out.reserve(mv.size());
-    for (auto &m:mv) out.push_back(m.toString());
+    for (auto &m : mv) out.push_back(m.toString());
     return out;
 }
 
 // 3) Pseudo-legal move generation
-// --- testPawnPushes() ---
 void testPawnPushes() {
     std::cout << "--- testPawnPushes ---\n";
 
@@ -101,6 +100,7 @@ void testPawnPushes() {
         assert(contains(v, "e2e4"));
     }
 
+    // pawn on e5
     {
         const std::string fen = "8/8/8/4P3/8/8/8/8 w - - 0 1";
         Board b; b.loadFEN(fen);
@@ -118,7 +118,7 @@ void testPawnPromotions() {
     const string fen="8/P7/8/8/8/8/8/8 w - - 0 1";
     Board b; b.loadFEN(fen);
     dumpMoves(b,fen);
-    auto v=gen(b);
+    auto v = gen(b);
     assert(contains(v,"a7a8Q"));
     assert(contains(v,"a7a8R"));
     assert(contains(v,"a7a8B"));
@@ -131,7 +131,7 @@ void testKnightMoves() {
     const string fen="8/8/8/8/8/8/8/N7 w - - 0 1";
     Board b; b.loadFEN(fen);
     dumpMoves(b,fen);
-    auto v=gen(b);
+    auto v = gen(b);
     assert(contains(v,"a1b3"));
     assert(contains(v,"a1c2"));
     std::cout<<"  ok knight moves\n\n";
@@ -182,9 +182,9 @@ void testKingMoves() {
     const string fen = "8/8/8/8/4K3/8/8/8 w - - 0 1";
     Board b; b.loadFEN(fen);
     dumpMoves(b,fen);
-    auto v=gen(b);
+    auto v = gen(b);
     for (auto sq:{"d5","e5","f5","d4","f4","d3","e3","f3"}) {
-        string m=string("e4")+sq;
+        string m = string("e4") + sq;
         assert(contains(v,m));
     }
     std::cout<<"  ok king moves\n\n";
@@ -196,7 +196,7 @@ void testCastlingGeneration() {
         const string fen="r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1";
         Board b; b.loadFEN(fen);
         dumpMoves(b,fen);
-        auto v=gen(b);
+        auto v = gen(b);
         assert(contains(v,"e1g1"));
         assert(contains(v,"e1c1"));
     }
@@ -204,7 +204,7 @@ void testCastlingGeneration() {
         const string fen="r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1";
         Board b; b.loadFEN(fen);
         dumpMoves(b,fen);
-        auto v=gen(b);
+        auto v = gen(b);
         assert(contains(v,"e8g8"));
         assert(contains(v,"e8c8"));
     }
@@ -216,14 +216,29 @@ void testEnPassantGeneration() {
     const string fen="8/8/8/3pP3/8/8/8/8 w - d6 0 1";
     Board b; b.loadFEN(fen);
     dumpMoves(b,fen);
-    auto mv=b.generateLegalMoves();
-    bool found=false;
-    for (auto &m:mv) {
+    auto mv = b.generateLegalMoves();
+    bool found = false;
+    for (auto &m : mv) {
         if (m.toString()=="e5d6" && m.type==MoveType::EN_PASSANT)
-            found=true;
+            found = true;
     }
     assert(found);
     std::cout<<"  ok en-passant\n\n";
+}
+
+// 4) Illegal-move filtering
+void testIllegalKingMoves() {
+    std::cout<<"--- testIllegalKingMoves ---\n";
+    // King on e1 attacked from f2 by a black rook
+    const string fen = "8/8/8/8/8/8/5r2/4K3 w - - 0 1";
+    Board b; b.loadFEN(fen);
+    dumpMoves(b,fen);
+    auto v = gen(b);
+    // e1-f1 is attacked → must NOT appear
+    assert(!contains(v,"e1f1"));
+    // e1-d1 is safe → should appear
+    assert(contains(v,"e1d1"));
+    std::cout<<"  ok illegal king moves filtered\n\n";
 }
 
 void testMakeUnmake() {
@@ -262,6 +277,8 @@ int main(){
     testKingMoves();
     testCastlingGeneration();
     testEnPassantGeneration();
+
+    testIllegalKingMoves();
 
     testMakeUnmake();
 

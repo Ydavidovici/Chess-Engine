@@ -9,6 +9,8 @@ Board::Board() {
     initialize();
 }
 
+static std::string stripClocks(const std::string& fen);
+
 // 1) initialize()
 void Board::initialize() {
     // Clear all bitboards
@@ -38,6 +40,8 @@ void Board::initialize() {
     fullmove_number   = 1;
 
     history.clear();
+	positionHistory.clear();
+    positionHistory.push_back(stripClocks(toFEN()));
 }
 
 // 2) loadFEN(const std::string&)
@@ -88,6 +92,9 @@ void Board::loadFEN(const std::string& fen) {
     } else {
         en_passant_square = -1;
     }
+
+ 	positionHistory.clear();
+    positionHistory.push_back(stripClocks(toFEN()));
 }
 
 
@@ -288,9 +295,129 @@ std::vector<Move> Board::generatePseudoMoves() const {
     return moves;
 }
 
-// For now, treat all pseudo-moves as legal.
+// --- new helper: findKing() ---
+int Board::findKing(Color c) const {
+    uint64_t kingBB = (c == Color::WHITE ? whiteBB[KING] : blackBB[KING]);
+    assert(kingBB != 0);
+    return __builtin_ctzll(kingBB);
+}
+
+// --- new helper: isSquareAttacked() ---
+bool Board::isSquareAttacked(int sq, Color by) const {
+    // occupancy and bitboards of attacker
+    uint64_t occ      = occupancy(Color::WHITE) | occupancy(Color::BLACK);
+    uint64_t ourOcc   = occupancy(by);
+    uint64_t oppOcc   = occupancy(by == Color::WHITE ? Color::BLACK : Color::WHITE);
+
+    // 1) pawn attacks
+    if (by == Color::WHITE) {
+        // white pawns attack from sq-7 and sq-9
+        for (int d : { -7, -9 }) {
+            int p = sq + d;
+            if (inBounds(p) && (whiteBB[PAWN] & (1ULL << p))) {
+                // file‐wrap: ensure pawn actually was on correct file
+                int df = std::abs((p % 8) - (sq % 8));
+                if (df == 1) return true;
+            }
+        }
+    } else {
+        // black pawns attack from sq+7 and sq+9
+        for (int d : { +7, +9 }) {
+            int p = sq + d;
+            if (inBounds(p) && (blackBB[PAWN] & (1ULL << p))) {
+                int df = std::abs((p % 8) - (sq % 8));
+                if (df == 1) return true;
+            }
+        }
+    }
+
+    // 2) knight attacks
+    static constexpr int knightDirs[8] = { -17,-15,-10,-6,6,10,15,17 };
+    for (int d : knightDirs) {
+        int p = sq + d;
+        if (!inBounds(p)) continue;
+        int df = std::abs((p % 8) - (sq % 8));
+        if (df > 2) continue;  // wrap guard
+        if ( (by == Color::WHITE ? whiteBB[KNIGHT] : blackBB[KNIGHT]) & (1ULL << p) )
+            return true;
+    }
+
+    // 3) sliding: bishop/queen diagonals
+    static constexpr int bishopDirs[4] = { -9, -7, 7, 9 };
+    for (int d : bishopDirs) {
+        int p = sq;
+        while (true) {
+            int f0 = p % 8;
+            p += d;
+            if (!inBounds(p)) break;
+            int f1 = p % 8;
+            if (std::abs(f1 - f0) != 1) break; // wrap
+            uint64_t mask = 1ULL << p;
+            if (occ & mask) {
+                auto bb = by == Color::WHITE ? whiteBB[BISHOP] | whiteBB[QUEEN]
+                                             : blackBB[BISHOP] | blackBB[QUEEN];
+                if (bb & mask) return true;
+                break;
+            }
+        }
+    }
+
+    // 4) sliding: rook/queen ranks & files
+    static constexpr int rookDirs[4] = { -8, -1, 1, 8 };
+    for (int d : rookDirs) {
+        int p = sq;
+        while (true) {
+            int r0 = p / 8, f0 = p % 8;
+            p += d;
+            if (!inBounds(p)) break;
+            int r1 = p / 8, f1 = p % 8;
+            // wrap guard for horizontal moves
+            if (d == -1 || d == +1) {
+                if (r1 != r0) break;
+            }
+            uint64_t mask = 1ULL << p;
+            if (occ & mask) {
+                auto bb = by == Color::WHITE ? whiteBB[ROOK] | whiteBB[QUEEN]
+                                             : blackBB[ROOK] | blackBB[QUEEN];
+                if (bb & mask) return true;
+                break;
+            }
+        }
+    }
+
+    // 5) king attacks (adjacent)
+    static constexpr int kingDirs[8] = { -9,-8,-7,-1,1,7,8,9 };
+    for (int d : kingDirs) {
+        int p = sq + d;
+        if (!inBounds(p)) continue;
+        int df = std::abs((p % 8) - (sq % 8));
+        if ((d == -1 || d == +1) && df != 1) continue;  // horizontal wrap
+        if ( (by==Color::WHITE ? whiteBB[KING] : blackBB[KING]) & (1ULL<<p) )
+            return true;
+    }
+
+    return false;
+}
+
 std::vector<Move> Board::generateLegalMoves() const {
-    return generatePseudoMoves();
+    auto pseudo = generatePseudoMoves();
+    // ——— if we don’t even have a king on the board, skip the “no-self-check” filter
+    //      (this lets your pawn-only positions generate pushes without crashing)
+    if (!pieceBB(side_to_move, KING)) {
+        return pseudo;
+    }
+    std::vector<Move> legal;
+    legal.reserve(pseudo.size());
+
+    for (auto &m : pseudo) {
+        Board copy = *this;
+        // copy.makeMove now rejects self-checks
+        if (copy.makeMove(m)) {
+            legal.push_back(m);
+        }
+    }
+
+    return legal;
 }
 
 // Full makeMove implementation
@@ -396,9 +523,18 @@ bool Board::makeMove(const Move& m) {
     else                                              ++halfmove_clock;
     if (us == Color::BLACK) ++fullmove_number;
 
-    // 8) Switch side and push history
     side_to_move = them;
     history.push_back(u);
+
+    // ** if we actually have a king, reject any move that leaves it in check **
+    if ( pieceBB(us, KING) != 0 &&
+         isSquareAttacked(findKing(us), them) ) {
+        // undo and fail
+        unmakeMove();
+        return false;
+    }
+
+    positionHistory.push_back(stripClocks(toFEN()));
     return true;
 }
 
@@ -451,4 +587,74 @@ void Board::unmakeMove() {
         clearBit(rbb, u.castling_rook_to);
         setBit(rbb,   u.castling_rook_from);
     }
+  if (!positionHistory.empty())
+        positionHistory.pop_back();
 }
+// ----------------------------------------------------------
+//  Endgame detection
+// ----------------------------------------------------------
+bool Board::inCheck(Color c) const {
+    int ksq = findKing(c);
+    assert(ksq >= 0 && "no king on board when calling inCheck");
+    // attacked by the opposite side
+    Color attacker = (c == Color::WHITE ? Color::BLACK : Color::WHITE);
+    return isSquareAttacked(ksq, attacker);
+}
+
+bool Board::hasLegalMoves(Color c) const {
+    // temporarily switch side_to_move to c, generate legal moves, restore
+    Color saved = side_to_move;
+    const_cast<Board*>(this)->side_to_move = c;
+    auto moves = generateLegalMoves();
+    const_cast<Board*>(this)->side_to_move = saved;
+    return !moves.empty();
+}
+
+bool Board::isCheckmate(Color c) const {
+    return inCheck(c) && !hasLegalMoves(c);
+}
+
+bool Board::isStalemate(Color c) const {
+    return !inCheck(c) && !hasLegalMoves(c);
+}
+
+static std::string stripClocks(const std::string &fen) {
+    // FEN: placement stm castling ep halfmove fullmove
+    // we want the first 4 fields only:
+    int spaces = 0, i = 0;
+    for (; i < (int)fen.size() && spaces < 4; ++i)
+        if (fen[i] == ' ') ++spaces;
+    return fen.substr(0, i);
+}
+
+bool Board::isFiftyMoveDraw() const {
+    return halfmove_clock >= 100;
+}
+
+bool Board::isThreefoldRepetition() const {
+    auto key = stripClocks(toFEN());
+    int cnt = 0;
+    for (auto &k : positionHistory)
+        if (k == key && ++cnt >= 3)
+            return true;
+    return false;
+}
+
+bool Board::isInsufficientMaterial() const {
+    // count all non-king material
+    int minorCount = 0, majorCount = 0, pawnCount = 0;
+    // white
+    for (int pt = PAWN; pt < KING; ++pt) {
+        uint64_t bbw = whiteBB[pt], bbb = blackBB[pt];
+        int c = __builtin_popcountll(bbw) + __builtin_popcountll(bbb);
+        if      (pt == PAWN)  pawnCount += c;
+        else if (pt == KNIGHT || pt == BISHOP) minorCount += c;
+        else /*ROOK,QUEEN*/  majorCount += c;
+    }
+    // if any pawn or any rook/queen, there is material
+    if (pawnCount || majorCount) return false;
+    // now only minors remain (and kings).  if there is at most one minor total, draw.
+    return minorCount <= 1;
+}
+
+
