@@ -151,116 +151,138 @@ uint64_t Board::pieceBB(Color c, PieceIndex pi) const {
     return (c == Color::WHITE ? whiteBB[pi] : blackBB[pi]);
 }
 
-// Generate all pseudo-legal moves for side_to_move
 std::vector<Move> Board::generatePseudoMoves() const {
     std::vector<Move> moves;
     Color c = side_to_move;
+
     uint64_t whiteOcc = occupancy(Color::WHITE);
     uint64_t blackOcc = occupancy(Color::BLACK);
     uint64_t allOcc   = whiteOcc | blackOcc;
     uint64_t ownOcc   = (c==Color::WHITE ? whiteOcc : blackOcc);
     uint64_t oppOcc   = (c==Color::WHITE ? blackOcc : whiteOcc);
 
-    // Directions
-    static const int knightDirs[] = {-17,-15,-10,-6,6,10,15,17};
-    static const int kingDirs[]   = {-9,-8,-7,-1,1,7,8,9};
-    static const int bishopDirs[] = {-9,-7,7,9};
-    static const int rookDirs[]   = {-8,-1,1,8};
-
-    // Pawn moves
-    uint64_t pawnBB  = (c == Color::WHITE ? whiteBB[PAWN] : blackBB[PAWN]);
-    int      dir     = (c == Color::WHITE ? 8 : -8);
-    int      startR  = (c == Color::WHITE ? 1 : 6);
-    int      promoR  = (c == Color::WHITE ? 7 : 0);
+    // 1) Pawns
+    uint64_t pawnBB  = (c==Color::WHITE ? whiteBB[PAWN] : blackBB[PAWN]);
+    int      dir     = (c==Color::WHITE ?  8 : -8);
+    int      startR  = (c==Color::WHITE ?  1 : 6);
+    int      promoR  = (c==Color::WHITE ?  7 : 0);
     uint64_t tmp = pawnBB;
     while (tmp) {
         int sq = __builtin_ctzll(tmp);
         tmp &= tmp - 1;
-        int t1 = sq + dir;
         // single push
-        if (inBounds(t1) && !(allOcc & (1ULL << t1))) {
-            if (t1 / 8 == promoR) {
-                for (char p : {'Q','R','B','N'})
+        int t1 = sq + dir;
+        if (inBounds(t1) && !(allOcc & (1ULL<<t1))) {
+            if (t1/8 == promoR) {
+                for (char p: {'Q','R','B','N'})
                     moves.emplace_back(sq, t1, MoveType::PROMOTION, p);
             } else {
                 moves.emplace_back(sq, t1);
                 // double push
-                if (sq / 8 == startR) {
-                    int t2 = sq + 2 * dir;
-                    if (inBounds(t2) && !(allOcc & (1ULL << t2)))
+                if (sq/8 == startR) {
+                    int t2 = sq + 2*dir;
+                    if (inBounds(t2) && !(allOcc & (1ULL<<t2)))
                         moves.emplace_back(sq, t2);
                 }
             }
         }
-        // captures
-        for (int d : {dir - 1, dir + 1}) {
+        // captures and en-passant
+        for (int d : {dir-1, dir+1}) {
             int tc = sq + d;
-            if (inBounds(tc) && (oppOcc & (1ULL << tc))) {
-                if (tc / 8 == promoR) {
-                    for (char p : {'Q','R','B','N'})
+            if (!inBounds(tc)) continue;
+            if (oppOcc & (1ULL<<tc)) {
+                // normal capture
+                if (tc/8 == promoR) {
+                    for (char p: {'Q','R','B','N'})
                         moves.emplace_back(sq, tc, MoveType::CAPTURE, p);
                 } else {
                     moves.emplace_back(sq, tc, MoveType::CAPTURE);
                 }
             }
+            else if (tc == en_passant_square) {
+                // en-passant capture
+                moves.emplace_back(sq, tc, MoveType::EN_PASSANT);
+            }
         }
     }
 
-    // Knight moves
-    tmp = (c == Color::WHITE ? whiteBB[KNIGHT] : blackBB[KNIGHT]);
+    // 2) Knights
+    static const int knightDirs[8] = {-17,-15,-10,-6,6,10,15,17};
+    tmp = (c==Color::WHITE ? whiteBB[KNIGHT] : blackBB[KNIGHT]);
     while (tmp) {
         int sq = __builtin_ctzll(tmp);
         tmp &= tmp - 1;
         for (int d : knightDirs) {
             int t = sq + d;
-            if (inBounds(t) && !(ownOcc & (1ULL << t))) {
-                MoveType mt = (oppOcc & (1ULL << t)) ? MoveType::CAPTURE : MoveType::NORMAL;
+            if (!inBounds(t)) continue;
+            if (!(ownOcc & (1ULL<<t))) {
+                MoveType mt = (oppOcc & (1ULL<<t)) ? MoveType::CAPTURE
+                                                   : MoveType::NORMAL;
                 moves.emplace_back(sq, t, mt);
             }
         }
     }
 
-    // Sliding pieces
-    auto slide = [&](uint64_t bb, const int dirs[], int nd) {
+    // 3) Sliding pieces
+    auto slide = [&](uint64_t bb,
+                     const int fdir[], const int rdir[], int nDir) {
         uint64_t scan = bb;
         while (scan) {
             int sq = __builtin_ctzll(scan);
             scan &= scan - 1;
-            for (int i = 0; i < nd; ++i) {
-                int t = sq;
+            int sf = sq % 8, sr = sq / 8;
+            for (int i = 0; i < nDir; ++i) {
+                int f = sf, r = sr;
                 while (true) {
-                    t += dirs[i];
-                    if (!inBounds(t)) break;
-                    // file wrap
-                    int df = abs((sq % 8) - (t % 8));
-                    if (df > 2 && (dirs[i] == -1 || dirs[i] == 1 ||
-                                  dirs[i] == -9 || dirs[i] == -7 ||
-                                  dirs[i] == 7  || dirs[i] == 9)) break;
-                    if (ownOcc & (1ULL << t)) break;
-                    MoveType mt = (oppOcc & (1ULL << t)) ? MoveType::CAPTURE : MoveType::NORMAL;
+                    f += fdir[i];  r += rdir[i];
+                    if (f<0||f>7||r<0||r>7) break;
+                    int t = r*8 + f;
+                    MoveType mt = (oppOcc & (1ULL<<t)) ? MoveType::CAPTURE
+                                                       : MoveType::NORMAL;
                     moves.emplace_back(sq, t, mt);
-                    if (allOcc & (1ULL << t)) break;
+                    if (allOcc & (1ULL<<t)) break;
                 }
             }
         }
     };
-    slide((c==Color::WHITE?whiteBB[BISHOP]:blackBB[BISHOP]), bishopDirs, 4);
-    slide((c==Color::WHITE?whiteBB[ROOK]  :blackBB[ROOK]  ), rookDirs,   4);
-    slide((c==Color::WHITE?whiteBB[QUEEN] :blackBB[QUEEN] ), bishopDirs, 4);
-    slide((c==Color::WHITE?whiteBB[QUEEN] :blackBB[QUEEN] ), rookDirs,   4);
+    // rook directions
+    static const int rf[4]={-1,1,0,0}, rr[4]={0,0,-1,1};
+    slide((c==Color::WHITE?whiteBB[ROOK]:blackBB[ROOK]), rf, rr, 4);
+    // bishop directions
+    static const int bf[4]={-1,1,-1,1}, br[4]={-1,-1,1,1};
+    slide((c==Color::WHITE?whiteBB[BISHOP]:blackBB[BISHOP]), bf, br, 4);
+    // queen = rook + bishop
+    slide((c==Color::WHITE?whiteBB[QUEEN]:blackBB[QUEEN]),  rf, rr, 4);
+    slide((c==Color::WHITE?whiteBB[QUEEN]:blackBB[QUEEN]),  bf, br, 4);
 
-    // King moves
-    tmp = (c == Color::WHITE ? whiteBB[KING] : blackBB[KING]);
+    // 4) King (one square)
+    static const int kingDirs[8] = {-9,-8,-7,-1,1,7,8,9};
+    tmp = (c==Color::WHITE ? whiteBB[KING] : blackBB[KING]);
     while (tmp) {
         int sq = __builtin_ctzll(tmp);
         tmp &= tmp - 1;
         for (int d : kingDirs) {
             int t = sq + d;
-            if (inBounds(t) && !(ownOcc & (1ULL << t))) {
-                MoveType mt = (oppOcc & (1ULL << t)) ? MoveType::CAPTURE : MoveType::NORMAL;
+            if (!inBounds(t)) continue;
+            if (!(ownOcc & (1ULL<<t))) {
+                MoveType mt = (oppOcc & (1ULL<<t)) ? MoveType::CAPTURE
+                                                   : MoveType::NORMAL;
                 moves.emplace_back(sq, t, mt);
             }
         }
+    }
+
+    // 5) Castling (rights & empty squares only)
+    if (c==Color::WHITE) {
+        if ((castling_rights&0b0001) && !(allOcc&((1ULL<<5)|(1ULL<<6))))
+            moves.emplace_back(4,6,MoveType::CASTLE_KINGSIDE);
+        if ((castling_rights&0b0010) && !(allOcc&((1ULL<<1)|(1ULL<<2)|(1ULL<<3))))
+            moves.emplace_back(4,2,MoveType::CASTLE_QUEENSIDE);
+    } else {
+        if ((castling_rights&0b0100) && !(allOcc&((1ULL<<61)|(1ULL<<62))))
+            moves.emplace_back(60,62,MoveType::CASTLE_KINGSIDE);
+        if ((castling_rights&0b1000) && !(allOcc&((1ULL<<57)|(1ULL<<58)|(1ULL<<59))))
+            moves.emplace_back(60,58,MoveType::CASTLE_QUEENSIDE);
     }
 
     return moves;

@@ -2,9 +2,15 @@
 #pragma once
 
 enum class Color { WHITE, BLACK };
+
 enum class MoveType {
-  NORMAL, CAPTURE, CASTLE_KINGSIDE, CASTLE_QUEENSIDE,
-  PROMOTION, EN_PASSANT, INVALID
+    NORMAL,
+    CAPTURE,
+    CASTLE_KINGSIDE,
+    CASTLE_QUEENSIDE,
+    PROMOTION,
+    EN_PASSANT,
+    INVALID
 };
 
 // Transposition‐table flags:

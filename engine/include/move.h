@@ -1,14 +1,14 @@
-// move.h
+// include/move.h
 #pragma once
 
 #include <string>
 #include "types.h"
 
 struct Move {
-    int start;               // source square (0–63)
-    int end;                 // destination square (0–63)
-    MoveType type;           // NORMAL, CAPTURE, PROMOTION, CASTLE_*, EN_PASSANT, etc.
-    char promo;              // promotion piece: 'Q','R','B','N' or '\0' if none
+    int       start;   // 0–63
+    int       end;     // 0–63
+    MoveType  type;    // NORMAL, CAPTURE, PROMOTION, CASTLE_*, EN_PASSANT, INVALID
+    char      promo;   // 'Q','R','B','N' or '\0'
 
     Move()
       : start(-1), end(-1), type(MoveType::INVALID), promo('\0') {}
