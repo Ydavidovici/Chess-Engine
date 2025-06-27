@@ -1,4 +1,3 @@
-// src/move.cpp
 #include "move.h"
 
 bool Move::isValid() const {

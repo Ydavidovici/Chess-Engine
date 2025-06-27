@@ -4,14 +4,43 @@
 #include <cassert>
 #include <cctype>
 #include <algorithm>
+#include <random>
+
+//=== Zobrist tables ===
+static uint64_t pieceKeys[2][Board::PieceTypeCount][64];
+static uint64_t sideKey;
+static uint64_t castleKeys[16];
+static uint64_t epFileKey[8];
+
+static uint64_t rand64() {
+    static std::mt19937_64 rng{ std::random_device{}() };
+    return rng();
+}
+
+// One-time Zobrist initializer
+static struct ZobristInit {
+    ZobristInit() {
+        for (int c = 0; c < 2; ++c)
+            for (int p = 0; p < Board::PieceTypeCount; ++p)
+                for (int sq = 0; sq < 64; ++sq)
+                    pieceKeys[c][p][sq] = rand64();
+        sideKey = rand64();
+        for (int i = 0; i < 16; ++i)   castleKeys[i] = rand64();
+        for (int f = 0; f < 8; ++f)     epFileKey[f]  = rand64();
+    }
+} _zinit;
+
+static std::string stripClocks(const std::string& fen) {
+    int spaces = 0, i = 0;
+    for (; i < (int)fen.size() && spaces < 4; ++i)
+        if (fen[i] == ' ') ++spaces;
+    return fen.substr(0, i);
+}
 
 Board::Board() {
     initialize();
 }
 
-static std::string stripClocks(const std::string& fen);
-
-// 1) initialize()
 void Board::initialize() {
     // Clear all bitboards
     whiteBB.fill(0);
@@ -24,7 +53,6 @@ void Board::initialize() {
     whiteBB[ROOK]   = 0x0000000000000081ULL;
     whiteBB[QUEEN]  = 0x0000000000000008ULL;
     whiteBB[KING]   = 0x0000000000000010ULL;
-
     blackBB[PAWN]   = 0x00FF000000000000ULL;
     blackBB[KNIGHT] = 0x4200000000000000ULL;
     blackBB[BISHOP] = 0x2400000000000000ULL;
@@ -34,69 +62,77 @@ void Board::initialize() {
 
     // Game state
     side_to_move      = Color::WHITE;
-    castling_rights   = 0b1111;  // KQkq
+    castling_rights   = 0b1111;
     en_passant_square = -1;
     halfmove_clock    = 0;
     fullmove_number   = 1;
 
     history.clear();
-	positionHistory.clear();
+    positionHistory.clear();
+
+    // Compute initial Zobrist hash
+    zobrist_ = 0;
+    for (int c = 0; c < 2; ++c) {
+        const auto &bbArr = (c==0 ? whiteBB : blackBB);
+        for (int p = 0; p < PieceTypeCount; ++p) {
+            uint64_t bb = bbArr[p];
+            while (bb) {
+                int sq = __builtin_ctzll(bb);
+                bb &= bb - 1;
+                zobrist_ ^= pieceKeys[c][p][sq];
+            }
+        }
+    }
+    if (side_to_move == Color::BLACK) zobrist_ ^= sideKey;
+    zobrist_ ^= castleKeys[castling_rights];
+    if (en_passant_square != -1)
+        zobrist_ ^= epFileKey[en_passant_square % 8];
+
     positionHistory.push_back(stripClocks(toFEN()));
 }
 
-// 2) loadFEN(const std::string&)
 void Board::loadFEN(const std::string& fen) {
+    // Parse FEN into board state
     whiteBB.fill(0);
     blackBB.fill(0);
-
     std::istringstream iss(fen);
     std::string placement, stm, cr, ep;
     iss >> placement >> stm >> cr >> ep >> halfmove_clock >> fullmove_number;
 
-    // Parse piece placement
     int rank = 7, file = 0;
     for (char c : placement) {
         if (c == '/') { --rank; file = 0; continue; }
         if (std::isdigit(c)) { file += c - '0'; continue; }
         int sq = rank*8 + file++;
         switch (c) {
-        case 'P': setBit(whiteBB[PAWN],   sq); break;
-        case 'N': setBit(whiteBB[KNIGHT], sq); break;
-        case 'B': setBit(whiteBB[BISHOP], sq); break;
-        case 'R': setBit(whiteBB[ROOK],   sq); break;
-        case 'Q': setBit(whiteBB[QUEEN],  sq); break;
-        case 'K': setBit(whiteBB[KING],   sq); break;
-        case 'p': setBit(blackBB[PAWN],   sq); break;
-        case 'n': setBit(blackBB[KNIGHT], sq); break;
-        case 'b': setBit(blackBB[BISHOP], sq); break;
-        case 'r': setBit(blackBB[ROOK],   sq); break;
-        case 'q': setBit(blackBB[QUEEN],  sq); break;
-        case 'k': setBit(blackBB[KING],   sq); break;
+            case 'P': setBit(whiteBB[PAWN], sq); break;
+            case 'N': setBit(whiteBB[KNIGHT], sq); break;
+            case 'B': setBit(whiteBB[BISHOP], sq); break;
+            case 'R': setBit(whiteBB[ROOK], sq); break;
+            case 'Q': setBit(whiteBB[QUEEN], sq); break;
+            case 'K': setBit(whiteBB[KING], sq); break;
+            case 'p': setBit(blackBB[PAWN], sq); break;
+            case 'n': setBit(blackBB[KNIGHT], sq); break;
+            case 'b': setBit(blackBB[BISHOP], sq); break;
+            case 'r': setBit(blackBB[ROOK], sq); break;
+            case 'q': setBit(blackBB[QUEEN], sq); break;
+            case 'k': setBit(blackBB[KING], sq); break;
         }
     }
-
-    // Side to move
     side_to_move = (stm == "w" ? Color::WHITE : Color::BLACK);
-
-    // Castling rights
     castling_rights = 0;
     if (cr.find('K')!=std::string::npos) castling_rights |= 0b0001;
     if (cr.find('Q')!=std::string::npos) castling_rights |= 0b0010;
     if (cr.find('k')!=std::string::npos) castling_rights |= 0b0100;
     if (cr.find('q')!=std::string::npos) castling_rights |= 0b1000;
-
-    // En passant target
     if (ep != "-") {
         int f = ep[0] - 'a', r = ep[1] - '1';
         en_passant_square = r*8 + f;
-    } else {
-        en_passant_square = -1;
-    }
+    } else en_passant_square = -1;
 
- 	positionHistory.clear();
-    positionHistory.push_back(stripClocks(toFEN()));
+    // Recompute Zobrist from scratch
+    initialize();
 }
-
 
 std::string Board::toFEN() const {
     std::string fen;
@@ -618,14 +654,6 @@ bool Board::isStalemate(Color c) const {
     return !inCheck(c) && !hasLegalMoves(c);
 }
 
-static std::string stripClocks(const std::string &fen) {
-    // FEN: placement stm castling ep halfmove fullmove
-    // we want the first 4 fields only:
-    int spaces = 0, i = 0;
-    for (; i < (int)fen.size() && spaces < 4; ++i)
-        if (fen[i] == ' ') ++spaces;
-    return fen.substr(0, i);
-}
 
 bool Board::isFiftyMoveDraw() const {
     return halfmove_clock >= 100;

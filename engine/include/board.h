@@ -24,19 +24,12 @@ public:
     void unmakeMove();
 
     // --- endgame detection ---
-    /** Is `c`’s king currently attacked? */
     bool inCheck(Color c) const;
-    /** Does `c` have at least one legal move? */
     bool hasLegalMoves(Color c) const;
-    /** True if `c` is in check and has no legal moves */
     bool isCheckmate(Color c) const;
-    /** True if `c` is not in check and has no legal moves */
     bool isStalemate(Color c) const;
-    /** 50-move rule: no pawn move or capture in last 100 half-moves */
     bool isFiftyMoveDraw() const;
-    /** threefold repetition: current position (ignoring move-counters) occurred at least 3× */
     bool isThreefoldRepetition() const;
-    /** insufficient material: only kings, or king+single minor vs king, etc. */
     bool isInsufficientMaterial() const;
 
     // Inspectors
@@ -44,19 +37,19 @@ public:
     uint64_t pieceBB(Color c, PieceIndex pi) const;
     Color sideToMove() const { return side_to_move; }
 
+    // Zobrist key for hashing
+    uint64_t zobristKey() const { return zobrist_; }
+
 private:
-    // Bitboards for each piece type
     std::array<uint64_t, PieceTypeCount> whiteBB{};
     std::array<uint64_t, PieceTypeCount> blackBB{};
 
-    // Game state
     Color   side_to_move;
-    uint8_t castling_rights;    // bits: Wk, WQ, bk, bQ
-    int     en_passant_square;  // -1 if none
+    uint8_t castling_rights;
+    int     en_passant_square;
     int     halfmove_clock;
     int     fullmove_number;
 
-    // Undo history entry for unmakeMove
     struct Undo {
         uint8_t      castling_rights;
         int          en_passant_square;
@@ -71,7 +64,6 @@ private:
         int          castling_rook_to;
     };
     std::vector<Undo> history;
-
     std::vector<std::string> positionHistory;
 
     // Bitboard helpers
@@ -80,9 +72,9 @@ private:
     static inline void clearBit(uint64_t& bb, int sq) { bb &= ~(1ULL << sq); }
     static inline bool testBit(uint64_t bb, int sq)   { return (bb >> sq) & 1ULL; }
 
- /** Is the given square attacked by side `by`? */
     bool isSquareAttacked(int sq, Color by) const;
+    int  findKing(Color c) const;
 
-    /** Return the square (0-63) of the king of color `c`. */
-    int findKing(Color c) const;
+    // Zobrist hash state
+    uint64_t zobrist_ = 0;
 };
