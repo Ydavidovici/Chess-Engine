@@ -42,7 +42,7 @@ target_include_directories(tt        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 #--------------------------------------------------------------------------------
 #  Search component
 #--------------------------------------------------------------------------------
-add_library(search STATIC src/search.cpp)
+add_library(search STATIC src/search.cpp src/timeman.cpp)
 target_include_directories(search
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
 )

@@ -1,11 +1,12 @@
-// include/search.h
 #pragma once
 #include "board.h"
 #include "move.h"
 #include "evaluator.h"
 #include "transpositionTable.h"
+#include "timeman.h"
 #include <limits>
 #include <vector>
+#include <cstdint>
 
 class Search {
 public:
@@ -13,13 +14,20 @@ public:
 
     Search(const Evaluator &evaluator, TranspositionTable &tt);
 
-    // returns best move for stm up to maxDepth plies
+    /**
+     * Legacy overload: no time management (infinite time budget).
+     */
     Move findBestMove(Board &board, Color stm, int maxDepth);
+
+    /**
+     * Timed search up to maxDepth plies, subject to given TimeManager.
+     */
+    Move findBestMove(Board &board, Color stm, int maxDepth, TimeManager &tm);
 
 private:
     const Evaluator &evaluator_;
     TranspositionTable &tt_;
 
-    int negamax(Board &board, int depth, int alpha, int beta, Color stm);
-    int quiescence(Board &board, int alpha, int beta, Color stm);
+    int negamax(Board &board, int depth, int alpha, int beta, Color stm, TimeManager &tm);
+    int quiescence(Board &board, int alpha, int beta, Color stm, TimeManager &tm);
 };
