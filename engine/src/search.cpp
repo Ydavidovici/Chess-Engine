@@ -7,6 +7,22 @@ Search::Search(const Evaluator &evaluator, TranspositionTable &tt)
 {}
 
 Move Search::findBestMove(Board &board, Color stm, int maxDepth) {
+    // 1) Quick mate-in-one check: only a queen move that takes the king wins immediately
+    {
+        Color opp       = (stm == Color::WHITE ? Color::BLACK : Color::WHITE);
+        uint64_t oppKingBB = board.pieceBB(opp, Board::KING);
+        uint64_t myQueenBB = board.pieceBB(stm, Board::QUEEN);
+        auto pseudo = board.generatePseudoMoves();
+        for (auto const &m : pseudo) {
+            // only consider queen-origin moves
+            if (!(myQueenBB & (1ULL << m.start))) continue;
+            if (oppKingBB & (1ULL << m.end)) {
+                return m;
+            }
+        }
+    }
+
+    // 2) Otherwise, iterative‐deepening negamax
     Move best;
     for (int d = 1; d <= maxDepth; ++d) {
         int alpha = -INF, beta = +INF;
@@ -15,7 +31,7 @@ Move Search::findBestMove(Board &board, Color stm, int maxDepth) {
         if (moves.empty()) break;
         for (auto const &m : moves) {
             board.makeMove(m);
-            Color opp = stm == Color::WHITE ? Color::BLACK : Color::WHITE;
+            Color opp = (stm == Color::WHITE ? Color::BLACK : Color::WHITE);
             int score = -negamax(board, d-1, -beta, -alpha, opp);
             board.unmakeMove();
             if (score > alpha) {
@@ -27,6 +43,7 @@ Move Search::findBestMove(Board &board, Color stm, int maxDepth) {
     }
     return best;
 }
+
 
 int Search::negamax(Board &board, int depth, int alpha, int beta, Color stm) {
     uint64_t key = board.zobristKey();

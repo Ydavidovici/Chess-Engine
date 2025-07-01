@@ -163,7 +163,7 @@ int Evaluator::evaluatePositional(const Board &board) const {
 
 int Evaluator::evaluate(const Board &board, Color stm) const {
     if (board.isCheckmate(stm)) return -MATE_SCORE;
-    if (board.isStalemate(stm)
+    if ((board.isStalemate(stm) || board.isStalemate(opponent(stm)))
      || board.isFiftyMoveDraw()
      || board.isThreefoldRepetition()
      || board.isInsufficientMaterial())

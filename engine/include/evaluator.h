@@ -10,6 +10,13 @@
 #include <limits>
 #include <utility>
 
+// a simple Color-flip helper
+static inline Color opponent(Color c) {
+    return c == Color::WHITE ? Color::BLACK
+                             : Color::WHITE;
+}
+
+
 class Evaluator {
 public:
     /**

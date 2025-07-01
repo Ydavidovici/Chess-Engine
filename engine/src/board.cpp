@@ -130,8 +130,30 @@ void Board::loadFEN(const std::string& fen) {
         en_passant_square = r*8 + f;
     } else en_passant_square = -1;
 
-    // Recompute Zobrist from scratch
-    initialize();
+    // 1) Clear any old undo/history
+    history.clear();
+    positionHistory.clear();
+
+    // 2) Recompute zobrist_ from this position
+    zobrist_ = 0;
+    for (int c = 0; c < 2; ++c) {
+        const auto &bbArr = (c == 0 ? whiteBB : blackBB);
+        for (int p = 0; p < PieceTypeCount; ++p) {
+            uint64_t bb = bbArr[p];
+            while (bb) {
+                int sq = __builtin_ctzll(bb);
+                bb &= bb - 1;
+                zobrist_ ^= pieceKeys[c][p][sq];
+            }
+        }
+    }
+    if (side_to_move == Color::BLACK) zobrist_ ^= sideKey;
+    zobrist_ ^= castleKeys[castling_rights];
+    if (en_passant_square != -1)
+        zobrist_ ^= epFileKey[en_passant_square % 8];
+
+    // 3) Record this position (minus clocks) for repetition detection
+    positionHistory.push_back(stripClocks(fen));
 }
 
 std::string Board::toFEN() const {
@@ -307,6 +329,8 @@ std::vector<Move> Board::generatePseudoMoves() const {
         for (int d : kingDirs) {
             int t = sq + d;
             if (!inBounds(t)) continue;
+            int f0 = sq % 8, f1 = t % 8;
+            if (std::abs(f1 - f0) > 1) continue;
             if (!(ownOcc & (1ULL<<t))) {
                 MoveType mt = (oppOcc & (1ULL<<t)) ? MoveType::CAPTURE
                                                    : MoveType::NORMAL;
@@ -436,21 +460,28 @@ bool Board::isSquareAttacked(int sq, Color by) const {
 }
 
 std::vector<Move> Board::generateLegalMoves() const {
+    // First, generate all pseudo-legal moves
     auto pseudo = generatePseudoMoves();
-    // ——— if we don’t even have a king on the board, skip the “no-self-check” filter
-    //      (this lets your pawn-only positions generate pushes without crashing)
-    if (!pieceBB(side_to_move, KING)) {
+
+    // If side to move has no king (e.g., pawn-only positions), skip the self-check filter
+    if (!pieceBB(side_to_move, KING))
         return pseudo;
-    }
+
     std::vector<Move> legal;
     legal.reserve(pseudo.size());
 
-    for (auto &m : pseudo) {
+    // Prepare a bitboard for the opponent's king to skip any king-captures
+    Color them = (side_to_move == Color::WHITE ? Color::BLACK : Color::WHITE);
+    uint64_t oppKingBB = pieceBB(them, KING);
+
+    // Filter out moves that capture the opponent's king or leave you in check
+    for (auto const &m : pseudo) {
+        // Skip king-captures entirely
+        if (oppKingBB & (1ULL << m.end))
+            continue;
         Board copy = *this;
-        // copy.makeMove now rejects self-checks
-        if (copy.makeMove(m)) {
+        if (copy.makeMove(m))
             legal.push_back(m);
-        }
     }
 
     return legal;
