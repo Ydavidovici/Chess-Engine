@@ -20,15 +20,13 @@ int main(){
         const char* desc;
     } tests[] = {
         // Mate in 1: Qh5-e8#
-        {
-            "rnb1kbnr/pppp1ppp/8/4p2Q/8/8/PPPPPPPP/RNB1KBNR w KQkq - 0 1",
-            "h5e8", 1, "Mate in one"
-          },
-          // Simple capture: Ra1xa8
-          {
-              "r7/8/8/8/8/8/8/R3K2R w KQ - 0 1",
-              "a1a8", 1, "Simple rook capture"
-            }
+        { "rnb1kbnr/ppppp1pp/8/4p2Q/8/8/PPPPPPPP/RNB1KBNR w KQkq - 0 1",
+          "h5e8", 1, "Mate in one"
+        },
+        // Simple capture: Ra1xa8
+        { "r6k/8/8/8/8/8/8/R3K2R w KQ - 0 1",
+          "a1a8", 1, "Simple rook capture"
+        }
     };
 
     for (auto &t : tests) {

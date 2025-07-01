@@ -18,7 +18,7 @@ int main(){
         {"7k/5Q2/6K1/8/8/8/8/8 b - - 0 1", Color::BLACK,  0,        "Stalemate Black"},
         {"7k/5Q2/6K1/8/8/8/8/8 w - - 0 1", Color::WHITE,  0,        "Stalemate White"},
         // Checkmate → -MATE_VALUE for stm
-        {"6k1/5ppp/8/8/8/8/5PPP/6K1 b - - 0 1", Color::BLACK, -100000, "Checkmate Black"},
+        {"6k1/6Q1/6K1/8/8/8/8/8 b - - 0 1", Color::BLACK, -100000, "Checkmate Black"},
         {"6k1/5ppp/8/8/8/8/5PPP/6K1 w - - 0 1", Color::WHITE,   0,     "No-mate White"}
     };
 
