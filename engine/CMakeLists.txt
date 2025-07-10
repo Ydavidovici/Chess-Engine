@@ -58,7 +58,7 @@ target_link_libraries(search
 #--------------------------------------------------------------------------------
 #  Core engine library
 #--------------------------------------------------------------------------------
-add_library(core_engine STATIC src/engine.cpp)
+add_library(core_engine STATIC src/main.cpp)
 target_include_directories(core_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_link_libraries(core_engine
@@ -69,7 +69,7 @@ target_link_libraries(core_engine
 #  Python module (optional)
 #--------------------------------------------------------------------------------
 if(BUILD_PYTHON_BINDINGS)
-    pybind11_add_module(pyengine src/engine_pybind.cpp)
+    pybind11_add_module(pyengine src/bindings.cpp)
     target_link_libraries(pyengine PRIVATE core_engine)
     install(TARGETS pyengine LIBRARY DESTINATION .)
 endif()
