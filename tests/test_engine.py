@@ -1,70 +1,99 @@
-#!/usr/bin/env python3
-import random
-import chess
-import chess.engine
-from pyengine import Engine, Move, Color, MoveType
+# test_chessengine.py
+import chessengine as ce
 
-def square_to_index(sq: int) -> int:
-    """
-    Convert python-chess square index (0-63) to our engine's index (rank*8 + file).
-    python-chess uses a1=0, h8=63 with same mapping.
-    """
-    file = chess.square_file(sq)
-    rank = chess.square_rank(sq)
-    return rank * 8 + file
+def test_board():
+    print("** BOARD API **")
+    b = ce.Board()
+    b.initialize()
+    start_fen = b.to_fen()
+    print("Start FEN:", start_fen)
 
-def generate_random_game(num_moves: int = 40, seed: int = None):
-    """
-    Play a random sequence of moves on both python-chess and our engine.
-    Returns the final python-chess Board and our Engine instance.
-    """
-    if seed is not None:
-        random.seed(seed)
+    # Load a custom position (e.g. Scholar's Mate after 1.e4 e5 2.Qh5 Nc6 3.Bc4 Nf6)
+    scholar = "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 2 3"
+    b.load_fen(scholar)
+    print("Loaded FEN:", b.to_fen())
 
-    board = chess.Board()
-    engine = Engine()
-    engine.new_game()
+    # Legal moves
+    legals = b.generate_legal_moves()
+    print(f"{len(legals)} legal moves from this position:", [m.toString() for m in legals[:8]], "...")
 
-    for _ in range(num_moves):
-        if board.is_game_over():
+    # Make a move & undo
+    move = legals[0].toString()
+    print("Applying move:", move)
+    b.make_move(move)
+    print("FEN after move:", b.to_fen())
+    print("Undoing move")
+    b.unmake_move()
+    print("Back to FEN:", b.to_fen())
+
+    # Inspectors
+    stm = b.side_to_move()
+    print("Side to move (0=WHITE,1=BLACK):", int(stm))
+    sq = 4  # e4 square index
+    attacked = b.is_square_attacked(sq, stm)
+    print(f"Is square {sq} attacked by side {int(stm)}?", attacked)
+
+def test_engine():
+    print("\n** ENGINE API **")
+    e = ce.Engine()
+    # reset and FEN roundtrip
+    e.reset()
+    initial_fen = e.get_fen()
+    print("Engine start FEN:", initial_fen)
+
+    # set position
+    scholar = "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 2 3"
+    ok = e.set_position(scholar)
+    print("Set position succeeded?", ok)
+    print("Engine FEN is now:", e.get_fen())
+
+    # apply a legal move
+    leg = e.legal_moves()
+    print("Engine sees", len(leg), "legal moves:", leg[:8], "...")
+    move = leg[0]
+    print("Engine applying move:", move, "->", e.apply_move(move))
+    print("FEN after engine move:", e.get_fen())
+
+    # undo
+    print("Undoing engine move:", e.undo_move())
+    print("Back to FEN:", e.get_fen())
+
+    # evaluation
+    score = e.evaluate()
+    print("Static eval of starting position:", score)
+
+    # play a playout
+    settings = ce.PlaySettings()
+    settings.depth = 3
+    settings.tt_size_mb = 16
+    settings.time_left_ms = 0       # use depth-only search
+    settings.increment_ms = 0
+    settings.moves_to_go = 30
+
+    print("\n-- Let engine play a few moves --")
+    e.reset()
+    moves = []
+    for ply in range(6):
+        if e.is_game_over():
+            print("Game over at ply", ply)
             break
-        # Pick a random legal move
-        mv = random.choice(list(board.legal_moves))
-        board.push(mv)
+        mv = e.play_move(settings)
+        moves.append(mv)
+        print(f"Engine ply {ply+1}:", mv)
 
-        # Convert to our Move
-        m = Move()
-        m.start = square_to_index(mv.from_square)
-        m.end   = square_to_index(mv.to_square)
-        if mv.promotion:
-            m.type = MoveType.PROMOTION
-            # promotion piece from chess.Piece.symbol, e.g. 'q'
-            m.promo = mv.promotion.symbol().upper()
+    data = e.get_game_data()
+    print("Game moves:", data.moves)
 
-        # engine color is the side who just moved in python-chess
-        color = Color.WHITE if board.turn == chess.BLACK else Color.BLACK
-        if not engine.make_move(m, color):
-            print(f"[Engine] rejected move {mv.uci()} at ply {board.fullmove_number}")
-            break
-
-    return board, engine
-
-def main():
-    # 1) Generate a reproducible random game
-    board, engine = generate_random_game(num_moves=40, seed=123)
-
-    print("Final python-chess FEN:", board.fen())
-    print("\nEngine's board:")
-    engine.print_board()
-
-    our_eval = engine.evaluate_board()
-    print("\nEngine eval:", our_eval)
-
-    # 2) Ask Stockfish for its evaluation at depth 3
-    with chess.engine.SimpleEngine.popen_uci("stockfish") as sf:
-        info = sf.analyse(board, limit=chess.engine.Limit(depth=3))
-        sf_score = info["score"].white().score(mate_score=100000)
-    print("Stockfish eval (d3):", sf_score)
+    # If you still have SearchInfo bound:
+    if hasattr(e, "last_search_info"):
+        info = e.last_search_info()
+        print("Last search info:", dict(
+            nodes=info.nodes,
+            tt_hits=info.tt_hits,
+            depth=info.depth,
+            time_ms=info.time_ms
+        ))
 
 if __name__ == "__main__":
-    main()
+    test_board()
+    test_engine()

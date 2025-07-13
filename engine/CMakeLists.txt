@@ -35,10 +35,10 @@ find_package(pybind11 REQUIRED)
 option(BUILD_PYTHON_BINDINGS "Build Python (pybind11) bindings" ON)
 
 if(BUILD_PYTHON_BINDINGS)
-    # This target will automatically pull in pybind11 include dirs
-    pybind11_add_module(pyengine src/bindings.cpp)
-    target_link_libraries(pyengine PRIVATE core_engine)
-    install(TARGETS pyengine LIBRARY DESTINATION .)
+    # Build the Python module as 'chessengine', matching the PYBIND11_MODULE name.
+    pybind11_add_module(chessengine src/bindings.cpp)
+    target_link_libraries(chessengine PRIVATE core_engine)
+    install(TARGETS chessengine LIBRARY DESTINATION .)
 endif()
 
 # -------------------------------------------------------------------

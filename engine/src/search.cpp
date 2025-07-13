@@ -1,6 +1,8 @@
 // src/search.cpp
 
 #include "search.h"
+#include "timeman.h"
+#include <chrono>
 #include <algorithm>
 #include <limits>
 #include <iostream>
@@ -10,6 +12,14 @@ static constexpr int INF = std::numeric_limits<int>::max();
 Search::Search(const Evaluator &evaluator, TranspositionTable &tt)
   : evaluator_(evaluator), tt_(tt)
 {}
+
+// Legacy overload: infinite‐time search delegates to timed version
+Move Search::findBestMove(Board &board,
+                          Color stm,
+                          int maxDepth) {
+    TimeManager tm;               // no limits
+    return findBestMove(board, stm, maxDepth, tm);
+}
 
 Move Search::findBestMove(Board &board,
                           Color stm,
