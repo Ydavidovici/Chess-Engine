@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(chess_engine)
 
+find_package(pybind11 REQUIRED)
+include_directories(${pybind11_INCLUDE_DIRS})
+
 # Allow disabling Python bindings
 option(BUILD_PYTHON_BINDINGS "Build Python (pybind11) bindings" OFF)
 
@@ -24,16 +27,20 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 #--------------------------------------------------------------------------------
 #  Static libraries for each component
 #--------------------------------------------------------------------------------
-add_library(board     STATIC src/board.cpp)
-add_library(move      STATIC src/move.cpp)
-add_library(evaluator STATIC src/evaluator.cpp)
+add_library(board     STATIC src/board.cpp
+        src/bindings.cpp)
+add_library(move      STATIC src/move.cpp
+        src/bindings.cpp)
+add_library(evaluator STATIC src/evaluator.cpp
+        src/bindings.cpp)
 # evaluator needs Move’s definitions (and board if it uses anything from there)
 target_link_libraries(evaluator
         PUBLIC
         move
         board
 )
-add_library(tt        STATIC src/transpositionTable.cpp)
+add_library(tt        STATIC src/transpositionTable.cpp
+        src/bindings.cpp)
 
 target_include_directories(board     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(move      PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -42,7 +49,8 @@ target_include_directories(tt        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 #--------------------------------------------------------------------------------
 #  Search component
 #--------------------------------------------------------------------------------
-add_library(search STATIC src/search.cpp src/timeman.cpp)
+add_library(search STATIC src/search.cpp src/timeman.cpp
+        src/bindings.cpp)
 target_include_directories(search
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
