@@ -1,4 +1,6 @@
+// include/search.h
 #pragma once
+
 #include "board.h"
 #include "move.h"
 #include "evaluator.h"
@@ -17,12 +19,17 @@ public:
     /**
      * Legacy overload: no time management (infinite time budget).
      */
-    Move findBestMove(Board &board, Color stm, int maxDepth);
+    Move findBestMove(Board &board,
+                      Color stm,
+                      int maxDepth);
 
     /**
      * Timed search up to maxDepth plies, subject to given TimeManager.
      */
-    Move findBestMove(Board &board, Color stm, int maxDepth, TimeManager &tm);
+    Move findBestMove(Board &board,
+                      Color stm,
+                      int maxDepth,
+                      TimeManager &tm);
 
 private:
     const Evaluator &evaluator_;

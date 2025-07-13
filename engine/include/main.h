@@ -1,46 +1,55 @@
-/* include/main.h */
+// include/main.h
 #pragma once
+
 #include <string>
 #include <vector>
+
 #include "board.h"
-#include "move.h"
 #include "search.h"
 #include "evaluator.h"
+#include "types.h"
+#include "move.h"
 #include "transpositionTable.h"
 #include "timeman.h"
-#include "types.h"
 
-// Settings for a single engine move
 struct PlaySettings {
-    int depth = 6;
-    size_t tt_size_mb = 64;          // megabytes          // megabytes
-    uint64_t time_left_ms = 0;       // 0 = ignore timing, fixed-depth
-    uint64_t increment_ms = 0;
-    int moves_to_go = 30;
+    int depth           = 6;
+    int tt_size_mb      = 64;
+    int time_left_ms    = 0;
+    int increment_ms    = 0;
+    int moves_to_go     = 30;
 };
 
-// Summary of a played game
 struct GameData {
-    std::vector<std::string> moves;    // UCI moves in order
+    std::vector<std::string> moves;
 };
 
 class Engine {
 public:
     Engine();
+    ~Engine();
 
-    // Apply an incoming move (uci). Returns true if legal
+    // Position control
+    void reset();
+    bool setPosition(const std::string &fen);
+    std::string getFEN() const;
+
+    // Evaluation
+    int evaluateCurrentPosition() const;
+
+    // Move control
     bool applyMove(const std::string &uci);
+    bool undoMove();
+    std::vector<std::string> legalMoves() const;
 
-    // Search & play one move, appending to history, then return UCI
+    // Engine play + profiling
     std::string playMove(const PlaySettings &settings);
 
-    // Query if the game is over
+    // Game state
     bool isGameOver() const;
-
-    // Retrieve the full move history once game ends
     GameData getGameData() const;
 
 private:
-    Board board_;
+    Board                 board_;
     std::vector<std::string> history_;
 };
