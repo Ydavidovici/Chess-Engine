@@ -45,10 +45,10 @@ endif()
 # Tests
 # -------------------------------------------------------------------
 enable_testing()
-add_executable(test_board_move   ../tests/engine/board_move_tests.cpp)
-add_executable(test_eval         ../tests/engine/eval_test.cpp)
-add_executable(test_search       ../tests/engine/search_test.cpp)
-add_executable(test_tt           ../tests/engine/tt_test.cpp)
+add_executable(test_board_move   ../../tests/myengine/board_move_tests.cpp)
+add_executable(test_eval         ../../tests/myengine/eval_test.cpp)
+add_executable(test_search       ../../tests/myengine/search_test.cpp)
+add_executable(test_tt           ../../tests/myengine/tt_test.cpp)
 
 foreach(test_exe IN ITEMS
         test_board_move test_eval test_search test_tt)
