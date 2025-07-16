@@ -1,0 +1,28 @@
+name: Release Build & Publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up CMake & Python
+        uses: lukka/run-vcpkg@v12
+        # (or your preferred setup for cmake & python)
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh
+
+      - name: Run Release Build
+        run: |
+          chmod +x ./release-build.sh
+          ./release-build.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
