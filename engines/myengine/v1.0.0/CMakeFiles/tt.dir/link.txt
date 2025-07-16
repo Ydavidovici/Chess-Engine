@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libtt.a CMakeFiles/tt.dir/src/transpositionTable.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libtt.a
