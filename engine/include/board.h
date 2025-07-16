@@ -23,6 +23,11 @@ public:
     bool makeMove(const Move& m);
     void unmakeMove();
 
+    bool is_square_attacked(int sq, Color by) const {
+        return isSquareAttacked(sq, by);
+    }
+
+
     // --- endgame detection ---
     bool inCheck(Color c) const;
     bool hasLegalMoves(Color c) const;
