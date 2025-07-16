@@ -66,7 +66,7 @@ def test_engine():
     settings = ce.PlaySettings()
     settings.depth = 3
     settings.tt_size_mb = 16
-    settings.time_left_ms = 0       # use depth-only search
+    settings.time_left_ms = 1000
     settings.increment_ms = 0
     settings.moves_to_go = 30
 
