@@ -487,7 +487,6 @@ std::vector<Move> Board::generateLegalMoves() const {
     return legal;
 }
 
-// Full makeMove implementation
 bool Board::makeMove(const Move& m) {
     // Save state
     Undo u;
@@ -594,8 +593,8 @@ bool Board::makeMove(const Move& m) {
     history.push_back(u);
 
     // ** if we actually have a king, reject any move that leaves it in check **
-    if ( pieceBB(us, KING) != 0 &&
-         isSquareAttacked(findKing(us), them) ) {
+      if ( pieceBB(us, KING) == 0
+        || isSquareAttacked(findKing(us), them) ) {
         // undo and fail
         unmakeMove();
         return false;
@@ -611,52 +610,66 @@ void Board::unmakeMove() {
     history.pop_back();
 
     Move m = u.move;
+    // we just flipped side_to_move in makeMove, so swap back:
     Color them = side_to_move;
     Color us   = (them == Color::WHITE ? Color::BLACK : Color::WHITE);
 
-    // Restore game state
+    // 1) restore clocks & side‐to‐move
     side_to_move      = us;
     castling_rights   = u.castling_rights;
     en_passant_square = u.en_passant_square;
     halfmove_clock    = u.halfmove_clock;
     fullmove_number   = u.fullmove_number;
 
-    uint64_t fromMask = 1ULL << m.start;
-    uint64_t toMask   = 1ULL << m.end;
-
-    // Remove moved/promoted piece
-    auto &dstBB = (us == Color::WHITE ? whiteBB[u.moved_piece] : blackBB[u.moved_piece]);
-    clearBit(dstBB, m.end);
-
-    // Restore pawn on promotion
-    if (m.type == MoveType::PROMOTION && m.promo) {
-        auto &pbb = (us == Color::WHITE ? whiteBB[PAWN] : blackBB[PAWN]);
-        setBit(pbb, m.start);
-    } else {
-        setBit(dstBB, m.start);
-    }
-
-    // Restore captured piece
-    if (u.captured_piece < PieceTypeCount) {
-        auto &cbb = (them == Color::WHITE ? whiteBB[u.captured_piece]
-                                          : blackBB[u.captured_piece]);
-        if (m.type == MoveType::EN_PASSANT) {
-            int epSq = (us == Color::WHITE ? m.end - 8 : m.end + 8);
-            setBit(cbb, epSq);
-        } else {
-            setBit(cbb, m.end);
+    // 2) undo the piece move / promotion
+    if (m.type == MoveType::PROMOTION) {
+        // clear the promoted piece
+        PieceIndex promoPiece = QUEEN;
+        switch (m.promo) {
+            case 'R': promoPiece = ROOK;   break;
+            case 'B': promoPiece = BISHOP; break;
+            case 'N': promoPiece = KNIGHT; break;
         }
+        auto &promBB = (us == Color::WHITE ? whiteBB[promoPiece]
+                                           : blackBB[promoPiece]);
+        clearBit(promBB, m.end);
+
+        // put the pawn back where it started
+        auto &pawnBB = (us == Color::WHITE ? whiteBB[PAWN]
+                                           : blackBB[PAWN]);
+        setBit(pawnBB, m.start);
+    } else {
+        // normal move: take piece off 'end' and back onto 'start'
+        auto &bb = (us == Color::WHITE ? whiteBB[u.moved_piece]
+                                       : blackBB[u.moved_piece]);
+        clearBit(bb, m.end);
+        setBit(bb,   m.start);
     }
 
-    // Undo castling rook move
+    // 3) restore any captured piece
+    if (u.captured_piece < PieceTypeCount) {
+        auto &capBB = (them == Color::WHITE ? whiteBB[u.captured_piece]
+                                            : blackBB[u.captured_piece]);
+        int restoreSq = (m.type == MoveType::EN_PASSANT)
+                        ? (us == Color::WHITE ? m.end - 8 : m.end + 8)
+                        : m.end;
+        setBit(capBB, restoreSq);
+    }
+
+    // 4) undo castling rook‐move
     if (u.is_castling) {
-        auto &rbb = (us == Color::WHITE ? whiteBB[ROOK] : blackBB[ROOK]);
+        auto &rbb = (us == Color::WHITE ? whiteBB[ROOK]
+                                        : blackBB[ROOK]);
         clearBit(rbb, u.castling_rook_to);
         setBit(rbb,   u.castling_rook_from);
     }
-  if (!positionHistory.empty())
+
+    // 5) pop your repetition history
+    if (!positionHistory.empty())
         positionHistory.pop_back();
 }
+
+
 // ----------------------------------------------------------
 //  Endgame detection
 // ----------------------------------------------------------
