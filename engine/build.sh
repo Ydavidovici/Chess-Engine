@@ -12,22 +12,28 @@ cmake --build .
 
 echo "=== Installing python module into venv (if any) ==="
 if [ -n "${VIRTUAL_ENV:-}" ]; then
-  # Figure out where this venv’s site-packages lives
-  PY_SITE=$(python - <<'PYCODE'
-import site, sys
-# site.getsitepackages() may not work in all venvs; fallback to user_site
+  echo "Detected virtualenv at: $VIRTUAL_ENV"
+
+  # Use the venv’s python if available, otherwise fallback to python3
+  PYTHON_EXE="${VIRTUAL_ENV}/bin/python"
+  if ! [ -x "$PYTHON_EXE" ]; then
+    PYTHON_EXE=python3
+  fi
+
+  # Find the venv’s site-packages directory
+  PY_SITE=$("$PYTHON_EXE" - <<'PYCODE'
+import site
 paths = site.getsitepackages() if hasattr(site, "getsitepackages") else []
 if not paths:
     paths = [site.getusersitepackages()]
 print(paths[0])
 PYCODE
-)
-  echo "Detected venv site-packages at: $PY_SITE"
+  )
+  echo "Installing into: $PY_SITE"
 
-  # Copy any engine module (wildcard covers .so/.dylib)
-  echo "Copying module files to site-packages..."
+  # Copy the built extension modules into site-packages
   cp chessengine*.so chessengine*.dylib "$PY_SITE/" 2>/dev/null || true
-  cp pyengine*.so pyengine*.dylib "$PY_SITE/" 2>/dev/null || true
+  cp pyengine*.so    pyengine*.dylib    "$PY_SITE/" 2>/dev/null || true
 
   echo "Module installed. You should now be able to 'import chessengine' anywhere in this venv."
 else
