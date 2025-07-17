@@ -2,16 +2,20 @@
 set -euo pipefail
 
 # Checkout a specific version tag and build it
-# Usage: ./checkout-build.sh vMAJOR.MINOR.PATCH
+# Usage: ./checkout-build.sh [v]MAJOR.MINOR.PATCH
+
 if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 vMAJOR.MINOR.PATCH" >&2
+  echo "Usage: $0 [v]MAJOR.MINOR.PATCH" >&2
   exit 1
 fi
 
-TAG=$1
+# strip leading "v" if present, then re-add it
+VER="${1#v}"
+TAG="v${VER}"
+
 echo "Checking out ${TAG}..."
 git fetch --tags
-git checkout "${TAG}"
+git checkout "tags/${TAG}"   # ensures you check out the tag object, not a branch
 
 echo "Building source at ${TAG}..."
 ./build.sh
