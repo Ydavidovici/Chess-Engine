@@ -1,4 +1,3 @@
-# engines/myengine/list-versions.sh
 #!/usr/bin/env bash
 set -eu
 
