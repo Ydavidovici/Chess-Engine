@@ -1,1 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/c++  -g -arch arm64 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX15.5.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names "CMakeFiles/test_eval.dir/Users/yaakovdavidovici/Coding/Chess-Engine/tests/myengine/eval_test.cpp.o" -o test_eval  libcore_engine.a libsearch.a libevaluator.a libboard.a libmove.a libtt.a

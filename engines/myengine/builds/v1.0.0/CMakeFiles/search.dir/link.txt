@@ -1,2 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/ar qc libsearch.a CMakeFiles/search.dir/src/search.cpp.o CMakeFiles/search.dir/src/timeman.cpp.o
-/Library/Developer/CommandLineTools/usr/bin/ranlib libsearch.a
