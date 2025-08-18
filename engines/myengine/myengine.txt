@@ -1,0 +1,94 @@
+#TODO
+
+Fix bogus move strings in move listing (Scholar’s Mate FEN, start pos)
+Info: Logs show impossible moves like a7h5 and g1a3.
+Task: Audit Move::toString/fromString mapping (file/rank calc, 0..63 to algebraic). Add asserts that round-trip is identity.
+Accept: From the Scholar FEN, a7 only prints a7a6/a7a5; from start, knights never print non-knight leaps.
+
+Fix root legal count inflation at start (search logs say 34; should be 20)
+Info: rootLegal=(34) on the start position.
+Task: Ensure root uses legal (not pseudo-legal) generator, with check-evasion filter. Check for duplicate emission or stale buffer reuse.
+Accept: perft(1)=20, perft(2)=400 from start; search root reports 20 moves.
+
+Add a perft harness & lock known counts
+Info: We need a correctness guard before deep tuning.
+Task: Implement C++ perft + Python test wrapper.
+Accept: Start FEN: d1=20, d2=400, d3=8902, d4=197281. (Add 2–3 more standard test positions.)
+
+Fix timeout/TT sentinel leak (1073741823 shows in scores)
+Info: Depth 2 logs show score=1073741823 → INT sentinel leaked via abort path/TT.
+Task: Use finite INF≈30000; when time aborts, do not store TT; propagate aborted flag; root returns last fully searched best.
+Accept: No “1073741823” appears; on timeouts, best move matches previous depth PV, no wild swings.
+
+Initialize root best from previous iteration PV (not placeholder a2a3)
+Info: Logs: defaulting best=a2a3.
+Task: Store and reuse previous PV’s first move as initial best in next depth.
+Accept: Log shows defaulting best=<prev PV move>.
+
+Fix PST mirroring for black
+Info: Start eval printed +85 (should be near 0).
+Task: Apply MIRROR[64] index for black PST lookups; flip sign correctly.
+Accept: Start eval in [-15, +15]; mirrored positions evaluate to opposite scores within 15cp.
+
+Right-size/phase the tempo & development terms
+Info: Step-like deltas (+50, +100) and biased baseline likely from big static bonuses.
+Task: Tempo ≈ +10cp max; keep development modest and tapered.
+Accept: Start eval stays near 0; quiet pawn pushes don’t all jump in fixed 10–20cp ladders.
+
+Implement tapered eval (opening↔endgame blend)
+Info: Uniform weights cause flat, unrealistic ladders.
+Task: Compute phase; blend MG/EG: score=(mg*phase + eg*(maxPhase-phase))/maxPhase.
+Accept: Early game favors development/center; endgame favors king activity/passed pawns; regression tests pass.
+
+Bounded, phase-scaled mobility
+Info: Many quiet moves clustered at identical values; mobility likely overweight/uncapped.
+Task: Count mobility by piece type; small weights; cap per piece; scale by phase.
+Accept: Scores vary sensibly among quiet choices; no giant cliffs from 1–2 extra targets.
+
+Add eval breakdown API (get_eval_breakdown)
+Info: Tuning is blind without term-level visibility.
+Task: Expose {material, pst, tempo, mobility, pawns, king_safety, …} via pybind; print in tests.
+Accept: Python test prints a dict; terms sum to final score ±1.
+
+Fix test using wrong square index for “e4”
+Info: is_square_attacked(4, …) used; 4 is e1, not e4.
+Task: Add square_from("e4") or (file,rank) helper; update test.
+Accept: Attack tests reference true e4; results make sense.
+
+Mirror-symmetry eval test
+Info: Catch PST/mirroring regressions automatically.
+Task: Add mirror_fen_and_colors(); assert eval(fen) ≈ -eval(mirror) within 15cp.
+Accept: Test green.
+
+Knight move printer sanity test
+Info: Guard against string bugs like g1a3.
+Task: From central squares (e4/d5), enumerate knight moves; assert all printed targets ∈ legal L-shape set.
+Accept: Test green.
+
+TT flag correctness on cutoffs
+Info: Aborts/cutoffs can be mislabeled as EXACT.
+Task: Store LOWER/UPPER/EXACT per αβ outcome; never EXACT on incomplete nodes.
+Accept: Probe-resolve behavior matches αβ bounds in unit tests.
+
+Time management knob for tests
+Info: Frequent time up mid-move-loop makes results noisy.
+Task: Allow node-limit or larger soft time for tests (e.g., nodes=50k), or time_left_ms=5000.
+Accept: Depth 2 completes routinely in CI; logs stable.
+
+(Optional) Quick snippets to drop into issues
+
+Perft acceptance (start FEN):
+
+d1: 20
+
+d2: 400
+
+d3: 8902
+
+d4: 197281
+
+Start eval acceptance: abs(e.evaluate()) ≤ 15
+
+Mirror acceptance: abs(eval(f) + eval(mirror(f))) ≤ 15
+
+Tempo target: +10cp (white to move), tapered out by late endgame.
