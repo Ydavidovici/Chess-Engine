@@ -30,9 +30,10 @@ target_link_libraries(core_engine   PUBLIC board move evaluator tt search)
 # -------------------------------------------------------------------
 # Python bindings
 # -------------------------------------------------------------------
-find_package(pybind11 REQUIRED)
-
 option(BUILD_PYTHON_BINDINGS "Build Python (pybind11) bindings" ON)
+set(PYBIND11_FINDPYTHON ON)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(pybind11 CONFIG REQUIRED)
 
 if(BUILD_PYTHON_BINDINGS)
     # Build the Python module as 'chessengine', matching the PYBIND11_MODULE name.
