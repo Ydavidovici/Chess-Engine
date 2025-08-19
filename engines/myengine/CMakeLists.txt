@@ -30,9 +30,10 @@ target_link_libraries(core_engine   PUBLIC board move evaluator tt search)
 # -------------------------------------------------------------------
 # Python bindings
 # -------------------------------------------------------------------
-find_package(pybind11 REQUIRED)
-
 option(BUILD_PYTHON_BINDINGS "Build Python (pybind11) bindings" ON)
+set(PYBIND11_FINDPYTHON ON)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
+find_package(pybind11 CONFIG REQUIRED)
 
 if(BUILD_PYTHON_BINDINGS)
     # Build the Python module as 'chessengine', matching the PYBIND11_MODULE name.
@@ -45,15 +46,26 @@ endif()
 # Tests
 # -------------------------------------------------------------------
 enable_testing()
+
 add_executable(test_board_move   ../../tests/myengine/board_move_tests.cpp)
 add_executable(test_eval         ../../tests/myengine/eval_test.cpp)
 add_executable(test_search       ../../tests/myengine/search_test.cpp)
 add_executable(test_tt           ../../tests/myengine/tt_test.cpp)
 
-foreach(test_exe IN ITEMS
-        test_board_move test_eval test_search test_tt)
-    target_include_directories(${test_exe}
-            PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+foreach(test_exe IN ITEMS test_board_move test_eval test_search test_tt)
+    target_include_directories(${test_exe} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(${test_exe} PRIVATE core_engine)
-    add_test(NAME ${test_exe} COMMAND ${test_exe})
 endforeach()
+
+# Name the CTest tests to match file stems and add a label
+add_test(NAME board_move_tests COMMAND test_board_move)
+set_tests_properties(board_move_tests PROPERTIES LABELS "myengine")
+
+add_test(NAME eval_test COMMAND test_eval)
+set_tests_properties(eval_test PROPERTIES LABELS "myengine")
+
+add_test(NAME search_test COMMAND test_search)
+set_tests_properties(search_test PROPERTIES LABELS "myengine")
+
+add_test(NAME tt_test COMMAND test_tt)
+set_tests_properties(tt_test PROPERTIES LABELS "myengine")

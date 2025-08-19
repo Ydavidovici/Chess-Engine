@@ -5,6 +5,8 @@
 #include <cctype>
 #include <algorithm>
 #include <random>
+#include <cstdlib>
+#include <cmath>
 
 //=== Zobrist tables ===
 static uint64_t pieceKeys[2][Board::PieceTypeCount][64];
@@ -255,11 +257,17 @@ std::vector<Move> Board::generatePseudoMoves() const {
         for (int d : {dir-1, dir+1}) {
             int tc = sq + d;
             if (!inBounds(tc)) continue;
+
+            // NEW: guard against file wrap
+            int fromFile = sq % 8;
+            int toFile   = tc % 8;
+            if (std::abs(toFile - fromFile) != 1) continue;
+
             if (oppOcc & (1ULL<<tc)) {
                 // normal capture
                 if (tc/8 == promoR) {
                     for (char p: {'Q','R','B','N'})
-                        moves.emplace_back(sq, tc, MoveType::CAPTURE, p);
+                        moves.emplace_back(sq, tc, MoveType::PROMOTION, p);
                 } else {
                     moves.emplace_back(sq, tc, MoveType::CAPTURE);
                 }
@@ -280,6 +288,12 @@ std::vector<Move> Board::generatePseudoMoves() const {
         for (int d : knightDirs) {
             int t = sq + d;
             if (!inBounds(t)) continue;
+
+            // NEW: exact L-shape guard (prevents wrap like g1->a3)
+            int df = std::abs((t % 8) - (sq % 8));
+            int dr = std::abs((t / 8) - (sq / 8));
+            if (!((df == 1 && dr == 2) || (df == 2 && dr == 1))) continue;
+
             if (!(ownOcc & (1ULL<<t))) {
                 MoveType mt = (oppOcc & (1ULL<<t)) ? MoveType::CAPTURE
                                                    : MoveType::NORMAL;
@@ -290,7 +304,7 @@ std::vector<Move> Board::generatePseudoMoves() const {
 
     // 3) Sliding pieces
     auto slide = [&](uint64_t bb,
-                     const int fdir[], const int rdir[], int nDir) {
+                 const int fdir[], const int rdir[], int nDir) {
         uint64_t scan = bb;
         while (scan) {
             int sq = __builtin_ctzll(scan);
@@ -302,14 +316,23 @@ std::vector<Move> Board::generatePseudoMoves() const {
                     f += fdir[i];  r += rdir[i];
                     if (f<0||f>7||r<0||r>7) break;
                     int t = r*8 + f;
-                    MoveType mt = (oppOcc & (1ULL<<t)) ? MoveType::CAPTURE
-                                                       : MoveType::NORMAL;
-                    moves.emplace_back(sq, t, mt);
-                    if (allOcc & (1ULL<<t)) break;
+
+                    // STOP on friendly blocker (do not add a move)
+                    if (ownOcc & (1ULL<<t)) break;
+
+                    if (oppOcc & (1ULL<<t)) {
+                        // capture and STOP
+                        moves.emplace_back(sq, t, MoveType::CAPTURE);
+                        break;
+                    }
+
+                    // empty square → quiet move and continue sliding
+                    moves.emplace_back(sq, t, MoveType::NORMAL);
                 }
             }
         }
     };
+
     // rook directions
     static const int rf[4]={-1,1,0,0}, rr[4]={0,0,-1,1};
     slide((c==Color::WHITE?whiteBB[ROOK]:blackBB[ROOK]), rf, rr, 4);
@@ -352,6 +375,13 @@ std::vector<Move> Board::generatePseudoMoves() const {
             moves.emplace_back(60,58,MoveType::CASTLE_QUEENSIDE);
     }
 
+#ifndef NDEBUG
+    for (const auto& m : moves) {
+        auto s = m.toString();
+        auto back = Move::fromUCI(s);
+        assert(back.start == m.start && back.end == m.end && back.promo == m.promo);
+    }
+#endif
     return moves;
 }
 
@@ -451,7 +481,9 @@ bool Board::isSquareAttacked(int sq, Color by) const {
         int p = sq + d;
         if (!inBounds(p)) continue;
         int df = std::abs((p % 8) - (sq % 8));
-        if ((d == -1 || d == +1) && df != 1) continue;  // horizontal wrap
+        int dr = std::abs((p / 8) - (sq / 8));
+        // true adjacency must have both deltas <= 1 (and not (0,0))
+        if (df > 1 || dr > 1) continue;
         if ( (by==Color::WHITE ? whiteBB[KING] : blackBB[KING]) & (1ULL<<p) )
             return true;
     }
@@ -479,6 +511,18 @@ std::vector<Move> Board::generateLegalMoves() const {
         // Skip king-captures entirely
         if (oppKingBB & (1ULL << m.end))
             continue;
+
+        if (m.type == MoveType::CASTLE_KINGSIDE || m.type == MoveType::CASTLE_QUEENSIDE) {
+            // King starts on m.start (e1=4 or e8=60). Step is +1 (kingside) or -1 (queenside).
+            int kFrom = m.start;
+            int step  = (m.type == MoveType::CASTLE_KINGSIDE ? +1 : -1);
+            int mid   = kFrom + step;
+            // Must not be in check, and must not pass through check
+            if (isSquareAttacked(kFrom, them)) continue;
+            if (isSquareAttacked(mid,   them)) continue;
+            // (Final square is checked after move by makeMove().)
+        }
+
         Board copy = *this;
         if (copy.makeMove(m))
             legal.push_back(m);
@@ -562,19 +606,21 @@ bool Board::makeMove(const Move& m) {
 
     // 5) Update castling rights
     if (moved == KING) {
-        if (us == Color::WHITE) castling_rights &= 0b1100;
-        else                     castling_rights &= 0b0011;
-    } else if (moved == ROOK) {
-        if      (m.start == 0)  castling_rights &= 0b1110;
-        else if (m.start == 7)  castling_rights &= 0b1101;
-        else if (m.start == 56) castling_rights &= 0b1011;
-        else if (m.start == 63) castling_rights &= 0b0111;
+        if (us == Color::WHITE) castling_rights &= 0b1100; // clear K,Q
+        else                    castling_rights &= 0b0011; // clear k,q
     }
+    else if (moved == ROOK) {
+        if      (m.start == 0)  castling_rights &= 0b1101; // a1 → clear White Q (bit 1<<1)
+        else if (m.start == 7)  castling_rights &= 0b1110; // h1 → clear White K (bit 1<<0)
+        else if (m.start == 56) castling_rights &= 0b0111; // a8 → clear Black q (bit 1<<3)
+        else if (m.start == 63) castling_rights &= 0b1011; // h8 → clear Black k (bit 1<<2)
+    }
+
     if (captured == ROOK) {
-        if      (m.end == 0)   castling_rights &= 0b1110;
-        else if (m.end == 7)   castling_rights &= 0b1101;
-        else if (m.end == 56)  castling_rights &= 0b1011;
-        else if (m.end == 63)  castling_rights &= 0b0111;
+        if      (m.end == 0)    castling_rights &= 0b1101; // captured a1 rook → clear White Q
+        else if (m.end == 7)    castling_rights &= 0b1110; // captured h1 rook → clear White K
+        else if (m.end == 56)   castling_rights &= 0b0111; // captured a8 rook → clear Black q
+        else if (m.end == 63)   castling_rights &= 0b1011; // captured h8 rook → clear Black k
     }
 
     // 6) En passant target
@@ -592,10 +638,8 @@ bool Board::makeMove(const Move& m) {
     side_to_move = them;
     history.push_back(u);
 
-    // ** if we actually have a king, reject any move that leaves it in check **
-      if ( pieceBB(us, KING) == 0
-        || isSquareAttacked(findKing(us), them) ) {
-        // undo and fail
+    // Only reject if we *have* a king and it's left in check
+    if (pieceBB(us, KING) && isSquareAttacked(findKing(us), them)) {
         unmakeMove();
         return false;
     }
