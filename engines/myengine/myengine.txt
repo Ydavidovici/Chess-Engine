@@ -1,10 +1,5 @@
 #TODO
 
-Fix bogus move strings in move listing (Scholar’s Mate FEN, start pos)
-Info: Logs show impossible moves like a7h5 and g1a3.
-Task: Audit Move::toString/fromString mapping (file/rank calc, 0..63 to algebraic). Add asserts that round-trip is identity.
-Accept: From the Scholar FEN, a7 only prints a7a6/a7a5; from start, knights never print non-knight leaps.
-
 Fix root legal count inflation at start (search logs say 34; should be 20)
 Info: rootLegal=(34) on the start position.
 Task: Ensure root uses legal (not pseudo-legal) generator, with check-evasion filter. Check for duplicate emission or stale buffer reuse.
