@@ -1,10 +1,5 @@
 #TODO
 
-Fix root legal count inflation at start (search logs say 34; should be 20)
-Info: rootLegal=(34) on the start position.
-Task: Ensure root uses legal (not pseudo-legal) generator, with check-evasion filter. Check for duplicate emission or stale buffer reuse.
-Accept: perft(1)=20, perft(2)=400 from start; search root reports 20 moves.
-
 Add a perft harness & lock known counts
 Info: We need a correctness guard before deep tuning.
 Task: Implement C++ perft + Python test wrapper.
