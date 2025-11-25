@@ -15,14 +15,14 @@ PYBIND11_MODULE(chessengine, m) {
     .value("BLACK", Color::BLACK)
     .export_values();
 
-    // 2) Move
+
     py::class_<Move>(m, "Move")
         .def_static("fromUCI", &Move::fromUCI, py::arg("uci"))
         .def("toString",       &Move::toString)
         .def("__str__",        &Move::toString)
         ;
 
-    // 3) PlaySettings
+
     py::class_<PlaySettings>(m, "PlaySettings")
         .def(py::init<>())
         .def_readwrite("depth",        &PlaySettings::depth)
@@ -32,12 +32,11 @@ PYBIND11_MODULE(chessengine, m) {
         .def_readwrite("moves_to_go",  &PlaySettings::moves_to_go)
         ;
 
-    // 4) GameData
+
     py::class_<GameData>(m, "GameData")
-        .def_readonly("moves", &GameData::moves)  // std::vector<Move>
+        .def_readonly("moves", &GameData::moves)
         ;
 
-    // 5) PieceIndex enum
     py::enum_<Board::PieceIndex>(m, "PieceIndex")
         .value("PAWN",   Board::PAWN)
         .value("KNIGHT", Board::KNIGHT)
@@ -48,7 +47,6 @@ PYBIND11_MODULE(chessengine, m) {
         .export_values()
         ;
 
-    // 6) Board
     py::class_<Board>(m, "Board")
         .def(py::init<>())
         .def("initialize",           &Board::initialize)
@@ -72,7 +70,6 @@ PYBIND11_MODULE(chessengine, m) {
         .def("zobrist_key",          &Board::zobristKey)
         ;
 
-    // 7) Engine
     py::class_<Engine>(m, "Engine")
         .def(py::init<>())
         .def("reset",         &Engine::reset)

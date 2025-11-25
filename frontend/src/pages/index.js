@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import {useState, useEffect} from 'react';
 import axios from 'axios';
-import { useRouter } from 'next/router';
+import {useRouter} from 'next/router';
 import ChessboardComponent from '../components/Chessboard';
 import Sidebar from '../components/Sidebar';
+import {health} from "@/src/services/api";
 
 export default function Home() {
     const [player1, setPlayer1] = useState('');
@@ -11,9 +12,18 @@ export default function Home() {
     const [gameStatus, setGameStatus] = useState('Not Started');
     const router = useRouter();
 
+    const runHealthCheck = async () => {
+        const data = await health();
+        console.log("API returned:", data);
+
+    };
+    useEffect(() => {runHealthCheck()});
+
+
+
     const startGame = async () => {
         try {
-            const response = await axios.post('http://127.0.0.1:5000/start_game', {
+            const response = await axios.post(`${API_URL}/start_game`, {
                 player1_id: player1,
                 player2_id: player2,
             });
