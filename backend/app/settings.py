@@ -1,5 +1,3 @@
-# backend/app/settings.py
-
 import os
 
 class Config:

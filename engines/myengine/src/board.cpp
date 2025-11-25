@@ -1,4 +1,3 @@
-// engine/src/board.cpp
 #include "board.h"
 #include <sstream>
 #include <cassert>
@@ -94,7 +93,6 @@ void Board::initialize() {
 }
 
 void Board::loadFEN(const std::string& fen) {
-    // Parse FEN into board state
     whiteBB.fill(0);
     blackBB.fill(0);
     std::istringstream iss(fen);
@@ -132,11 +130,10 @@ void Board::loadFEN(const std::string& fen) {
         en_passant_square = r*8 + f;
     } else en_passant_square = -1;
 
-    // 1) Clear any old undo/history
+
     history.clear();
     positionHistory.clear();
 
-    // 2) Recompute zobrist_ from this position
     zobrist_ = 0;
     for (int c = 0; c < 2; ++c) {
         const auto &bbArr = (c == 0 ? whiteBB : blackBB);
@@ -154,7 +151,6 @@ void Board::loadFEN(const std::string& fen) {
     if (en_passant_square != -1)
         zobrist_ ^= epFileKey[en_passant_square % 8];
 
-    // 3) Record this position (minus clocks) for repetition detection
     positionHistory.push_back(stripClocks(fen));
 }
 
@@ -180,10 +176,10 @@ std::string Board::toFEN() const {
         if (empty) fen += char('0' + empty);
         if (rank) fen += '/';
     }
-    // Side to move
+
     fen += ' ';
     fen += (side_to_move == Color::WHITE ? 'w' : 'b');
-    // Castling rights
+
     fen += ' ';
     std::string cr;
     if (castling_rights & 0b0001) cr += 'K';
@@ -191,7 +187,7 @@ std::string Board::toFEN() const {
     if (castling_rights & 0b0100) cr += 'k';
     if (castling_rights & 0b1000) cr += 'q';
     fen += (cr.empty() ? "-" : cr);
-    // En passant
+
     fen += ' ';
     if (en_passant_square != -1) {
         int f = en_passant_square % 8;
@@ -201,7 +197,7 @@ std::string Board::toFEN() const {
     } else {
         fen += '-';
     }
-    // Halfmove & fullmove clocks
+
     fen += ' ' + std::to_string(halfmove_clock);
     fen += ' ' + std::to_string(fullmove_number);
     return fen;
@@ -228,7 +224,7 @@ std::vector<Move> Board::generatePseudoMoves() const {
     uint64_t ownOcc   = (c==Color::WHITE ? whiteOcc : blackOcc);
     uint64_t oppOcc   = (c==Color::WHITE ? blackOcc : whiteOcc);
 
-    // 1) Pawns
+
     uint64_t pawnBB  = (c==Color::WHITE ? whiteBB[PAWN] : blackBB[PAWN]);
     int      dir     = (c==Color::WHITE ?  8 : -8);
     int      startR  = (c==Color::WHITE ?  1 : 6);
@@ -237,7 +233,7 @@ std::vector<Move> Board::generatePseudoMoves() const {
     while (tmp) {
         int sq = __builtin_ctzll(tmp);
         tmp &= tmp - 1;
-        // single push
+
         int t1 = sq + dir;
         if (inBounds(t1) && !(allOcc & (1ULL<<t1))) {
             if (t1/8 == promoR) {
@@ -245,7 +241,7 @@ std::vector<Move> Board::generatePseudoMoves() const {
                     moves.emplace_back(sq, t1, MoveType::PROMOTION, p);
             } else {
                 moves.emplace_back(sq, t1);
-                // double push
+
                 if (sq/8 == startR) {
                     int t2 = sq + 2*dir;
                     if (inBounds(t2) && !(allOcc & (1ULL<<t2)))
@@ -253,12 +249,12 @@ std::vector<Move> Board::generatePseudoMoves() const {
                 }
             }
         }
-        // captures and en-passant
+
         for (int d : {dir-1, dir+1}) {
             int tc = sq + d;
             if (!inBounds(tc)) continue;
 
-            // NEW: guard against file wrap
+
             int fromFile = sq % 8;
             int toFile   = tc % 8;
             if (std::abs(toFile - fromFile) != 1) continue;
@@ -273,13 +269,13 @@ std::vector<Move> Board::generatePseudoMoves() const {
                 }
             }
             else if (tc == en_passant_square) {
-                // en-passant capture
+
                 moves.emplace_back(sq, tc, MoveType::EN_PASSANT);
             }
         }
     }
 
-    // 2) Knights
+
     static const int knightDirs[8] = {-17,-15,-10,-6,6,10,15,17};
     tmp = (c==Color::WHITE ? whiteBB[KNIGHT] : blackBB[KNIGHT]);
     while (tmp) {
@@ -289,7 +285,7 @@ std::vector<Move> Board::generatePseudoMoves() const {
             int t = sq + d;
             if (!inBounds(t)) continue;
 
-            // NEW: exact L-shape guard (prevents wrap like g1->a3)
+
             int df = std::abs((t % 8) - (sq % 8));
             int dr = std::abs((t / 8) - (sq / 8));
             if (!((df == 1 && dr == 2) || (df == 2 && dr == 1))) continue;
@@ -302,7 +298,7 @@ std::vector<Move> Board::generatePseudoMoves() const {
         }
     }
 
-    // 3) Sliding pieces
+
     auto slide = [&](uint64_t bb,
                  const int fdir[], const int rdir[], int nDir) {
         uint64_t scan = bb;
@@ -317,33 +313,33 @@ std::vector<Move> Board::generatePseudoMoves() const {
                     if (f<0||f>7||r<0||r>7) break;
                     int t = r*8 + f;
 
-                    // STOP on friendly blocker (do not add a move)
+
                     if (ownOcc & (1ULL<<t)) break;
 
                     if (oppOcc & (1ULL<<t)) {
-                        // capture and STOP
+
                         moves.emplace_back(sq, t, MoveType::CAPTURE);
                         break;
                     }
 
-                    // empty square → quiet move and continue sliding
+
                     moves.emplace_back(sq, t, MoveType::NORMAL);
                 }
             }
         }
     };
 
-    // rook directions
+
     static const int rf[4]={-1,1,0,0}, rr[4]={0,0,-1,1};
     slide((c==Color::WHITE?whiteBB[ROOK]:blackBB[ROOK]), rf, rr, 4);
-    // bishop directions
+
     static const int bf[4]={-1,1,-1,1}, br[4]={-1,-1,1,1};
     slide((c==Color::WHITE?whiteBB[BISHOP]:blackBB[BISHOP]), bf, br, 4);
-    // queen = rook + bishop
+
     slide((c==Color::WHITE?whiteBB[QUEEN]:blackBB[QUEEN]),  rf, rr, 4);
     slide((c==Color::WHITE?whiteBB[QUEEN]:blackBB[QUEEN]),  bf, br, 4);
 
-    // 4) King (one square)
+
     static const int kingDirs[8] = {-9,-8,-7,-1,1,7,8,9};
     tmp = (c==Color::WHITE ? whiteBB[KING] : blackBB[KING]);
     while (tmp) {
