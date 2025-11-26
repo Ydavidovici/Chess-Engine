@@ -4,11 +4,11 @@ import cors from "cors";
 const app = express();
 
 app.use(cors({
-    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
 }));
 app.use(express.json());
 
-app.get("/health", async (req, res) => {
+app.get("/api/health", async (req, res) => {
     try {
         res.json({
             status: "ok",
