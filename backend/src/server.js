@@ -4,19 +4,19 @@ import cors from "cors";
 const app = express();
 
 app.use(cors({
-  origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    origin: ["http://localhost:3000", "http://127.0.0.1:3000"],
 }));
 app.use(express.json());
 
 app.get("/health", async (req, res) => {
-  try {
-    res.json({
-      status: "ok",
-    });
-  } catch (err) {
-    console.error("Health failed:", err);
-    res.status(500).json({ status: "error", error: String(err) });
-  }
+    try {
+        res.json({
+            status: "ok",
+        });
+    } catch (err) {
+        console.error("Health failed:", err);
+        res.status(500).json({status: "error", error: String(err)});
+    }
 });
 
 // app.post("/players", async (req, res) => {
@@ -46,5 +46,5 @@ app.get("/health", async (req, res) => {
 const PORT = process.env.PORT;
 
 app.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
+    console.log(`Backend listening on http://localhost:${PORT}`);
 });
