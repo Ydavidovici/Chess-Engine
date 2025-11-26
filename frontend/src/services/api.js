@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api";
 
 export const startGame = async (player1_id, player2_id) => {
     const response = await axios.post(`${API_URL}/start_game`, { player1_id, player2_id });
