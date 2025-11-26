@@ -1,18 +1,24 @@
 {
   "name": "frontend",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "bunx vite",
     "build": "bunx vite build",
     "preview": "bunx vite preview"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.1.17",
     "axios": "^1.13.2",
     "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react-dom": "^18.3.0",
+    "react-router-dom": "^7.9.6",
+    "tailwindcss": "^4.1.17"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.17",
     "@vitejs/plugin-react-swc": "^3.7.0",
+    "autoprefixer": "^10.4.22",
     "vite": "^5.4.0"
   }
 }
