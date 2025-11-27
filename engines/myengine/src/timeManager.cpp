@@ -1,4 +1,4 @@
-#include "timeman.h"
+#include "timeManager.h"
 #include <algorithm>
 
 void TimeManager::start(uint64_t millis_left, uint64_t inc, int mtg) {

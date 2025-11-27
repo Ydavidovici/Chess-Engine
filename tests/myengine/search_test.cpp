@@ -10,7 +10,7 @@
 #include "transpositionTable.h"
 #include "board.h"
 #include "move.h"
-#include "timeman.h"
+#include "timeManager.h"
 
 int main(){
     Evaluator ev;

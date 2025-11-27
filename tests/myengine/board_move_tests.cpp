@@ -1,5 +1,3 @@
-// tests/engine/board_move_comprehensive_tests.cpp
-
 #include "board.h"
 #include "move.h"
 #include "types.h"

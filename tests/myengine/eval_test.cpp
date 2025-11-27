@@ -1,4 +1,3 @@
-// eval_test.cpp
 #include <iostream>
 #include <cstdlib>
 #include "evaluator.h"

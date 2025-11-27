@@ -10,7 +10,7 @@
 #include "types.h"
 #include "move.h"
 #include "transpositionTable.h"
-#include "timeman.h"
+#include "timeManager.h"
 
 struct PlaySettings {
     int depth           = 6;

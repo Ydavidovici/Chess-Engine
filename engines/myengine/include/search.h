@@ -5,7 +5,7 @@
 #include "move.h"
 #include "evaluator.h"
 #include "transpositionTable.h"
-#include "timeman.h"
+#include "timeManager.h"
 #include <limits>
 #include <vector>
 #include <cstdint>

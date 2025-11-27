@@ -7,7 +7,6 @@ bool Move::isValid() const {
 }
 
 bool Move::isCapture() const {
-    // both regular captures and en-passant count as “capture”
     return type == MoveType::CAPTURE
         || type == MoveType::EN_PASSANT;
 }
@@ -19,7 +18,6 @@ std::string Move::toString() const {
         return std::string{file, rank};
     };
 
-    // e.g. "e2e4", or "e7e8Q" for promotions
     std::string s = toSq(start) + toSq(end);
     if (promo != '\0') {
         s += promo;

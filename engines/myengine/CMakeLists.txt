@@ -6,41 +6,39 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
+set(ENGINE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # -------------------------------------------------------------------
-# Core libraries (no pybind11 headers here)
+# Core libraries
 # -------------------------------------------------------------------
 add_library(board        STATIC src/board.cpp)
 add_library(move         STATIC src/move.cpp)
 add_library(evaluator    STATIC src/evaluator.cpp)
 add_library(tt           STATIC src/transpositionTable.cpp)
-add_library(search       STATIC src/search.cpp src/timeman.cpp)
-add_library(core_engine  STATIC src/main.cpp)
+add_library(search       STATIC src/search.cpp src/timeManager.cpp)
 
-target_include_directories(board        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(move         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(evaluator    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(tt           PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(search       PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_include_directories(core_engine  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+add_library(core_engine  STATIC src/engine.cpp)
 
-target_link_libraries(evaluator     PUBLIC move board)
-target_link_libraries(search        PUBLIC evaluator tt board move)
-target_link_libraries(core_engine   PUBLIC board move evaluator tt search)
+target_include_directories(board       PUBLIC ${ENGINE_INCLUDE_DIR})
+target_include_directories(move        PUBLIC ${ENGINE_INCLUDE_DIR})
+target_include_directories(evaluator   PUBLIC ${ENGINE_INCLUDE_DIR})
+target_include_directories(tt          PUBLIC ${ENGINE_INCLUDE_DIR})
+target_include_directories(search      PUBLIC ${ENGINE_INCLUDE_DIR})
+target_include_directories(core_engine PUBLIC ${ENGINE_INCLUDE_DIR})
+
+target_link_libraries(evaluator   PUBLIC move board)
+target_link_libraries(search      PUBLIC evaluator tt board move)
+target_link_libraries(core_engine PUBLIC board move evaluator tt search)
 
 # -------------------------------------------------------------------
-# Python bindings
+# UCI executable
 # -------------------------------------------------------------------
-option(BUILD_PYTHON_BINDINGS "Build Python (pybind11) bindings" ON)
-set(PYBIND11_FINDPYTHON ON)
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
-find_package(pybind11 CONFIG REQUIRED)
+add_executable(myengine
+    src/main.cpp
+)
 
-if(BUILD_PYTHON_BINDINGS)
-    # Build the Python module as 'chessengine', matching the PYBIND11_MODULE name.
-    pybind11_add_module(chessengine src/bindings.cpp)
-    target_link_libraries(chessengine PRIVATE core_engine)
-    install(TARGETS chessengine LIBRARY DESTINATION .)
-endif()
+target_include_directories(myengine PRIVATE ${ENGINE_INCLUDE_DIR})
+target_link_libraries(myengine PRIVATE core_engine)
 
 # -------------------------------------------------------------------
 # Tests
@@ -53,11 +51,10 @@ add_executable(test_search       ../../tests/myengine/search_test.cpp)
 add_executable(test_tt           ../../tests/myengine/tt_test.cpp)
 
 foreach(test_exe IN ITEMS test_board_move test_eval test_search test_tt)
-    target_include_directories(${test_exe} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_include_directories(${test_exe} PRIVATE ${ENGINE_INCLUDE_DIR})
     target_link_libraries(${test_exe} PRIVATE core_engine)
 endforeach()
 
-# Name the CTest tests to match file stems and add a label
 add_test(NAME board_move_tests COMMAND test_board_move)
 set_tests_properties(board_move_tests PROPERTIES LABELS "myengine")
 

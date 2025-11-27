@@ -15,7 +15,7 @@ TAG="v${VER}"
 
 echo "Checking out ${TAG}..."
 git fetch --tags
-git checkout "tags/${TAG}"   # ensures you check out the tag object, not a branch
+git checkout "tags/${TAG}"
 
 echo "Building source at ${TAG}..."
 ./build.sh

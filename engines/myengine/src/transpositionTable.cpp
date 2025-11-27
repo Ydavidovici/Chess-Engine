@@ -10,7 +10,6 @@ void TranspositionTable::store(uint64_t key,
     table_[key] = e;
 }
 
-// Legacy 2-arg overload:
 bool TranspositionTable::probe(uint64_t key, TTEntry &out) const {
     auto it = table_.find(key);
     if (it == table_.end()) return false;
@@ -18,7 +17,6 @@ bool TranspositionTable::probe(uint64_t key, TTEntry &out) const {
     return true;
 }
 
-// New single-arg overload:
 TranspositionTable::ProbeResult
 TranspositionTable::probe(uint64_t key) const {
     auto it = table_.find(key);
