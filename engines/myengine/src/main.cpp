@@ -1,97 +1,87 @@
 // src/main.cpp
 #include "main.h"
+#include <iostream>
+#include <string>
+#include <sstream>
 
-// ——— Constructor / Destructor ———
-Engine::Engine() {
-    board_.initialize();
-    history_.clear();
+// =======================
+// Minimal UCI front-end
+// =======================
+
+static std::string trim(const std::string& s) {
+    const auto first = s.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return "";
+    const auto last = s.find_last_not_of(" \t\r\n");
+    return s.substr(first, last - first + 1);
 }
-Engine::~Engine() = default;
 
-// ——— Position control ———
-void Engine::reset() {
-    board_.initialize();
-    history_.clear();
+static void handle_uci() {
+    std::cout << "id name MyEngine\n";
+    std::cout << "id author Yaakov\n";
+    std::cout << "uciok\n";
+    std::cout.flush();
 }
 
-bool Engine::setPosition(const std::string &fen) {
-    try {
-        board_.loadFEN(fen);
-        history_.clear();
-        return true;
-    } catch (...) {
-        return false;
+static void handle_isready() {
+    std::cout << "readyok\n";
+    std::cout.flush();
+}
+
+static void handle_position_basic(const std::string& line, Engine& eng) {
+    if (line.find("startpos") != std::string::npos) {
+        eng.reset();
     }
 }
 
-std::string Engine::getFEN() const {
-    return board_.toFEN();
-}
+static void handle_go_basic(const std::string& line, Engine& eng) {
+    PlaySettings settings{};
+    settings.depth        = 10;
+    settings.tt_size_mb   = 64;
+    settings.time_left_ms = 0;
+    settings.increment_ms = 0;
+    settings.moves_to_go  = 0;
 
-// ——— Evaluation ———
-int Engine::evaluateCurrentPosition() const {
-    Evaluator eval;
-    // two-arg evaluate: board + side to move
-    return eval.evaluate(board_, board_.sideToMove());
-}
-
-// ——— Apply/undo moves & legal moves ———
-bool Engine::applyMove(const std::string &uci) {
-    Move m = Move::fromUCI(uci);
-    if (!board_.makeMove(m)) return false;
-    history_.push_back(uci);
-    return true;
-}
-
-bool Engine::undoMove() {
-    if (history_.empty()) return false;
-    board_.unmakeMove();
-    history_.pop_back();
-    return true;
-}
-
-std::vector<std::string> Engine::legalMoves() const {
-    auto mv = board_.generateLegalMoves();
-    std::vector<std::string> out;
-    out.reserve(mv.size());
-    for (auto &m : mv) out.push_back(m.toString());
-    return out;
-}
-
-// ——— Engine vs. Python playMove + stats capture ———
-std::string Engine::playMove(const PlaySettings &settings) {
-    TranspositionTable tt(settings.tt_size_mb * 1024 * 1024);
-    TimeManager tm;
-    tm.start(settings.time_left_ms, settings.increment_ms, settings.moves_to_go);
-
-    Evaluator eval;
-    Search searcher(eval, tt);
-    Move best;
-
-    if (settings.time_left_ms > 0) {
-        best = searcher.findBestMove(board_, board_.sideToMove(), settings.depth, tm);
-    } else {
-        best = searcher.findBestMove(board_, board_.sideToMove(), settings.depth);
+    std::istringstream iss(line);
+    std::string token;
+    iss >> token;
+    while (iss >> token) {
+        if (token == "depth") {
+            iss >> settings.depth;
+        }
     }
 
-    board_.makeMove(best);
-    std::string uci = best.toString();
-    history_.push_back(uci);
-    return uci;
+    const std::string bestUci = eng.playMove(settings);
+
+    std::cout << "bestmove " << bestUci << "\n";
+    std::cout.flush();
 }
 
+int main() {
+    std::ios::sync_with_stdio(false);
+    std::cin.tie(nullptr);
 
-// ——— Game‐over & history ———
-bool Engine::isGameOver() const {
-    return board_.isCheckmate(board_.sideToMove())
-           || board_.isStalemate(board_.sideToMove())
-           || board_.isFiftyMoveDraw()
-           || board_.isThreefoldRepetition()
-           || board_.isInsufficientMaterial();
-}
+    Engine eng;
+    eng.reset();
 
-GameData Engine::getGameData() const {
-    GameData gd;
-    gd.moves = history_;
-    return gd;
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        line = trim(line);
+        if (line.empty()) continue;
+
+        if (line == "uci") {
+            handle_uci();
+        } else if (line == "isready") {
+            handle_isready();
+        } else if (line.rfind("position", 0) == 0) {
+            handle_position_basic(line, eng);
+        } else if (line.rfind("go", 0) == 0) {
+            handle_go_basic(line, eng);
+        } else if (line == "ucinewgame") {
+            eng.reset();
+        } else if (line == "quit") {
+            break;
+        }
+    }
+
+    return 0;
 }

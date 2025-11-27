@@ -18,7 +18,6 @@ static uint64_t rand64() {
     return rng();
 }
 
-// One-time Zobrist initializer
 static struct ZobristInit {
     ZobristInit() {
         for (int c = 0; c < 2; ++c)
@@ -47,7 +46,6 @@ void Board::initialize() {
     whiteBB.fill(0);
     blackBB.fill(0);
 
-    // Starting position
     whiteBB[PAWN]   = 0x000000000000FF00ULL;
     whiteBB[KNIGHT] = 0x0000000000000042ULL;
     whiteBB[BISHOP] = 0x0000000000000024ULL;
@@ -61,7 +59,6 @@ void Board::initialize() {
     blackBB[QUEEN]  = 0x0800000000000000ULL;
     blackBB[KING]   = 0x1000000000000000ULL;
 
-    // Game state
     side_to_move      = Color::WHITE;
     castling_rights   = 0b1111;
     en_passant_square = -1;
@@ -71,7 +68,6 @@ void Board::initialize() {
     history.clear();
     positionHistory.clear();
 
-    // Compute initial Zobrist hash
     zobrist_ = 0;
     for (int c = 0; c < 2; ++c) {
         const auto &bbArr = (c==0 ? whiteBB : blackBB);
@@ -156,7 +152,6 @@ void Board::loadFEN(const std::string& fen) {
 
 std::string Board::toFEN() const {
     std::string fen;
-    // Piece placement
     for (int rank = 7; rank >= 0; --rank) {
         int empty = 0;
         for (int file = 0; file < 8; ++file) {

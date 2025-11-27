@@ -1,4 +1,3 @@
-// src/evaluator.cpp
 #include "evaluator.h"
 #include <algorithm>
 #include <iostream>
@@ -13,7 +12,6 @@ Evaluator::Evaluator(unsigned maxQDepth_)
 {
     initializePieceSquareTables();
 
-    // Zobrist init
     std::mt19937_64 rng{std::random_device{}()};
     std::uniform_int_distribution<uint64_t> dist;
     zobristKeys.assign(12, std::vector<uint64_t>(64));
@@ -24,7 +22,6 @@ Evaluator::Evaluator(unsigned maxQDepth_)
 }
 
 void Evaluator::initializePieceSquareTables() {
-    //--- fill whitePawnTable, whiteKnightTable, etc. exactly as before ---
     whitePawnTable = {
         0,0,0,0,0,0,0,0,
         50,50,50,50,50,50,50,50,
@@ -35,7 +32,6 @@ void Evaluator::initializePieceSquareTables() {
         5,10,10,-20,-20,10,10,5,
         0,0,0,0,0,0,0,0
     };
-    // … knight, bishop, rook, queen, kingMG, kingEG …
     whiteKnightTable = {
         -50,-40,-30,-30,-30,-30,-40,-50,
         -40,-20,0,0,0,0,-20,-40,
@@ -97,7 +93,6 @@ void Evaluator::initializePieceSquareTables() {
         -50,-30,-30,-30,-30,-30,-30,-50
     };
 
-    // Mirror for black
     blackPawnTable   = { whitePawnTable.rbegin(),   whitePawnTable.rend() };
     blackKnightTable = { whiteKnightTable.rbegin(), whiteKnightTable.rend() };
     blackBishopTable = { whiteBishopTable.rbegin(), whiteBishopTable.rend() };
@@ -108,7 +103,7 @@ void Evaluator::initializePieceSquareTables() {
 }
 
 uint64_t Evaluator::generateZobristHash(const Board &board,
-                                        bool sideToMove) const {
+    bool sideToMove) const {
     uint64_t h = 0;
     for (int sq = 0; sq < 64; ++sq) {
         uint64_t bit = 1ULL << sq;

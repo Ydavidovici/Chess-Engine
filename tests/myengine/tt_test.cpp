@@ -1,4 +1,3 @@
-// tt_test.cpp
 #include <iostream>
 #include <cstdlib>
 #include "transpositionTable.h"

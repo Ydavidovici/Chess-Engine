@@ -1,7 +1,6 @@
-// src/search.cpp
 
 #include "search.h"
-#include "timeman.h"
+#include "timeManager.h"
 #include <chrono>
 #include <algorithm>
 #include <limits>
