@@ -1,6 +1,6 @@
-import { spawn } from "bun";
+import {spawn} from "bun";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import {fileURLToPath} from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,26 +27,35 @@ export class UciEngine {
             stderr: "inherit",
         });
 
-        this._readLoop();
+        this._readLoop().catch((err) => {
+            console.error("[engine] readLoop error:", err);
+        });
 
-        await this._sendCommand("uci", (line) => line.startsWith("uciok"));
-        await this._sendCommand("isready", (line) => line.startsWith("readyok"));
+        console.log("[engine >>] uci");
+        await this._sendCommand("uci", (line) => {
+            return line.startsWith("uciok");
+        });
+
+        console.log("[engine >>] isready");
+        await this._sendCommand("isready", (line) => {
+            line.startsWith("readyok");
+        });
 
         this.ready = true;
-        console.log("[engine] UCI engine ready");
     }
 
     async stop() {
         if (!this.proc) return;
         try {
             await this._sendRaw("quit");
-        } catch (_) {}
+        } catch (_) {
+        }
         this.proc.kill();
         this.proc = null;
         this.ready = false;
     }
 
-    async bestMoveFromFen(fen, { depth = 15 } = {}) {
+    async bestMoveFromFen(fen, {depth = 15} = {}) {
         if (!this.ready) {
             await this.start();
         }
@@ -54,7 +63,7 @@ export class UciEngine {
         await this._sendCommand(`position fen ${fen}`, () => false);
         const bestmoveLine = await this._sendCommand(
             `go depth ${depth}`,
-            (line) => line.startsWith("bestmove")
+            (line) => line.startsWith("bestmove"),
         );
 
         const parts = bestmoveLine.split(/\s+/);
@@ -70,7 +79,7 @@ export class UciEngine {
 
     async _sendCommand(cmd, donePredicate) {
         return new Promise(async (resolve, reject) => {
-            const item = { donePredicate, resolve, reject };
+            const item = {donePredicate, resolve, reject};
             this.queue.push(item);
             try {
                 await this._sendRaw(cmd);
@@ -82,7 +91,7 @@ export class UciEngine {
 
     async _readLoop() {
         if (!this.proc) return;
-
+        
         const decoder = new TextDecoder();
         let buffer = "";
 
@@ -96,12 +105,19 @@ export class UciEngine {
 
                 if (!line) continue;
 
+                console.log("[engine <<]", line);
+
                 if (this.queue.length > 0) {
                     const current = this.queue[0];
                     if (current.donePredicate(line)) {
                         this.queue.shift().resolve(line);
                     }
                 }
+            }
+        }
+        if (this.proc?.stderr) {
+            for await (const chunk of this.proc.stderr) {
+                console.error("[engine STDERR]", decoder.decode(chunk));
             }
         }
     }
