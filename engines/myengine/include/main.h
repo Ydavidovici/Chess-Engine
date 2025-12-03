@@ -13,11 +13,11 @@
 #include "timeManager.h"
 
 struct PlaySettings {
-    int depth           = 6;
-    int tt_size_mb      = 64;
-    int time_left_ms    = 0;
-    int increment_ms    = 0;
-    int moves_to_go     = 30;
+    int depth = 6;
+    int tt_size_mb = 64;
+    int time_left_ms = 0;
+    int increment_ms = 0;
+    int moves_to_go = 30;
 };
 
 struct GameData {

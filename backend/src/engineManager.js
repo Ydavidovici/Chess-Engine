@@ -5,22 +5,20 @@ import {fileURLToPath} from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-
 const ENGINE_PATH = path.join(__dirname, "..", "..", "engines", "myengine", "build", "myengine");
 
 export class UciEngine {
     constructor(cmd = ENGINE_PATH) {
         this.cmd = cmd;
-        this.proc = null;
+        this.process = null;
         this.ready = false;
         this.queue = [];
-        this.current = null;
     }
 
     async start() {
-        if (this.proc) return;
+        if (this.process) return;
 
-        this.proc = spawn({
+        this.process = spawn({
             cmd: [this.cmd],
             stdin: "pipe",
             stdout: "pipe",
@@ -32,50 +30,32 @@ export class UciEngine {
         });
 
         console.log("[engine >>] uci");
-        await this._sendCommand("uci", (line) => {
-            return line.startsWith("uciok");
-        });
+        await this._sendCommand("uci", (line) => line.startsWith("uciok"));
 
         console.log("[engine >>] isready");
-        await this._sendCommand("isready", (line) => {
-            line.startsWith("readyok");
-        });
+        await this._sendCommand("isready", (line) => line.startsWith("readyok"));
 
         this.ready = true;
+        console.log("[engine] start complete, ready =", this.ready);
     }
 
+
     async stop() {
-        if (!this.proc) return;
+        if (!this.process) return;
         try {
             await this._sendRaw("quit");
         } catch (_) {
         }
-        this.proc.kill();
-        this.proc = null;
+        this.process.kill();
+        this.process = null;
         this.ready = false;
     }
 
-    async bestMoveFromFen(fen, {depth = 15} = {}) {
-        if (!this.ready) {
-            await this.start();
-        }
-
-        await this._sendCommand(`position fen ${fen}`, () => false);
-        const bestmoveLine = await this._sendCommand(
-            `go depth ${depth}`,
-            (line) => line.startsWith("bestmove"),
-        );
-
-        const parts = bestmoveLine.split(/\s+/);
-        const move = parts[1] || null;
-        return move;
-    }
-
-
     async _sendRaw(cmd) {
-        if (!this.proc) throw new Error("engine not started");
-        this.proc.stdin.write(cmd + "\n");
+        if (!this.process) throw new Error("engine not started");
+        this.process.stdin.write(cmd + "\n");
     }
+
 
     async _sendCommand(cmd, donePredicate) {
         return new Promise(async (resolve, reject) => {
@@ -90,17 +70,18 @@ export class UciEngine {
     }
 
     async _readLoop() {
-        if (!this.proc) return;
-        
+        if (!this.process) return;
+
         const decoder = new TextDecoder();
         let buffer = "";
 
-        for await (const chunk of this.proc.stdout) {
+        for await (const chunk of this.process.stdout) {
             buffer += decoder.decode(chunk);
 
             let idx;
             while ((idx = buffer.indexOf("\n")) >= 0) {
-                const line = buffer.slice(0, idx).trim();
+                const raw = buffer.slice(0, idx);
+                const line = raw.trim();
                 buffer = buffer.slice(idx + 1);
 
                 if (!line) continue;
@@ -108,17 +89,42 @@ export class UciEngine {
                 console.log("[engine <<]", line);
 
                 if (this.queue.length > 0) {
+                    console.log("[engine queue] size:", this.queue.length);
                     const current = this.queue[0];
-                    if (current.donePredicate(line)) {
-                        this.queue.shift().resolve(line);
+                    let done = false;
+                    try {
+                        done = current.donePredicate(line);
+                    } catch (e) {
+                        console.error("[engine queue] predicate error:", e);
                     }
+                    if (done) {
+                        const item = this.queue.shift();
+                        item.resolve(line);
+                    }
+                } else {
+                    console.log("[engine queue] empty, ignoring line");
                 }
             }
         }
-        if (this.proc?.stderr) {
-            for await (const chunk of this.proc.stderr) {
-                console.error("[engine STDERR]", decoder.decode(chunk));
-            }
-        }
     }
+
+
+    async bestMoveFromFen(fen) {
+        if (!this.ready) {
+            console.log("[engine wrapper] start() from bestMoveFromFen");
+            await this.start();
+        }
+        console.log("[engine wrapper] queue size before sending:", this.queue.length);
+        const bestmoveLine = await this._sendCommand(
+            `bestmovefromfen ${fen}`,
+            (line) => {
+                return line.startsWith("bestmove");
+            }
+        );
+        console.log("[engine wrapper] resolved bestmove line:", bestmoveLine);
+        const move = bestmoveLine.slice("bestmove".length).trim();
+        return move;
+    }
+
+
 }
