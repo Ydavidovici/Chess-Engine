@@ -1,27 +1,30 @@
 #include "main.h"
+#include "board.h"
 #include <iostream>
 #include <string>
 #include <unordered_map>
 #include <sstream>
 
-using CommandHandler = void(*)(const std::string& line, Engine& eng);
+using CommandHandler = void(*)(const std::string& line, Engine& engine);
 
-static void handle_uci(const std::string& line, Engine& eng);
-static void handle_isready(const std::string& line, Engine& eng);
-static void handle_position_basic(const std::string& line, Engine& eng);
-static void handle_go_basic(const std::string& line, Engine& eng);
-static void handle_ucinewgame(const std::string& line, Engine& eng);
-static void handle_quit(const std::string& line, Engine& eng);
-static void bestMoveFromFen(const std::string& line, Engine& eng);
+static void handle_uci(const std::string& line, Engine& engine);
+static void handle_isready(const std::string& line, Engine& engine);
+static void handle_ucinewgame(const std::string& line, Engine& engine);
+static void handle_quit(const std::string& line, Engine& engine);
+static void handle_position(const std::string& line, Engine& engine);
+static void handle_go(const std::string& line, Engine& engine);
+static void handle_bestmove(const std::string& line, Engine& engine);
+static void handle_printboard(const std::string& line, Engine& engine);
 
 static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"uci", handle_uci},
     {"isready", handle_isready},
-    {"position", handle_position_basic},
-    {"go", handle_go_basic},
     {"ucinewgame", handle_ucinewgame},
     {"quit", handle_quit},
-    {"bestmovefromfen", bestMoveFromFen}
+    {"position", handle_position},
+    {"go", handle_go},
+    {"bestmovefromfen", handle_bestmove},
+    {"printboard", handle_printboard}
 };
 
 static std::string trim(const std::string& s) {
@@ -41,7 +44,7 @@ static void split_command(const std::string& line, std::string& cmd, std::string
     std::getline(iss, rest);
 }
 
-static bool dispatch_uci(const std::string& rawLine, Engine& eng) {
+static bool dispatch_uci(const std::string& rawLine, Engine& engine) {
     std::string line = trim(rawLine);
     if (line.empty()) return true;
 
@@ -53,41 +56,83 @@ static bool dispatch_uci(const std::string& rawLine, Engine& eng) {
 
     auto it = UCI_COMMANDS.find(cmd);
     if (it != UCI_COMMANDS.end()) {
-        it->second(line, eng);
-    } else {
+        it->second(line, engine);
+    }
+    else {
         std::cout << "no dispatch\n";
     }
     return cmd != "quit";
 }
 
-static void handle_uci(const std::string& line, Engine& eng) {
+static void handle_uci(const std::string& line, Engine& engine) {
     std::cout << "uciok\n";
     std::cout.flush();
 }
 
-
-static void handle_isready(const std::string& line, Engine& eng) {
+static void handle_isready(const std::string& line, Engine& engine) {
     std::cout << "readyok\n";
     std::cout.flush();
 }
 
-static void handle_ucinewgame(const std::string& line, Engine& eng) {
+static void handle_ucinewgame(const std::string& line, Engine& engine) {
     std::cout << "newgame\n";
+    engine.reset();
     std::cout.flush();
 }
 
-static void handle_quit(const std::string& line, Engine&eng) {
-    std::cout << "six\n";
-    std::cout << "seven\n";
-}
+static void handle_quit(const std::string& line, Engine& engine) {}
 
-static void handle_position_basic(const std::string& line, Engine& eng) {
-    if (line.find("startpos") != std::string::npos) {
-        eng.reset();
+static void handle_position(const std::string& line, Engine& engine) {
+    std::string cmd, rest;
+    split_command(line, cmd, rest);
+
+    std::istringstream iss(rest);
+    std::string token;
+    iss >> token;
+
+    if (token == "startpos") {
+        engine.reset();
+    }
+    else if (token == "fen") {
+        std::string placement, stm, castling, ep;
+        int halfmove_clock = 0;
+        int fullmove_number = 1;
+
+        iss >> placement >> stm >> castling >> ep >> halfmove_clock >> fullmove_number;
+
+        if (!placement.empty()) {
+            std::ostringstream fen;
+            fen << placement << ' '
+                << stm << ' '
+                << castling << ' '
+                << ep << ' '
+                << halfmove_clock << ' '
+                << fullmove_number;
+
+            bool ok = engine.setPosition(fen.str());
+            if (!ok) {
+                std::cout << "info string invalid FEN in position command\n";
+                std::cout.flush();
+            }
+        }
+    }
+    else {
+        return;
+    }
+
+    if (iss >> token && token == "moves") {
+        std::string moveUci;
+        while (iss >> moveUci) {
+            if (!engine.applyMove(moveUci)) {
+                std::cout << "info string failed to apply move " << moveUci << "\n";
+                std::cout.flush();
+                break;
+            }
+        }
     }
 }
 
-static void handle_go_basic(const std::string& line, Engine& eng) {
+static void handle_go(const std::string& line, Engine& engine) {
     PlaySettings settings{};
     settings.depth = 10;
     settings.tt_size_mb = 64;
@@ -104,64 +149,62 @@ static void handle_go_basic(const std::string& line, Engine& eng) {
         }
     }
 
-    const std::string bestUci = eng.playMove(settings);
+    const std::string bestUci = engine.playMove(settings);
 
     std::cout << "bestmove " << bestUci << "\n";
     std::cout.flush();
 }
 
-static void bestMoveFromFen(const std::string& line, Engine& eng) {
-    std::cout << "bestmove six seven\n";
+static void handle_bestmove(const std::string& line, Engine& engine) {
+    std::istringstream iss(line);
+    std::string cmd;
+    iss >> cmd;
+
+    std::string fenPart;
+    std::string fen;
+    while (iss >> fenPart) {
+        if (!fen.empty()) fen += ' ';
+        fen += fenPart;
+    }
+
+    if (!fen.empty()) {
+        bool ok = engine.setPosition(fen);
+        if (!ok) {
+            std::cout << "info string invalid FEN in bestmovefromfen\n";
+            std::cout.flush();
+            return;
+        }
+    }
+    PlaySettings settings{};
+    settings.depth = 10;
+    settings.tt_size_mb = 64;
+    settings.time_left_ms = 0;
+    settings.increment_ms = 0;
+    settings.moves_to_go = 0;
+
+    const std::string bestUci = engine.playMove(settings);
+
+    std::cout << "bestmove " << bestUci << "\n";
     std::cout.flush();
 }
 
-
-// static void bestMoveFromFen(const std::string& line, Engine& eng) {
-//     // line looks like: "bestmovefromfen <fen tokens...>"
-//
-//     std::istringstream iss(line);
-//     std::string cmd;
-//     iss >> cmd; // "bestmovefromfen"
-//
-//     // Collect the rest of the line as a FEN string
-//     std::string fenPart;
-//     std::string fen;
-//     while (iss >> fenPart) {
-//         if (!fen.empty()) fen += ' ';
-//         fen += fenPart;
-//     }
-//
-//     if (!fen.empty()) {
-//         eng.setPosition(fen);  // assumes Engine::setPosition(fen) exists
-//     }
-//
-//     PlaySettings settings{};
-//     settings.depth        = 10;  // or whatever you like
-//     settings.tt_size_mb   = 64;
-//     settings.time_left_ms = 0;
-//     settings.increment_ms = 0;
-//     settings.moves_to_go  = 0;
-//
-//     const std::string bestUci = eng.playMove(settings);
-//
-//     std::cout << "bestmove " << bestUci << "\n";
-//     std::cout.flush();
-// }
+static void handle_printboard(const std::string& line, Engine& engine) {
+    engine.getBoard().printBoard();
+}
 
 
 int main() {
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
 
-    Engine eng;
-    eng.reset();
+    Engine engine;
+    engine.reset();
 
     std::string line;
     while (std::getline(std::cin, line)) {
-        if (!dispatch_uci(line, eng)) {
+        if (!dispatch_uci(line, engine)) {
             break;
         }
     }
     return 0;
 }
-

@@ -119,7 +119,7 @@ export class UciEngine {
             `bestmovefromfen ${fen}`,
             (line) => {
                 return line.startsWith("bestmove");
-            }
+            },
         );
         console.log("[engine wrapper] resolved bestmove line:", bestmoveLine);
         const move = bestmoveLine.slice("bestmove".length).trim();

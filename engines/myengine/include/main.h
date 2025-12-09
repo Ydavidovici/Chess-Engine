@@ -29,27 +29,25 @@ public:
     Engine();
     ~Engine();
 
-    // Position control
     void reset();
-    bool setPosition(const std::string &fen);
+    bool setPosition(const std::string& fenString);
     std::string getFEN() const;
 
-    // Evaluation
+    Board& getBoard() { return board; }
+    const Board& getBoard() const { return board; }
+
     int evaluateCurrentPosition() const;
 
-    // Move control
-    bool applyMove(const std::string &uci);
+    bool applyMove(const std::string& uci);
     bool undoMove();
     std::vector<std::string> legalMoves() const;
 
-    // Engine play + profiling
-    std::string playMove(const PlaySettings &settings);
+    std::string playMove(const PlaySettings& settings);
 
-    // Game state
     bool isGameOver() const;
     GameData getGameData() const;
 
 private:
-    Board                 board_;
-    std::vector<std::string> history_;
+    Board board;
+    std::vector<std::string> history;
 };
