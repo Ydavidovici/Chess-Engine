@@ -127,4 +127,17 @@ export class UciEngine {
     }
 
 
+    async printBoard(fen) {
+        console.log("fen", fen);
+        return await this._sendCommand(`printboard ${fen}`, (line) => {
+            return line.startsWith("printboard_done");
+        });
+    }
+
+    async makeMove(fen, move) {
+        console.log("making move", move);
+        return await this._sendCommand(`makemove ${fen} ${move}`, (line) => {
+            return line.startsWith("move_made");
+        });
+    }
 }

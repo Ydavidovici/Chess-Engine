@@ -12,6 +12,11 @@
 #include "transpositionTable.h"
 #include "timeManager.h"
 
+struct FenAndTail {
+    std::string fen;
+    std::string tail;
+};
+
 struct PlaySettings {
     int depth = 6;
     int tt_size_mb = 64;

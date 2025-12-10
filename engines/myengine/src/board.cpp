@@ -281,9 +281,7 @@ std::vector<Move> Board::generatePseudoMoves() const {
         }
     }
 
-    auto slidePieces = [&](uint64_t piece_bitboard,
-                           const int file_directions[], const int rank_directions[],
-                           int direction_count) {
+    auto slidePieces = [&](uint64_t piece_bitboard, const int file_directions[], const int rank_directions[], int direction_count) {
         uint64_t scan_sliders = piece_bitboard;
         while (scan_sliders) {
             int from_square_index = __builtin_ctzll(scan_sliders);
@@ -324,18 +322,15 @@ std::vector<Move> Board::generatePseudoMoves() const {
 
     static const int rook_file_directions[4] = {-1, 1, 0, 0};
     static const int rook_rank_directions[4] = {0, 0, -1, 1};
-    slidePieces((us_color == Color::WHITE ? white_bitboards[ROOK] : black_bitboards[ROOK]),
-                rook_file_directions, rook_rank_directions, 4);
+
+    slidePieces((us_color == Color::WHITE ? white_bitboards[ROOK] : black_bitboards[ROOK]), rook_file_directions, rook_rank_directions, 4);
 
     static const int bishop_file_directions[4] = {-1, 1, -1, 1};
     static const int bishop_rank_directions[4] = {-1, -1, 1, 1};
-    slidePieces((us_color == Color::WHITE ? white_bitboards[BISHOP] : black_bitboards[BISHOP]),
-                bishop_file_directions, bishop_rank_directions, 4);
 
-    slidePieces((us_color == Color::WHITE ? white_bitboards[QUEEN] : black_bitboards[QUEEN]),
-                rook_file_directions, rook_rank_directions, 4);
-    slidePieces((us_color == Color::WHITE ? white_bitboards[QUEEN] : black_bitboards[QUEEN]),
-                bishop_file_directions, bishop_rank_directions, 4);
+    slidePieces((us_color == Color::WHITE ? white_bitboards[BISHOP] : black_bitboards[BISHOP]), bishop_file_directions, bishop_rank_directions, 4);
+    slidePieces((us_color == Color::WHITE ? white_bitboards[QUEEN] : black_bitboards[QUEEN]), rook_file_directions, rook_rank_directions, 4);
+    slidePieces((us_color == Color::WHITE ? white_bitboards[QUEEN] : black_bitboards[QUEEN]), bishop_file_directions, bishop_rank_directions, 4);
 
     static const int king_directions[8] = {-9, -8, -7, -1, 1, 7, 8, 9};
     uint64_t king_bitboard = (us_color == Color::WHITE ? white_bitboards[KING] : black_bitboards[KING]);
@@ -508,8 +503,7 @@ std::vector<Move> Board::generateLegalMoves() const {
     std::vector<Move> legal_moves;
     legal_moves.reserve(pseudo_moves.size());
 
-    Color opponent_color =
-        (side_to_move == Color::WHITE ? Color::BLACK : Color::WHITE);
+    Color opponent_color = (side_to_move == Color::WHITE ? Color::BLACK : Color::WHITE);
     uint64_t opponent_king_bitboard = pieceBB(opponent_color, KING);
 
     for (const auto& move : pseudo_moves) {
@@ -534,6 +528,9 @@ std::vector<Move> Board::generateLegalMoves() const {
 }
 
 bool Board::makeMove(const Move& move) {
+    // std::cout << "[makeMove] ENTER: move=" << move.toString() << " side_to_move=" << (side_to_move == Color::WHITE ? "white" : "black") << "\n";
+    std::cout.flush();
+
     Undo undo_entry;
     undo_entry.castling_rights = castling_rights;
     undo_entry.en_passant_square_index = en_passant_square_index;
@@ -548,20 +545,36 @@ bool Board::makeMove(const Move& move) {
     uint64_t from_mask = 1ULL << move.start;
     uint64_t to_mask = 1ULL << move.end;
 
+    // std::cout << "[makeMove] from_mask=" << from_mask << " to_mask=" << to_mask << "\n";
+    std::cout.flush();
+
     Color us_color = side_to_move;
     Color opponent_color = (us_color == Color::WHITE ? Color::BLACK : Color::WHITE);
 
     PieceIndex moved_piece_index = PAWN;
+    bool found_moved = false;
     for (int piece_type_index = 0; piece_type_index < PieceTypeCount; ++piece_type_index) {
         uint64_t piece_bitboard =
         (us_color == Color::WHITE
              ? white_bitboards[piece_type_index]
              : black_bitboards[piece_type_index]);
+
         if (testBit(piece_bitboard, move.start)) {
             moved_piece_index = static_cast<PieceIndex>(piece_type_index);
+            found_moved = true;
+            std::cout << "[makeMove] Found moved piece at "
+                << move.start << " index=" << piece_type_index << "\n";
+            std::cout.flush();
             break;
         }
     }
+
+    if (!found_moved) {
+        std::cout << "[makeMove] ERROR: No piece on from-square " << move.start << "\n";
+        std::cout.flush();
+        return false;
+    }
+
     undo_entry.moved_piece = moved_piece_index;
 
     PieceIndex captured_piece_index = PieceTypeCount;
@@ -573,9 +586,13 @@ bool Board::makeMove(const Move& move) {
         if (testBit(opponent_bitboard, move.end)) {
             clearBit(opponent_bitboard, move.end);
             captured_piece_index = static_cast<PieceIndex>(piece_type_index);
+            std::cout << "[makeMove] Captured piece at " << move.end
+                << " index=" << piece_type_index << "\n";
+            std::cout.flush();
             break;
         }
     }
+
     if (move.type == MoveType::EN_PASSANT) {
         int captured_pawn_square =
             (us_color == Color::WHITE ? move.end - 8 : move.end + 8);
@@ -585,60 +602,76 @@ bool Board::makeMove(const Move& move) {
              : black_bitboards[PAWN]);
         clearBit(pawn_bitboard, captured_pawn_square);
         captured_piece_index = PAWN;
+        std::cout << "[makeMove] EN_PASSANT capture at " << captured_pawn_square << "\n";
+        std::cout.flush();
     }
     undo_entry.captured_piece = captured_piece_index;
 
-    if (move.type == MoveType::CASTLE_KINGSIDE ||
-        move.type == MoveType::CASTLE_QUEENSIDE) {
+    if (move.type == MoveType::CASTLE_KINGSIDE || move.type == MoveType::CASTLE_QUEENSIDE) {
         undo_entry.is_castling_move = true;
-        int rook_from_square =
-            (move.type == MoveType::CASTLE_KINGSIDE ? move.start + 3 : move.start - 4);
-        int rook_to_square =
-            (move.type == MoveType::CASTLE_KINGSIDE ? move.start + 1 : move.start - 1);
+        int rook_from_square = (move.type == MoveType::CASTLE_KINGSIDE ? move.start + 3 : move.start - 4);
+        int rook_to_square = (move.type == MoveType::CASTLE_KINGSIDE ? move.start + 1 : move.start - 1);
         undo_entry.castling_rook_from_square = rook_from_square;
         undo_entry.castling_rook_to_square = rook_to_square;
 
-        auto& rook_bitboard =
-            (us_color == Color::WHITE ? white_bitboards[ROOK] : black_bitboards[ROOK]);
+        auto& rook_bitboard = (us_color == Color::WHITE ? white_bitboards[ROOK] : black_bitboards[ROOK]);
         clearBit(rook_bitboard, rook_from_square);
         setBit(rook_bitboard, rook_to_square);
+
+        std::cout << "[makeMove] CASTLING " << (move.type == MoveType::CASTLE_KINGSIDE ? "kingside" : "queenside") << " rook " << rook_from_square << " -> " << rook_to_square << "\n";
+        std::cout.flush();
     }
 
-    auto& moved_piece_bitboard =
-    (us_color == Color::WHITE
-         ? white_bitboards[moved_piece_index]
-         : black_bitboards[moved_piece_index]);
-    clearBit(moved_piece_bitboard, move.start);
-
-    if (move.type == MoveType::PROMOTION && move.promo) {
-        PieceIndex promotion_piece_index = QUEEN;
-        switch (move.promo) {
-        case 'R': promotion_piece_index = ROOK;
-            break;
-        case 'B': promotion_piece_index = BISHOP;
-            break;
-        case 'N': promotion_piece_index = KNIGHT;
-            break;
-        }
-        auto& promotion_bitboard =
+    {
+        auto& moved_piece_bitboard =
         (us_color == Color::WHITE
-             ? white_bitboards[promotion_piece_index]
-             : black_bitboards[promotion_piece_index]);
-        setBit(promotion_bitboard, move.end);
-    }
-    else {
-        setBit(moved_piece_bitboard, move.end);
+             ? white_bitboards[moved_piece_index]
+             : black_bitboards[moved_piece_index]);
+
+        clearBit(moved_piece_bitboard, move.start);
+
+        if (move.type == MoveType::PROMOTION && move.promo) {
+            PieceIndex promotion_piece_index = QUEEN;
+            switch (move.promo) {
+            case 'R': promotion_piece_index = ROOK;
+                break;
+            case 'B': promotion_piece_index = BISHOP;
+                break;
+            case 'N': promotion_piece_index = KNIGHT;
+                break;
+            }
+            auto& promotion_bitboard =
+            (us_color == Color::WHITE
+                 ? white_bitboards[promotion_piece_index]
+                 : black_bitboards[promotion_piece_index]);
+            setBit(promotion_bitboard, move.end);
+
+            std::cout << "[makeMove] PROMOTION to "
+                << (int)promotion_piece_index
+                << " at " << move.end << "\n";
+            std::cout.flush();
+        }
+        else {
+            setBit(moved_piece_bitboard, move.end);
+            std::cout << "[makeMove] Moved piece " << (int)moved_piece_index
+                << " from " << move.start << " to " << move.end << "\n";
+            std::cout.flush();
+        }
     }
 
     if (moved_piece_index == KING) {
         if (us_color == Color::WHITE) castling_rights &= 0b1100;
         else castling_rights &= 0b0011;
+        std::cout << "[makeMove] King moved: castling_rights=" << (int)castling_rights << "\n";
+        std::cout.flush();
     }
     else if (moved_piece_index == ROOK) {
         if (move.start == 0) castling_rights &= 0b1101;
         if (move.start == 7) castling_rights &= 0b1110;
         if (move.start == 56) castling_rights &= 0b0111;
         if (move.start == 63) castling_rights &= 0b1011;
+        std::cout << "[makeMove] Rook moved: castling_rights=" << (int)castling_rights << "\n";
+        std::cout.flush();
     }
 
     if (captured_piece_index == ROOK) {
@@ -646,6 +679,8 @@ bool Board::makeMove(const Move& move) {
         if (move.end == 7) castling_rights &= 0b1110;
         if (move.end == 56) castling_rights &= 0b0111;
         if (move.end == 63) castling_rights &= 0b1011;
+        std::cout << "[makeMove] Rook captured: castling_rights=" << (int)castling_rights << "\n";
+        std::cout.flush();
     }
 
     en_passant_square_index = -1;
@@ -653,25 +688,39 @@ bool Board::makeMove(const Move& move) {
         std::abs((move.end / 8) - (move.start / 8)) == 2) {
         en_passant_square_index = (move.start + move.end) / 2;
         undo_entry.is_pawn_double_push = true;
+        std::cout << "[makeMove] Pawn double push, ep_square="
+            << en_passant_square_index << "\n";
+        std::cout.flush();
     }
 
-    if (moved_piece_index == PAWN || captured_piece_index != PieceTypeCount)
+    if (moved_piece_index == PAWN || captured_piece_index != PieceTypeCount) {
         halfmove_clock = 0;
-    else
+    }
+    else {
         ++halfmove_clock;
+    }
 
     if (us_color == Color::BLACK)
         ++fullmove_number;
 
+    // std::cout << "[makeMove] halfmove_clock=" << halfmove_clock << " fullmove_number=" << fullmove_number << "\n";
+    std::cout.flush();
+
     side_to_move = opponent_color;
     move_history.push_back(undo_entry);
+    // std::cout << "[makeMove] Switched side_to_move to " << (side_to_move == Color::WHITE ? "white" : "black") << " move_history size=" << move_history.size() << "\n";
+    std::cout.flush();
 
     if (pieceBB(us_color, KING) &&
         isSquareAttacked(findKing(us_color), opponent_color)) {
+        // std::cout << "[makeMove] Move leaves own king in check, undoing\n";
+        std::cout.flush();
         unmakeMove();
         return false;
     }
 
+    std::cout << "[makeMove] EXIT OK\n";
+    std::cout.flush();
     return true;
 }
 
@@ -789,6 +838,8 @@ void Board::printBoard() const {
     printBitboards();
 
     std::cout << "===============================================\n";
+    std::cout << "printboard_done\n";
+    std::cout << std::flush;
 }
 
 void Board::printFENString() const {

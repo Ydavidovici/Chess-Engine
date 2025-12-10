@@ -1,10 +1,15 @@
 import {useEffect} from "react";
-import {bestMove} from "../services/api.js";
+import {bestMove, makeMove, printPosition} from "../services/api.js";
 
 export default function Game({ gameId }) {
 
     useEffect(() => {
-        getBestMove();
+        // getBestMove();
+        // printPosition("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+        // makeMove("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", "a2a3")
+        // makeMove("rnbqkbnr/pppppppp/8/8/8/P7/1PPPPPPP/RNBQKBNR b KQkq - 0 1", "e7e5")
+        // makeMove( "rnbqkbnr/pppp1ppp/8/4p3/8/P7/1PPPPPPP/RNBQKBNR w KQkq e6 0 2", "g1f3")
+        // makeMove( "rnbqkbnr/pppp1ppp/8/4p3/8/P4N2/1PPPPPPP/RNBQKB1R b KQkq - 1 2", "g8f1")
     });
 
     const getBestMove = async () => {
