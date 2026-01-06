@@ -45,15 +45,15 @@ target_link_libraries(myengine PRIVATE core_engine)
 # -------------------------------------------------------------------
 enable_testing()
 
-add_executable(test_board_move   ../../tests/myengine/board_move_tests.cpp)
-add_executable(test_eval         ../../tests/myengine/eval_test.cpp)
-add_executable(test_search       ../../tests/myengine/search_test.cpp)
-add_executable(test_tt           ../../tests/myengine/tt_test.cpp)
+add_executable(test_board_move ../../tests/myengine/board_move_tests.cpp)
+add_executable(test_eval ../../tests/myengine/eval_test.cpp)
+add_executable(test_search ../../tests/myengine/search_test.cpp)
+add_executable(test_tt ../../tests/myengine/tt_test.cpp)
 
-foreach(test_exe IN ITEMS test_board_move test_eval test_search test_tt)
+foreach (test_exe IN ITEMS test_board_move test_eval test_search test_tt)
     target_include_directories(${test_exe} PRIVATE ${ENGINE_INCLUDE_DIR})
     target_link_libraries(${test_exe} PRIVATE core_engine)
-endforeach()
+endforeach ()
 
 add_test(NAME board_move_tests COMMAND test_board_move)
 set_tests_properties(board_move_tests PROPERTIES LABELS "myengine")
