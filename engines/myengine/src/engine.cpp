@@ -53,19 +53,19 @@ std::vector<std::string> Engine::legalMoves() const {
 }
 
 std::string Engine::playMove(const PlaySettings &settings) {
-    TranspositionTable tt(settings.tt_size_mb * 1024 * 1024);
+    TranspositionTable tt(1000000);
     TimeManager tm;
-    tm.start(settings.time_left_ms, settings.increment_ms, settings.moves_to_go);
+    // tm.start(settings.time_left_ms, settings.increment_ms, settings.moves_to_go);
 
     Evaluator eval;
     Search searcher(eval, tt);
-    Move best;
 
-    if (settings.time_left_ms > 0) {
-        best = searcher.findBestMove(board, board.sideToMove(), settings.depth, tm);
-    } else {
-        best = searcher.findBestMove(board, board.sideToMove(), settings.depth);
-    }
+    Move best = searcher.findBestMove(
+        board,
+        settings.depth,
+        settings.time_left_ms,
+        settings.increment_ms
+    );
 
     board.makeMove(best);
     std::string uci = best.toString();

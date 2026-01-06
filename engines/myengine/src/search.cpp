@@ -1,143 +1,156 @@
 #include "search.h"
-#include "timeManager.h"
-#include <chrono>
 #include <algorithm>
-#include <limits>
 #include <iostream>
+#include <limits>
 
-static constexpr int INF = std::numeric_limits<int>::max();
+static constexpr int INF = 1000000;
+static constexpr int MATE_SCORE = 100000;
 
 Search::Search(const Evaluator& evaluator, TranspositionTable& tt)
     : evaluator_(evaluator), tt_(tt) {}
 
-Move Search::findBestMove(Board& board, Color stm, int maxDepth) {
-    TimeManager tm;
-    return findBestMove(board, stm, maxDepth, tm);
-}
-
-Move Search::findBestMove(Board& board, Color stm, int maxDepth, TimeManager& tm) {
-    Color opp = (stm == Color::WHITE ? Color::BLACK : Color::WHITE);
-
-    auto rootMoves = board.generateLegalMoves();
-    Move best = rootMoves.front();
-    std::cerr << "[search] rootLegal=(" << rootMoves.size() << ") defaulting best=" << best.toString() << "\n";
-
-    std::cerr << "[search] ==== START ITERATIVE DEEPENING (maxDepth=" << maxDepth << ") ====\n";
+Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int incrementMs) {
+    if (timeLeftMs > 0) {
+        tm_.start(timeLeftMs, incrementMs, 0);
+    } else {
+        tm_.start(2000, 0, 0);
+    }
+    Move bestMove;
 
     for (int depth = 1; depth <= maxDepth; ++depth) {
-        std::cerr << "[search] -- depth=" << depth << "\n";
-        if (tm.isTimeUp()) {
-            std::cerr << "[search]    time's up before depth " << depth
-                << ", returning best so far=" << best.toString() << "\n";
-            break;
-        }
+        if (tm_.isTimeUp()) break;
 
-        int alpha = -INF, beta = +INF;
-        Move localBest = best;
+        int alpha = -INF;
+        int beta = INF;
 
-        auto moves = board.generateLegalMoves();
-        std::cerr << "[search]   moves to try: " << moves.size() << "\n";
+        auto rootMoves = board.generateLegalMoves();
+        if (rootMoves.empty()) break;
 
-        for (auto const& m : moves) {
-            if (tm.isTimeUp()) {
-                std::cerr << "[search]      time up mid-move-loop\n";
-                break;
-            }
+        orderMoves(rootMoves);
 
-            std::cerr << "[search]    eval move " << m.toString() << "\n";
-            board.makeMove(m);
-            std::cerr << "[search]      calling negamax for " << m.toString() << "\n";
+        Move currentBestMove = rootMoves[0];
+        int currentBestScore = -INF;
 
-            int score = -negamax(board, depth - 1, -beta, -alpha, opp, tm);
+        for (const auto& move : rootMoves) {
+            board.makeMove(move);
+
+            int score = -negamax(board, depth - 1, -beta, -alpha, 1);
+
             board.unmakeMove();
 
-            std::cerr << "[search]    move " << m.toString() << " → score=" << score << "  (prev α=" << alpha << ")\n";
+            if (tm_.isTimeUp()) break;
 
+            if (score > currentBestScore) {
+                currentBestScore = score;
+                currentBestMove = move;
+            }
             if (score > alpha) {
                 alpha = score;
-                localBest = m;
-                std::cerr << "[search]      ^ new best at depth " << depth << ": " << localBest.toString() << " (α=" << alpha << ")\n";
             }
         }
-        best = localBest;
+
+        if (!tm_.isTimeUp()) {
+            bestMove = currentBestMove;
+            std::cout << "info depth " << depth << " score cp " << currentBestScore << " pv " << bestMove.toString() << "\n";
+        }
     }
 
-    std::cerr << "[search] ==== DONE: best=" << best.toString() << " ====\n";
-    return best;
+    return bestMove;
 }
 
-int Search::negamax(Board& board, int depth, int alpha, int beta, Color stm, TimeManager& tm) {
-    if (tm.isTimeUp())
-        return alpha;
+int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoot) {
+    if ((plyFromRoot % 2048) == 0 && tm_.isTimeUp()) return 0;
 
-    uint64_t key = board.zobristKey();
+    uint64_t key = evaluator_.generateZobristHash(board, board.sideToMove() == Color::WHITE);
+
     TranspositionTable::TTEntry ent;
     if (tt_.probe(key, ent) && ent.depth >= depth) {
-        switch (ent.flag) {
-        case TranspositionTable::EXACT: return ent.value;
-        case TranspositionTable::LOWERBOUND: alpha = std::max(alpha, ent.value);
-            break;
-        case TranspositionTable::UPPERBOUND: beta = std::min(beta, ent.value);
-            break;
-        }
+        if (ent.flag == TranspositionTable::EXACT) return ent.value;
+        if (ent.flag == TranspositionTable::LOWERBOUND) alpha = std::max(alpha, ent.value);
+        if (ent.flag == TranspositionTable::UPPERBOUND) beta = std::min(beta, ent.value);
         if (alpha >= beta) return ent.value;
     }
 
-    if (depth == 0)
-        return quiescence(board, alpha, beta, stm, tm);
+    if (depth == 0) {
+        return quiescence(board, alpha, beta);
+    }
 
     auto moves = board.generateLegalMoves();
-    if (moves.empty())
-        return evaluator_.evaluateTerminal(board, stm);
+    if (moves.empty()) {
+        int score = evaluator_.evaluateTerminal(board, board.sideToMove());
+        if (score == -MATE_SCORE) score += plyFromRoot;
+        return score;
+    }
 
-    int origAlpha = alpha;
-    Move bestChild = moves.front();
+    orderMoves(moves);
 
-    for (auto const& m : moves) {
-        if (tm.isTimeUp()) break;
-        board.makeMove(m);
-        Color opp = (stm == Color::WHITE ? Color::BLACK : Color::WHITE);
-        int score = -negamax(board, depth - 1, -beta, -alpha, opp, tm);
+    int bestScore = -INF;
+    Move bestMoveInNode;
+
+    for (const auto& move : moves) {
+        board.makeMove(move);
+        int score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
         board.unmakeMove();
 
-        if (score >= beta) {
-            tt_.store(key, score, depth, m, TranspositionTable::LOWERBOUND);
+        if (tm_.isTimeUp()) return 0;
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestMoveInNode = move;
+        }
+        alpha = std::max(alpha, score);
+        if (alpha >= beta) {
+            tt_.store(key, beta, depth, move, TranspositionTable::LOWERBOUND);
             return beta;
         }
-        if (score > alpha) {
-            alpha = score;
-            bestChild = m;
+    }
+
+    int flag = TranspositionTable::EXACT;
+    if (bestScore <= alpha) flag = TranspositionTable::UPPERBOUND;
+    else if (bestScore >= beta) flag = TranspositionTable::LOWERBOUND;
+
+    tt_.store(key, bestScore, depth, bestMoveInNode, flag);
+    return bestScore;
+}
+
+int Search::quiescence(Board& board, int alpha, int beta) {
+    int standPat = evaluator_.evaluate(board, board.sideToMove());
+    if (standPat >= beta) return beta;
+    if (standPat > alpha) alpha = standPat;
+
+    auto allMoves = board.generateLegalMoves();
+    std::vector<Move> captures;
+    captures.reserve(allMoves.size());
+    for (const auto& m : allMoves) {
+        if (m.isCapture() || m.type == MoveType::PROMOTION) {
+            captures.push_back(m);
         }
     }
 
-    auto flag = (alpha <= origAlpha) ? TranspositionTable::UPPERBOUND : (alpha >= beta) ? TranspositionTable::LOWERBOUND : TranspositionTable::EXACT; tt_.store(key, alpha, depth, bestChild, flag);
-    return alpha;
-}
+    orderMoves(captures);
 
-int Search::quiescence(Board& board, int alpha, int beta, Color stm, TimeManager& tm) {
-    if (tm.isTimeUp())
-        return alpha;
-
-    int stand = evaluator_.evaluate(board, stm);
-    if (stand >= beta) return beta;
-    alpha = std::max(alpha, stand);
-
-    auto allMoves = board.generateLegalMoves();
-    std::vector<Move> caps;
-    for (auto const& m : allMoves) {
-        if (m.isCapture() || m.type == MoveType::PROMOTION)
-            caps.push_back(m);
-    }
-
-    for (auto const& m : caps) {
-        if (tm.isTimeUp()) break;
-        board.makeMove(m);
-        Color opp = (stm == Color::WHITE ? Color::BLACK : Color::WHITE);
-        int score = -quiescence(board, -beta, -alpha, opp, tm);
+    for (const auto& move : captures) {
+        board.makeMove(move);
+        int score = -quiescence(board, -beta, -alpha);
         board.unmakeMove();
 
         if (score >= beta) return beta;
-        alpha = std::max(alpha, score);
+        if (score > alpha) alpha = score;
     }
     return alpha;
+}
+
+void Search::orderMoves(std::vector<Move>& moves) {
+    std::stable_sort(moves.begin(), moves.end(), [](const Move& a, const Move& b) {
+        bool aIsCap = a.isCapture();
+        bool bIsCap = b.isCapture();
+        bool aIsPromo = (a.type == MoveType::PROMOTION);
+        bool bIsPromo = (b.type == MoveType::PROMOTION);
+
+        if (aIsCap != bIsCap) return aIsCap > bIsCap;
+
+        if (aIsPromo != bIsPromo) return aIsPromo > bIsPromo;
+
+        return false;
+    });
 }

@@ -1,28 +1,23 @@
 #pragma once
 
 #include "board.h"
-#include "move.h"
 #include "evaluator.h"
 #include "transpositionTable.h"
 #include "timeManager.h"
-#include <limits>
+#include "move.h"
 #include <vector>
-#include <cstdint>
 
 class Search {
 public:
-    static constexpr int INF = std::numeric_limits<int>::max() / 2;
-
     Search(const Evaluator& evaluator, TranspositionTable& tt);
-
-    Move findBestMove(Board& board, Color stm, int maxDepth);
-
-    Move findBestMove(Board& board, Color stm, int maxDepth, TimeManager& tm);
+    Move findBestMove(Board& board, int maxDepth, int timeLeftMs = 0, int incrementMs = 0);
 
 private:
     const Evaluator& evaluator_;
     TranspositionTable& tt_;
+    TimeManager tm_;
 
-    int negamax(Board& board, int depth, int alpha, int beta, Color stm, TimeManager& tm);
-    int quiescence(Board& board, int alpha, int beta, Color stm, TimeManager& tm);
+    int negamax(Board& board, int depth, int alpha, int beta, int plyFromRoot);
+    int quiescence(Board& board, int alpha, int beta);
+    void orderMoves(std::vector<Move>& moves);
 };

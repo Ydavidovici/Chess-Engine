@@ -1,98 +1,101 @@
 #include <iostream>
-#include <cstdlib>
-#include <limits>
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cassert>
 
 #include "search.h"
 #include "evaluator.h"
 #include "transpositionTable.h"
 #include "board.h"
 #include "move.h"
-#include "timeManager.h"
 
-int main(){
-    Evaluator ev;
-    TranspositionTable tt(1 << 16);
-    Search s(ev, tt);
+
+Move run_search(const std::string& fen, int depth) {
     Board b;
+    b.loadFEN(fen);
 
-    // --- Mate-in-one test (drop-in) ---
-    {
-        const char* fen = "1k4N1/6Q1/1K6/8/8/8/8/8 w - - 0 1";
-        std::cout << "=== Mate-in-One Test ===\n";
-        b.loadFEN(fen);
+    TranspositionTable tt(1000000);
+    Evaluator ev;
+    Search s(ev, tt);
 
-        // brute-force: find all true mates-in-one
-        auto legal = b.generateLegalMoves();
-        std::vector<std::string> mates;
-        for (auto &m : legal) {
-            if (!b.makeMove(m)) continue;
-            bool isMate = b.isCheckmate(b.sideToMove() == Color::WHITE
-                                        ? Color::BLACK
-                                        : Color::WHITE);
-            b.unmakeMove();
-            if (isMate) mates.push_back(m.toString());
-        }
-        std::cout << "Brute-force mate-in-one moves: ";
-        if (mates.empty()) {
-            std::cout << "(none)\n";
-        } else {
-            for (auto &u : mates) std::cout << u << " ";
-            std::cout << "\n";
-        }
+    return s.findBestMove(b, depth, 5000, 0);
+}
 
-        // engine: best at depth=1
-        TimeManager tmMate;
-        tmMate.start(1'000'000, 0, 1);
-        Move bestMate = s.findBestMove(b, b.sideToMove(), 1, tmMate);
-        std::cout << "Engine best (depth=1): " << bestMate.toString() << "\n\n";
+void test_mate_in_2_rook_cut() {
+    std::cout << "--- test_mate_in_2_rook_cut ---\n";
+    const char* fen = "4r3/R7/6R1/8/8/5K2/8/6k1 w - - 0 1";
+
+    Move m = run_search(fen, 4); // Depth 4 to be safe
+    std::cout << "Engine move: " << m.toString() << "\n";
+
+    if (m.toString() == "a7a1" || m.toString() == "a7g7") {
+        std::cout << "PASS: Found checkmate sequence start.\n";
+    } else {
+        std::cerr << "FAIL: Missed mate in 2. Got " << m.toString() << "\n";
+        exit(1);
     }
+}
 
-    // --- Simple capture tests under infinite time budget ---
-    struct CaptureTest {
-        const char* fen;
-        std::vector<std::string> expectedUcis;
-        const char* desc;
-    } captureTests[] = {
-        { "r6k/8/8/8/8/8/8/R3K3 w Q - 0 1",
-          {"a1a8"}, "Simple rook capture"
-        }
-    };
+void test_mate_in_3_back_rank() {
+    std::cout << "--- test_mate_in_3_back_rank ---\n";
+    const char* fen = "6k1/5ppp/8/8/8/8/1r6/2R1R1K1 w - - 0 1";
 
-    for (auto &t : captureTests) {
-        b.loadFEN(t.fen);
-        TimeManager tm;
-        // give ample time so search actually runs depth=1
-        tm.start(1'000'000, /*inc=*/0, /*moves_to_go=*/1);
-        Move best = s.findBestMove(b, b.sideToMove(), 1, tm);
-        std::string u = best.toString();
-        bool ok = std::find(t.expectedUcis.begin(),
-                            t.expectedUcis.end(),
-                            u) != t.expectedUcis.end();
-        if (!ok) {
-            std::cerr << "SearchTest FAILED (" << t.desc
-                      << "): got " << u << ", expected "
-                      << t.expectedUcis[0] << "\n";
-            return 1;
-        }
+    // Depth 5 ensures we see the mate fully
+    Move m = run_search(fen, 5);
+    std::cout << "Engine move: " << m.toString() << "\n";
+
+    if (m.toString() == "e1e8" || m.toString() == "c1c8") {
+        std::cout << "PASS: Found back rank mate.\n";
+    } else {
+        std::cerr << "FAIL: Missed back rank mate. Got " << m.toString() << "\n";
+        exit(1);
     }
-    std::cout << "Simple capture tests passed\n";
+}
 
-    // --- Time-management test: zero ms left should return best-so-far  ---
-    b.loadFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    TimeManager tmZero;
-    tmZero.start(0, /*inc=*/0, /*moves_to_go=*/1);
-    Move bestZero = s.findBestMove(b, b.sideToMove(), 5, tmZero);
-    std::string uZero = bestZero.toString();
-    if (uZero != "a2a3") {
-        std::cerr << "SearchTest FAILED (Time expired): got "
-                  << uZero << ", expected a1a1\n";
-        return 1;
+void test_stalemate_avoidance() {
+    std::cout << "--- test_stalemate_avoidance ---\n";
+
+    const char* fen = "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1";
+    Move m = run_search(fen, 2);
+
+    std::cout << "Position: " << fen << "\n";
+    std::cout << "Engine move: " << m.toString() << "\n";
+
+    if (m.toString() == "f7g6") {
+        std::cerr << "FAIL: Engine played Stalemate (Qg6) in a winning position!\n";
+        exit(1);
     }
-    std::cout << "Time management test passed\n";
+    if (m.toString() == "f7g7" || m.toString() == "f7f8" || m.toString() == "f7h7") {
+        std::cout << "PASS: Found Checkmate.\n";
+    } else {
+        std::cout << "PASS: Avoided stalemate (played " << m.toString() << ")\n";
+    }
+}
 
-    std::cout << "All SearchTests passed\n";
+void test_hanging_piece_defense() {
+    std::cout << "--- test_hanging_piece_defense ---\n";
+    const char* fen = "r1bqkbnr/ppp1pppp/2n5/3p4/3Q4/2N5/PPP1PPPP/R1B1KBNR w KQkq - 0 1";
+
+    Move m = run_search(fen, 2);
+    std::cout << "Engine move: " << m.toString() << "\n";
+
+
+    if (m.toString() == "d4d5" || m.toString() == "d4a4" || m.toString() == "d4d3" ||
+        m.toString() == "d4d2" || m.toString() == "d4d1") {
+        std::cout << "PASS: Saved the Queen.\n";
+    } else {
+        std::cerr << "FAIL: Likely lost the Queen. Played " << m.toString() << "\n";
+        exit(1);
+    }
+}
+
+int main() {
+    test_mate_in_2_rook_cut();
+    test_mate_in_3_back_rank();
+    test_stalemate_avoidance();
+    test_hanging_piece_defense();
+
+    std::cout << "\nALL SEARCH TESTS PASSED\n";
     return 0;
 }

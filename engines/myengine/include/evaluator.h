@@ -1,91 +1,43 @@
-// include/evaluator.h
 #pragma once
 
 #include "board.h"
-#include "move.h"
-#include <cstdint>
 #include <vector>
-#include <unordered_map>
-#include <random>
-#include <limits>
-#include <utility>
-
-// a simple Color-flip helper
-static inline Color opponent(Color c) {
-    return c == Color::WHITE ? Color::BLACK
-                             : Color::WHITE;
-}
-
+#include <cstdint>
 
 class Evaluator {
 public:
-    /**
-     * @param maxQDepth  maximum recursive depth for quiescence before doing a static evaluate()
-     */
-    explicit Evaluator(unsigned maxQDepth = 2);
+    static constexpr int PST_COUNT = 6;
 
-    /**
-     * Full evaluation: returns +score if White is better to move, –score if Black.
-     * Handles checkmates (±∞ → ±100000), draws (0), otherwise material+positional.
-     */
-    int evaluate(const Board &board, Color stm) const;
+    Evaluator();
 
-    /**
-     * Leaf-only evaluation used by Search::negamax when depth==0.
-     * Same terminal handling, otherwise simply calls evaluate().
-     */
-    int evaluateTerminal(const Board &board, Color stm) const;
-
-    // (Optional) Expose these for direct use:
-    int quiescenceSearch(Board board,
-                         int alpha, int beta,
-                         bool maximizingPlayer,
-                         int depth);
-    std::pair<int,Move> alphaBeta(Board board,
-                                  int depth,
-                                  int alpha, int beta,
-                                  bool maximizingPlayer);
-    Move iterativeDeepening(const Board &board,
-                            int maxDepth,
-                            bool maximizingPlayer);
+    int evaluate(const Board& board, Color side_to_move) const;
+    int evaluateTerminal(const Board& board, Color side_to_move) const;
+    uint64_t generateZobristHash(const Board& board, bool sideToMove) const;
 
 private:
-    void initializePieceSquareTables();
-    uint64_t generateZobristHash(const Board &board,
-                                 bool sideToMove) const;
+    int evaluateMaterial(const Board& board) const;
+    int evaluatePositional(const Board& board) const;
 
-    int evaluateMaterial(const Board &board) const;
-    int evaluatePositional(const Board &board) const;
+    const int pieceValues[PST_COUNT] = {100, 320, 330, 500, 900, 20000};
 
-    unsigned maxQDepth;
+    std::vector<int> whitePawnTable;
+    std::vector<int> whiteKnightTable;
+    std::vector<int> whiteBishopTable;
+    std::vector<int> whiteRookTable;
+    std::vector<int> whiteQueenTable;
+    std::vector<int> whiteKingTableMG;
+    std::vector<int> whiteKingTableEG;
 
-    // Piece‐values and piece‐square tables
-    static constexpr int PST_COUNT = Board::PieceTypeCount;
-    static constexpr int pieceValues[PST_COUNT]
-        = { 100, 320, 330, 500, 900, 20000 };
+    std::vector<int> blackPawnTable;
+    std::vector<int> blackKnightTable;
+    std::vector<int> blackBishopTable;
+    std::vector<int> blackRookTable;
+    std::vector<int> blackQueenTable;
+    std::vector<int> blackKingTableMG;
+    std::vector<int> blackKingTableEG;
 
-    std::vector<int> whitePawnTable,   whiteKnightTable,
-                     whiteBishopTable, whiteRookTable,
-                     whiteQueenTable,  whiteKingTableMG,
-                     whiteKingTableEG;
-    std::vector<int> blackPawnTable,   blackKnightTable,
-                     blackBishopTable, blackRookTable,
-                     blackQueenTable,  blackKingTableMG,
-                     blackKingTableEG;
-
-    // Zobrist
-    std::vector<std::vector<uint64_t>> zobristKeys;  // [12][64]
+    std::vector<std::vector<uint64_t>> zobristKeys;
     uint64_t zobristSide;
 
-    // Tiny TT for alphaBeta
-    struct TTEntry { int depth, score, flag; };
-    enum : int { EXACT = 0, ALPHA_FLAG = 1, BETA_FLAG = 2 };
-    std::unordered_map<uint64_t,TTEntry> transpositionTable;
-
-    // Fallback zero‐initialized PST
-    static const int pst[PST_COUNT][64];
-
-    // Move ordering helper
-    static std::vector<Move> orderMoves(std::vector<Move> moves,
-                                        bool maximizingPlayer);
+    void initializePieceSquareTables();
 };
