@@ -19,10 +19,7 @@ export class UciEngine {
         if (this.process) return;
 
         this.process = spawn({
-            cmd: [this.cmd],
-            stdin: "pipe",
-            stdout: "pipe",
-            stderr: "inherit",
+            cmd: [this.cmd], stdin: "pipe", stdout: "pipe", stderr: "inherit",
         });
 
         this._readLoop().catch((err) => {
@@ -49,6 +46,38 @@ export class UciEngine {
         this.process.kill();
         this.process = null;
         this.ready = false;
+    }
+
+    async uciNewGame() {
+        await this._sendRaw("ucinewgame");
+        await this._sendCommand("isready", (l) => l === "readyok");
+    }
+
+    /**
+     * @param {string} fen "startpos" or a FEN string
+     * @param {string[]} moves Array of move strings ["e2e4", "e7e5"]
+     */
+    async position(fen, moves = []) {
+        let cmd = `position ${fen}`;
+        if (moves.length > 0) {
+            cmd += ` moves ${moves.join(" ")}`;
+        }
+        await this._sendRaw(cmd);
+    }
+
+    /**
+     * @param {Object} options { depth, wtime, btime, movetime }
+     */
+    async go(options = {}) {
+        let cmd = "go";
+        if (options.depth) cmd += ` depth ${options.depth}`;
+        if (options.wtime) cmd += ` wtime ${options.wtime}`;
+        if (options.btime) cmd += ` btime ${options.btime}`;
+        if (options.movetime) cmd += ` movetime ${options.movetime}`;
+
+        const line = await this._sendCommand(cmd, (l) => l.startsWith("bestmove"));
+
+        return line.split(" ")[1];
     }
 
     async _sendRaw(cmd) {
@@ -115,12 +144,9 @@ export class UciEngine {
             await this.start();
         }
         console.log("[engine wrapper] queue size before sending:", this.queue.length);
-        const bestmoveLine = await this._sendCommand(
-            `bestmovefromfen ${fen}`,
-            (line) => {
-                return line.startsWith("bestmove");
-            },
-        );
+        const bestmoveLine = await this._sendCommand(`bestmovefromfen ${fen}`, (line) => {
+            return line.startsWith("bestmove");
+        });
         console.log("[engine wrapper] resolved bestmove line:", bestmoveLine);
         const move = bestmoveLine.slice("bestmove".length).trim();
         return move;
@@ -139,5 +165,52 @@ export class UciEngine {
         return await this._sendCommand(`makemove ${fen} ${move}`, (line) => {
             return line.startsWith("move_made");
         });
+    }
+
+    static async playMatch(white, black, options) {
+        console.log(`\n=== MATCH START: ${white.name} (White) vs ${black.name} (Black) ===`);
+
+        await white.start();
+        await black.start();
+
+        await white.uciNewGame();
+        await black.uciNewGame();
+
+        const moves = [];
+        let turn = "white";
+        const maxMoves = options.maxMoves || 200;
+
+        try {
+            while (moves.length < maxMoves) {
+                const activeEngine = turn === "white" ? white : black;
+
+                await activeEngine.position("startpos", moves);
+
+                const bestMove = await activeEngine.go({depth: options.depth});
+
+                if (!bestMove || bestMove === "(none)" || bestMove === "0000") {
+                    console.log(`Game Over. ${activeEngine.name} cannot move.`);
+                    break;
+                }
+
+                console.log(`${moves.length + 1}. ${turn === "white" ? "White" : "Black"} (${activeEngine.name}): ${bestMove}`);
+                moves.push(bestMove);
+
+                turn = turn === "white" ? "black" : "white";
+            }
+        } catch (error) {
+            console.error("Match aborted due to error:", error);
+        } finally {
+            console.log(`=== MATCH END ===`);
+            console.log(`Moves: ${moves.join(" ")}`);
+            await white.stop();
+            await black.stop();
+        }
+    }
+
+    static async playLichessGame(engine, gameId, apiToken) {
+        console.log(`[Lichess Stub] Connecting to game ${gameId}...`);
+        await engine.start();
+        console.log("[Lichess Stub] Connected. Waiting for events...");
     }
 }

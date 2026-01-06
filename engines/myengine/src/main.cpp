@@ -213,23 +213,21 @@ static void handle_go(const std::string& line, Engine& engine) {
 
 static void handle_bestmove(const std::string& line, Engine& engine) {
     auto fenOpt = extractFen(line, "bestmovefromfen");
-    if (!fenOpt) {
-        std::cout << "info string bestmovefromfen requires FEN\n";
-        std::cout.flush();
-        return;
-    }
-
-    const std::string& fen = *fenOpt;
-
-    if (!engine.setPosition(fen)) {
-        std::cout << "info string invalid FEN in bestmovefromfen\n";
-        std::cout.flush();
-        return;
-    }
+    if (!fenOpt) {return;}
 
     PlaySettings settings{};
     settings.depth = 10;
     settings.tt_size_mb = 64;
+
+    std::istringstream iss(line);
+    std::string token;
+    while (iss >> token) {
+        if (token == "depth") {
+            iss >> settings.depth;
+        }
+    }
+
+    if (!engine.setPosition(*fenOpt)) {return;}
 
     const std::string bestUci = engine.playMove(settings);
     std::cout << "bestmove " << bestUci << "\n";
@@ -248,6 +246,9 @@ static void handle_printboard(const std::string& line, Engine& engine) {
         }
     }
     engine.getBoard().printBoard();
+
+    std::cout << "printboard_done\n";
+    std::cout.flush();
 }
 
 

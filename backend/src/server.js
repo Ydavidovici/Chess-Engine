@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
 import {UciEngine} from "./engineManager.js";
 import {db} from "../db/db.js";
 
@@ -11,44 +12,79 @@ app.use(cors({
 
 app.use(express.json());
 
-const engine = new UciEngine();
-engine.start();
+const MY_ENGINE_PATH = path.join(import.meta.dir, "engines", "myengine", "build", "myengine");
+const STOCKFISH_PATH = "/usr/bin/stockfish";
 
-app.get("/api/health", async (request, response) => {
+const mainEngine = new UciEngine(MY_ENGINE_PATH, "PrimaryEngine");
+mainEngine.start();
+
+
+app.get("/api/health", (req, res) => {
+    res.json({status: "ok", engine: mainEngine.ready ? "ready" : "starting"});
+});
+
+app.post("/api/engine/analysis", async (req, res) => {
     try {
-        response.json({
-            status: "ok",
-            engine: "ready",
-        });
+        const {fen, depth = 10} = req.body;
+        if (!fen) return res.status(400).json({error: "FEN required"});
+
+        const bestMove = await mainEngine.bestMoveFromFen(fen, depth);
+        res.json({bestMove, depth});
     } catch (err) {
-        console.error("health failed:", err);
-        response.status(500).json({status: "error", error: String(err)});
+        console.error("Analysis Error:", err);
+        res.status(500).json({error: err.message});
     }
 });
 
-app.post("/api/engine/best-move", async (request, response) => {
+app.post("/api/engine/make-move", async (req, res) => {
     try {
-        const {fen} = request.body;
-        if (!fen) {
-            return response.json({error: "fen is required"});
-        }
-        const bestMove = await engine.bestMoveFromFen(fen);
-        response.json({bestMove});
+        const {fen, move} = req.body;
+        const result = await mainEngine.makeMove(fen, move);
+        res.json({status: "moved", result});
     } catch (err) {
-        console.error("best-move failed:", err);
-        response.status(500).json({error: String(err)});
+        res.status(500).json({error: err.message});
     }
 });
 
-app.post("/api/engine/print-position", async (request, response) => {
-    const {fen} = request.body;
-    const board = await engine.printBoard(fen)
-    response.json(board);
+app.post("/api/engine/go", async (req, res) => {
+    try {
+        const {fen, moves, options} = req.body;
+        await mainEngine.position(fen || "startpos", moves || []);
+        const bestMove = await mainEngine.go(options || {depth: 10});
+
+        res.json({bestMove});
+    } catch (err) {
+        res.status(500).json({error: err.message});
+    }
 });
 
-app.post("/api/engine/make-move", async (request, response) => {
-    const {fen, move} = request.body
-    response.json(await engine.makeMove(fen, move))
+app.post("/api/engine/reset", async (req, res) => {
+    await mainEngine.uciNewGame();
+    res.json({status: "reset_complete"});
+});
+
+app.post("/api/engine/print", async (req, res) => {
+    const {fen} = req.body;
+    await mainEngine.printBoard(fen);
+    res.json({status: "printed_to_console"});
+});
+
+app.post("/api/arena/trigger", async (req, res) => {
+    const {games = 10, depth = 6} = req.body;
+
+    console.log(`[Arena] Starting match: MyEngine vs Stockfish (${games} games)`);
+
+    const p1 = new UciEngine(MY_ENGINE_PATH, "MyEngine_Arena");
+    const p2 = new UciEngine(STOCKFISH_PATH, "Stockfish_Arena");
+
+    UciEngine.playMatch(p1, p2, {depth, maxMoves: 200})
+    .then(() => console.log("[Arena] Match finished"))
+    .catch(err => console.error("[Arena] Match failed", err));
+
+    res.json({
+        status: "started",
+        message: "Match started in background. Check server logs.",
+    });
 });
 
 const PORT = process.env.PORT || 8000;
