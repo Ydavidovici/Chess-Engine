@@ -26,4 +26,4 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-engine
+engines/stockfish
