@@ -23,12 +23,7 @@ export default function Home() {
 
     return (
         <div className="bg-blue-500 flex flex-col items-center justify-center">
-            <div>
-                Hello my beautiful princess liz
-            </div>
-            <div>
-                Im coming for those cheeks
-            </div>
+            we live
         </div>
     );
 }

@@ -53,3 +53,7 @@ export const printPosition = async (fen) => {
     return data;
 }
 
+export const runBenchmark = async () => {
+    const { data } = await axios.post(`${API_URL}/api/engine/bench`);
+    return data;
+};

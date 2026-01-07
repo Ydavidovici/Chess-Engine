@@ -1,10 +1,16 @@
 #include "main.h"
 #include "board.h"
+#include "bench.h"
 #include <iostream>
 #include <string>
 #include <unordered_map>
 #include <sstream>
 #include <optional>
+
+struct FenAndTail {
+    std::string fen;
+    std::string tail;
+};
 
 using CommandHandler = void(*)(const std::string& line, Engine& engine);
 
@@ -17,6 +23,7 @@ static void handle_go(const std::string& line, Engine& engine);
 static void handle_bestmove(const std::string& line, Engine& engine);
 static void handle_printboard(const std::string& line, Engine& engine);
 static void handle_makeMove(const std::string& line, Engine& engine);
+static void handle_bench(const std::string& line, Engine& engine);
 
 static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"uci", handle_uci},
@@ -27,7 +34,8 @@ static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"go", handle_go},
     {"bestmovefromfen", handle_bestmove},
     {"printboard", handle_printboard},
-    {"makemove", handle_makeMove}
+    {"makemove", handle_makeMove},
+{"bench", handle_bench},
 };
 
 
@@ -291,6 +299,10 @@ static void handle_makeMove(const std::string& line, Engine& engine) {
 
     std::cout << "move_made " << moveStr << " " << engine.getFEN() << "\n";
     std::cout.flush();
+}
+
+static void handle_bench(const std::string& line, Engine& engine) {
+    Bench::run(engine);
 }
 
 

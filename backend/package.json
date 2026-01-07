@@ -1,24 +1,25 @@
 {
-    "name": "backend-js",
-    "module": "src/server.js",
-    "type": "module",
-    "private": true,
-    "scripts": {
-        "migrate": "bunx drizzle-kit generate && bunx drizzle-kit push",
-        "dev": "bun src/server.js",
-        "build": "bash ../engines/myengine/scripts/build.sh"
-    },
-    "devDependencies": {
-        "@types/bun": "latest"
-    },
-    "peerDependencies": {
-        "typescript": "^5"
-    },
-    "dependencies": {
-        "cors": "^2.8.5",
-        "drizzle-kit": "^0.31.7",
-        "drizzle-orm": "^0.44.7",
-        "express": "^5.1.0",
-        "sqlite3": "^5.1.7"
-    }
+  "name": "backend-js",
+  "version": "0.0.4",
+  "module": "src/server.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "migrate": "bunx drizzle-kit generate && bunx drizzle-kit push",
+    "dev": "bun src/server.js",
+    "build": "bun run build.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "drizzle-kit": "^0.31.7",
+    "drizzle-orm": "^0.44.7",
+    "express": "^5.1.0",
+    "sqlite3": "^5.1.7"
+  }
 }

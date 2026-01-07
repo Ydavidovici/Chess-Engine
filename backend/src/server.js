@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import {existsSync} from "fs";
 import {UciEngine} from "./engineManager.js";
 import {db} from "../db/db.js";
 
@@ -12,8 +13,36 @@ app.use(cors({
 
 app.use(express.json());
 
-const MY_ENGINE_PATH = path.join(import.meta.dir, "engines", "myengine", "build", "myengine");
+const PROD_PATH = path.join(import.meta.dir, "myengine");
+const DEV_PATH = path.resolve(import.meta.dir, "..", "..", "engines", "myengine", "build", "myengine");
 const STOCKFISH_PATH = "/usr/bin/stockfish";
+
+let selectedPath = null;
+
+if (existsSync(PROD_PATH)) {
+    console.log("✅ Running in Production Mode (Local Binary)");
+    selectedPath = PROD_PATH;
+} else if (existsSync(DEV_PATH)) {
+    console.log("⚠️  Running in Dev Mode (External Binary)");
+    selectedPath = DEV_PATH;
+} else {
+    const FIX_DEV_PATH = path.resolve(import.meta.dir, "..", "..", "..", "engines", "myengine", "build", "myengine");
+
+    if (existsSync(FIX_DEV_PATH)) {
+        console.log("⚠️  Running in Dev Mode (Deep Nested Fallback)");
+        selectedPath = FIX_DEV_PATH;
+    }
+}
+export const MY_ENGINE_PATH = selectedPath;
+
+console.log(`♟️  Engine Path: ${MY_ENGINE_PATH}`);
+
+if (!MY_ENGINE_PATH) {
+    console.error("❌ CRITICAL: Could not find chess engine binary!");
+    console.error(`   Checked Prod: ${PROD_PATH}`);
+    console.error(`   Checked Dev:  ${DEV_PATH}`);
+    process.exit(1);
+}
 
 const mainEngine = new UciEngine(MY_ENGINE_PATH, "PrimaryEngine");
 mainEngine.start();
@@ -85,6 +114,23 @@ app.post("/api/arena/trigger", async (req, res) => {
         status: "started",
         message: "Match started in background. Check server logs.",
     });
+});
+
+app.post("/api/engine/bench", async (req, res) => {
+    try {
+        console.log("Starting benchmark...");
+
+        const results = await mainEngine.bench();
+
+        console.log("Benchmark results:", results);
+        res.json({
+            status: "success",
+            data: results,
+        });
+    } catch (err) {
+        console.error("Benchmark failed:", err);
+        res.status(500).json({error: err.message});
+    }
 });
 
 const PORT = process.env.PORT || 8000;

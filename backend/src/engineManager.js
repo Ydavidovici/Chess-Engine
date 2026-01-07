@@ -213,4 +213,30 @@ export class UciEngine {
         await engine.start();
         console.log("[Lichess Stub] Connected. Waiting for events...");
     }
+
+    async bench() {
+        if (!this.ready) await this.start();
+
+        const results = {
+            nps: 0,
+            eps: 0,
+            nodes: 0,
+            time: 0,
+            fullOutput: []
+        };
+
+        await this._sendCommand("bench",
+            (line) => line.includes("Benchmark Complete"),
+            (line) => {
+                results.fullOutput.push(line);
+
+                // Parse the specific values your C++ code prints
+                if (line.includes("NPS:")) results.nps = parseInt(line.split(":")[1].trim());
+                if (line.includes("EPS:")) results.eps = parseInt(line.split(":")[1].trim());
+                if (line.includes("Total Nodes:")) results.nodes = parseInt(line.split(":")[1].trim());
+            }
+        );
+
+        return results;
+    }
 }

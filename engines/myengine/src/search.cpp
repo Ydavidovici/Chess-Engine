@@ -10,6 +10,8 @@ Search::Search(const Evaluator& evaluator, TranspositionTable& tt)
     : evaluator_(evaluator), tt_(tt) {}
 
 Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int incrementMs) {
+    nodes_ = 0;
+
     if (timeLeftMs > 0) {
         tm_.start(timeLeftMs, incrementMs, 0);
     } else {
@@ -59,6 +61,8 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
 }
 
 int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoot) {
+    nodes_++;
+
     if ((plyFromRoot % 2048) == 0 && tm_.isTimeUp()) return 0;
 
     uint64_t key = evaluator_.generateZobristHash(board, board.sideToMove() == Color::WHITE);
@@ -114,6 +118,8 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
 }
 
 int Search::quiescence(Board& board, int alpha, int beta) {
+    nodes_++;
+
     int standPat = evaluator_.evaluate(board, board.sideToMove());
     if (standPat >= beta) return beta;
     if (standPat > alpha) alpha = standPat;
