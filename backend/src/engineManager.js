@@ -230,7 +230,6 @@ export class UciEngine {
             (line) => {
                 results.fullOutput.push(line);
 
-                // Parse the specific values your C++ code prints
                 if (line.includes("NPS:")) results.nps = parseInt(line.split(":")[1].trim());
                 if (line.includes("EPS:")) results.eps = parseInt(line.split(":")[1].trim());
                 if (line.includes("Total Nodes:")) results.nodes = parseInt(line.split(":")[1].trim());
