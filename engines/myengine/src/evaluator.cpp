@@ -49,14 +49,32 @@ uint64_t Evaluator::generateZobristHash(const Board& board, bool sideToMove) con
 }
 
 int Evaluator::evaluate(const Board& board, Color stm) const {
-    if (board.isCheckmate(stm)) return -MATE_SCORE;
+    int score = 0;
 
-    if (board.isStalemate(stm) || board.isFiftyMoveDraw() ||
-        board.isThreefoldRepetition() || board.isInsufficientMaterial()) {
-        return 0;
-    }
+    auto evalPieceType = [&](const std::vector<int>& wTable, const std::vector<int>& bTable, Board::PieceIndex pt) {
+        uint64_t wbb = board.pieceBB(Color::WHITE, pt);
+        while (wbb) {
+            int sq = __builtin_ctzll(wbb);
+            score += wTable[sq];
+            wbb &= wbb - 1;
+        }
 
-    int score = evaluateMaterial(board) + evaluatePositional(board);
+        uint64_t bbb = board.pieceBB(Color::BLACK, pt);
+        while (bbb) {
+            int sq = __builtin_ctzll(bbb);
+            score -= bTable[sq];
+            bbb &= bbb - 1;
+        }
+    };
+
+    evalPieceType(whitePawnTable, blackPawnTable, Board::PAWN);
+    evalPieceType(whiteKnightTable, blackKnightTable, Board::KNIGHT);
+    evalPieceType(whiteBishopTable, blackBishopTable, Board::BISHOP);
+    evalPieceType(whiteRookTable, blackRookTable, Board::ROOK);
+    evalPieceType(whiteQueenTable, blackQueenTable, Board::QUEEN);
+
+    evalPieceType(whiteKingTableMG, blackKingTableMG, Board::KING);
+
     return (stm == Color::WHITE ? score : -score);
 }
 

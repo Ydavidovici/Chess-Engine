@@ -762,7 +762,51 @@ bool Board::makeMove(const Move& move) {
 
     side_to_move = opponent_color;
 
-    current_zobrist_key = calculateZobristKey();
+    // current_zobrist_key = calculateZobristKey();
+
+
+    current_zobrist_key ^= castling_keys[undo_entry.castling_rights];
+    if (undo_entry.en_passant_square_index != -1) {
+        current_zobrist_key ^= en_passant_keys[undo_entry.en_passant_square_index];
+    }
+
+    current_zobrist_key ^= castling_keys[castling_rights];
+    if (en_passant_square_index != -1) {
+        current_zobrist_key ^= en_passant_keys[en_passant_square_index];
+    }
+
+    current_zobrist_key ^= side_key;
+
+    int moved_side_offset = (us_color == Color::WHITE ? 0 : 6);
+
+    current_zobrist_key ^= piece_keys[undo_entry.moved_piece + moved_side_offset][move.start];
+
+    if (move.type == MoveType::PROMOTION) {
+        PieceIndex promoPiece = QUEEN;
+        if (move.promo == 'R') promoPiece = ROOK;
+        else if (move.promo == 'B') promoPiece = BISHOP;
+        else if (move.promo == 'N') promoPiece = KNIGHT;
+        current_zobrist_key ^= piece_keys[promoPiece + moved_side_offset][move.end];
+    } else {
+        current_zobrist_key ^= piece_keys[undo_entry.moved_piece + moved_side_offset][move.end];
+    }
+
+    if (undo_entry.captured_piece != PieceTypeCount) {
+        int captured_side_offset = (opponent_color == Color::WHITE ? 0 : 6);
+        int capture_square = move.end;
+
+        if (move.type == MoveType::EN_PASSANT) {
+            capture_square = (us_color == Color::WHITE ? move.end - 8 : move.end + 8);
+        }
+
+        current_zobrist_key ^= piece_keys[undo_entry.captured_piece + captured_side_offset][capture_square];
+    }
+
+    if (undo_entry.is_castling_move) {
+        int rook_side_offset = (us_color == Color::WHITE ? 0 : 6);
+        current_zobrist_key ^= piece_keys[ROOK + rook_side_offset][undo_entry.castling_rook_from_square];
+        current_zobrist_key ^= piece_keys[ROOK + rook_side_offset][undo_entry.castling_rook_to_square];
+    }
 
     move_history.push_back(undo_entry);
     // std::cout << "[makeMove] Switched side_to_move to " << (side_to_move == Color::WHITE ? "white" : "black") << " move_history size=" << move_history.size() << "\n";
@@ -965,16 +1009,21 @@ void Board::printBitboards() const {
 }
 
 Board::PieceIndex Board::getPieceAt(int square) const {
-    for (int p = 0; p < PieceTypeCount; ++p) {
-        if (testBit(white_bitboards[p], square)) {
-            return static_cast<PieceIndex>(p);
-        }
+    uint64_t mask = 1ULL << square;
+
+    uint64_t all_pieces =
+        white_bitboards[PAWN] | white_bitboards[KNIGHT] | white_bitboards[BISHOP] |
+        white_bitboards[ROOK] | white_bitboards[QUEEN] | white_bitboards[KING] |
+        black_bitboards[PAWN] | black_bitboards[KNIGHT] | black_bitboards[BISHOP] |
+        black_bitboards[ROOK] | black_bitboards[QUEEN] | black_bitboards[KING];
+
+    if (!(all_pieces & mask)) {
+        return PieceTypeCount;
     }
 
     for (int p = 0; p < PieceTypeCount; ++p) {
-        if (testBit(black_bitboards[p], square)) {
-            return static_cast<PieceIndex>(p);
-        }
+        if (testBit(white_bitboards[p], square)) return static_cast<PieceIndex>(p);
+        if (testBit(black_bitboards[p], square)) return static_cast<PieceIndex>(p);
     }
 
     return PieceTypeCount;
