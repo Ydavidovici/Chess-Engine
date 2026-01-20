@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <iostream>
 #include <limits>
+#include <cstring>
 
 static constexpr int INF = 1000000;
 static constexpr int MATE_SCORE = 100000;
@@ -47,6 +48,8 @@ Search::Search(const Evaluator& evaluator, TranspositionTable& tt)
 
 Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int incrementMs) {
     stats_.reset();
+
+    std::memset(history_, 0, sizeof history_);
 
     if (timeLeftMs > 0) {
         tm_.start(timeLeftMs, incrementMs, 0);

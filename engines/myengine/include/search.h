@@ -46,8 +46,8 @@ private:
     const Evaluator& evaluator_;
     TranspositionTable& tt_;
     TimeManager tm_;
-
     SearchStats stats_;
+    int history_[2][64][64];
 
     int negamax(Board& board, int depth, int alpha, int beta, int plyFromRoot);
     int quiescence(Board& board, int alpha, int beta, int plyFromRoot);
