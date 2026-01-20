@@ -51,5 +51,5 @@ private:
 
     int negamax(Board& board, int depth, int alpha, int beta, int plyFromRoot);
     int quiescence(Board& board, int alpha, int beta, int plyFromRoot);
-    void orderMoves(Board& board, std::vector<Move>& moves);
+    void orderMoves(Board& board, std::vector<Move>& moves, const Move& ttMove);
 };

@@ -758,7 +758,7 @@ bool Board::makeMove(const Move& move) {
         ++fullmove_number;
 
     // std::cout << "[makeMove] halfmove_clock=" << halfmove_clock << " fullmove_number=" << fullmove_number << "\n";
-    std::cout.flush();
+    // std::cout.flush();
 
     side_to_move = opponent_color;
 
