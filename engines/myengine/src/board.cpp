@@ -5,12 +5,79 @@
 #include <cctype>
 #include <cmath>
 #include <iostream>
+#include <random>
+
+
+uint64_t Board::piece_keys[12][64];
+uint64_t Board::en_passant_keys[64];
+uint64_t Board::castling_keys[16];
+uint64_t Board::side_key;
+bool Board::zobrist_initialized = false;
 
 Board::Board() {
     initialize();
 }
 
+void Board::initZobrist() {
+    if (zobrist_initialized) return;
+
+    std::mt19937_64 rng(123456789);
+    std::uniform_int_distribution<uint64_t> dist;
+
+    for (int p = 0; p < 12; ++p) {
+        for (int sq = 0; sq < 64; ++sq) {
+            piece_keys[p][sq] = dist(rng);
+        }
+    }
+
+    for (int sq = 0; sq < 64; ++sq) {
+        en_passant_keys[sq] = dist(rng);
+    }
+
+    for (int c = 0; c < 16; ++c) {
+        castling_keys[c] = dist(rng);
+    }
+
+    side_key = dist(rng);
+
+    zobrist_initialized = true;
+}
+
+uint64_t Board::calculateZobristKey() const {
+    uint64_t key = 0;
+
+    for (int p = 0; p < PieceTypeCount; ++p) {
+        uint64_t bb = white_bitboards[p];
+        while (bb) {
+            int sq = __builtin_ctzll(bb);
+            bb &= bb - 1;
+            key ^= piece_keys[p][sq];
+        }
+
+        bb = black_bitboards[p];
+        while (bb) {
+            int sq = __builtin_ctzll(bb);
+            bb &= bb - 1;
+            key ^= piece_keys[p + 6][sq];
+        }
+    }
+
+    if (en_passant_square_index != -1) {
+        key ^= en_passant_keys[en_passant_square_index];
+    }
+
+    key ^= castling_keys[castling_rights];
+
+    if (side_to_move == Color::BLACK) {
+        key ^= side_key;
+    }
+
+    return key;
+}
+
 void Board::initialize() {
+    initZobrist();
+
     white_bitboards.fill(0);
     black_bitboards.fill(0);
 
@@ -35,9 +102,15 @@ void Board::initialize() {
     fullmove_number = 1;
 
     move_history.clear();
+
+    current_zobrist_key = calculateZobristKey();
+
+    std::cout << "[DEBUG] Initial Zobrist Key: " << current_zobrist_key << std::endl;
 }
 
 void Board::loadFEN(const std::string& fenString) {
+    initZobrist();
+
     white_bitboards.fill(0);
     black_bitboards.fill(0);
 
@@ -113,6 +186,8 @@ void Board::loadFEN(const std::string& fenString) {
     }
 
     move_history.clear();
+
+    current_zobrist_key = calculateZobristKey();
 }
 
 std::string Board::toFEN() const {
@@ -532,6 +607,9 @@ bool Board::makeMove(const Move& move) {
     undo_entry.halfmove_clock = halfmove_clock;
     undo_entry.fullmove_number = fullmove_number;
     undo_entry.move = move;
+
+    undo_entry.zobrist_key = current_zobrist_key;
+
     undo_entry.is_pawn_double_push = false;
     undo_entry.is_castling_move = false;
     undo_entry.castling_rook_from_square = -1;
@@ -683,6 +761,9 @@ bool Board::makeMove(const Move& move) {
     std::cout.flush();
 
     side_to_move = opponent_color;
+
+    current_zobrist_key = calculateZobristKey();
+
     move_history.push_back(undo_entry);
     // std::cout << "[makeMove] Switched side_to_move to " << (side_to_move == Color::WHITE ? "white" : "black") << " move_history size=" << move_history.size() << "\n";
     // std::cout.flush();
@@ -704,6 +785,8 @@ void Board::unmakeMove() {
     assert(!move_history.empty());
     Undo undo_entry = move_history.back();
     move_history.pop_back();
+
+    current_zobrist_key = undo_entry.zobrist_key;
 
     Move move = undo_entry.move;
 
@@ -794,15 +877,26 @@ bool Board::isFiftyMoveDraw() const {
 }
 
 bool Board::isThreefoldRepetition() const {
+    int repetitionCount = 1;
+    int historySize = move_history.size();
+
+    for (int i = historySize - 2; i >= 0; i -= 2) {
+        if (move_history[i].zobrist_key == current_zobrist_key) {
+            repetitionCount++;
+            if (repetitionCount >= 3) return true;
+        }
+
+        if (move_history[i].moved_piece == PAWN ||
+            move_history[i].captured_piece != PieceTypeCount) {
+            break;
+            }
+    }
+
     return false;
 }
 
 bool Board::isInsufficientMaterial() const {
     return false;
-}
-
-uint64_t Board::zobristKey() const {
-    return 0ULL;
 }
 
 void Board::printBoard() const {

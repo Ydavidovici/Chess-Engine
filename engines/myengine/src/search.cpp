@@ -54,8 +54,9 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
     if (timeLeftMs > 0) {
         tm_.start(timeLeftMs, incrementMs, 0);
     } else {
-        tm_.start(2000, 0, 0);
+        tm_.start(50000, 0, 0);
     }
+
     Move bestMove;
 
     for (int depth = 1; depth <= maxDepth; ++depth) {
@@ -67,7 +68,6 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
         auto rootMoves = board.generateLegalMoves();
         if (rootMoves.empty()) break;
 
-        // Pass board for MVV-LVA
         orderMoves(board, rootMoves);
 
         Move currentBestMove = rootMoves[0];
@@ -101,6 +101,10 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
     stats_.totalNodes++;
 
     if ((plyFromRoot % 2048) == 0 && tm_.isTimeUp()) return 0;
+
+    if (plyFromRoot > 0 && (board.isThreefoldRepetition() || board.isFiftyMoveDraw())) {
+        return 0;
+    }
 
     uint64_t key = board.zobristKey();
 
@@ -152,6 +156,16 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
         if (alpha >= beta) {
             stats_.betaCutoffs++;
             if (movesSearched == 0) stats_.firstMoveCutoffs++;
+
+            if (!move.isCapture()) {
+                int side = static_cast<int>(board.sideToMove());
+                history_[side][move.start][move.end] += depth * depth;
+
+                if (history_[side][move.start][move.end] > 10000000) {
+                    history_[side][move.start][move.end] /= 2;
+                }
+            }
+
             tt_.store(key, beta, depth, move, TranspositionTable::LOWERBOUND);
             return beta;
         }
@@ -206,11 +220,18 @@ void Search::orderMoves(Board& board, std::vector<Move>& moves) {
         int scoreA = 0;
         int scoreB = 0;
 
-        if (a.isCapture()) scoreA = getMvvLvaScore(board, a) + 10000;
-        if (b.isCapture()) scoreB = getMvvLvaScore(board, b) + 10000;
+        if (a.isCapture()) scoreA = getMvvLvaScore(board, a) + 100000;
+        if (b.isCapture()) scoreB = getMvvLvaScore(board, b) + 100000;
 
-        if (a.type == MoveType::PROMOTION) scoreA += 9000;
-        if (b.type == MoveType::PROMOTION) scoreB += 9000;
+        if (a.type == MoveType::PROMOTION) scoreA += 90000;
+        if (b.type == MoveType::PROMOTION) scoreB += 90000;
+
+        if (!a.isCapture()) {
+            scoreA += history_[static_cast<int>(board.sideToMove())][a.start][a.end];
+        }
+        if (!b.isCapture()) {
+            scoreB += history_[static_cast<int>(board.sideToMove())][b.start][b.end];
+        }
 
         return scoreA > scoreB;
     });

@@ -1,9 +1,9 @@
 #pragma once
-
 #include <array>
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <random>
 
 #include "move.h"
 #include "types.h"
@@ -13,30 +13,25 @@ public:
     enum PieceIndex { PAWN = 0, KNIGHT, BISHOP, ROOK, QUEEN, KING, PieceTypeCount };
 
     Board();
-
     void initialize();
-
     void loadFEN(const std::string& fenString);
-
-    explicit Board(const std::string& fenString) {
-        loadFEN(fenString);
-    }
-
+    explicit Board(const std::string& fenString) { loadFEN(fenString); }
 
     std::string toFEN() const;
-
     std::vector<Move> generatePseudoMoves() const;
     std::vector<Move> generateLegalMoves() const;
 
     bool makeMove(const Move& move);
     void unmakeMove();
+
+    // Debugging
     void printBoard() const;
     void printFENString() const;
     void printPseudoLegalMoves() const;
     void printLegalMoves() const;
     void printBitboards() const;
 
-
+    // Game Logic
     bool is_square_attacked(int squareIndex, Color attackingColor) const {
         return isSquareAttacked(squareIndex, attackingColor);
     }
@@ -50,11 +45,15 @@ public:
 
     uint64_t occupancy(Color color) const;
     uint64_t pieceBB(Color color, PieceIndex pieceIndex) const;
-    uint64_t zobristKey() const;
-
     Color sideToMove() const { return side_to_move; }
-
     PieceIndex getPieceAt(int square) const;
+
+    uint64_t zobristKey() const { return current_zobrist_key; }
+
+    uint64_t getPolyglotPieceKey(int piece, int square) const {
+        return piece_keys[piece][square];
+    }
+
 private:
     std::array<uint64_t, PieceTypeCount> white_bitboards{};
     std::array<uint64_t, PieceTypeCount> black_bitboards{};
@@ -65,11 +64,23 @@ private:
     int halfmove_clock{};
     int fullmove_number{};
 
+    uint64_t current_zobrist_key;
+
+    static uint64_t piece_keys[12][64];
+    static uint64_t en_passant_keys[64];
+    static uint64_t castling_keys[16];
+    static uint64_t side_key;
+    static bool zobrist_initialized;
+
+    void initZobrist();
+    uint64_t calculateZobristKey() const;
+
     struct Undo {
         uint8_t castling_rights;
         int en_passant_square_index;
         int halfmove_clock;
         int fullmove_number;
+        uint64_t zobrist_key;
         Move move;
         PieceIndex moved_piece;
         PieceIndex captured_piece;

@@ -113,15 +113,15 @@ void Evaluator::initializePieceSquareTables() {
     // Rank 7 is massive (promotion threat).
     // -----------------------------------------------------------
     whitePawnTable = {
-         0,  0,  0,  0,  0,  0,  0,  0,  // Rank 1
-         5, 10, 10,-20,-20, 10, 10,  5,  // Rank 2 (Penalize central pawns for staying home?)
-         5, -5,-10,  0,  0,-10, -5,  5,  // Rank 3
-         0,  0,  0, 20, 20,  0,  0,  0,  // Rank 4 (Bonus for e4/d4)
-         5,  5, 10, 25, 25, 10,  5,  5,  // Rank 5 (Advanced center)
-        10, 10, 20, 30, 30, 20, 10, 10,  // Rank 6
-        50, 50, 50, 50, 50, 50, 50, 50,  // Rank 7 (Almost Queen)
-         0,  0,  0,  0,  0,  0,  0,  0   // Rank 8
-    };
+        0,  0,  0,  0,  0,  0,  0,  0,
+        5, 10, 10,-20,-20, 10, 10,  5,
+        5, -5,  0,  5,  5,  0, -5,  5,
+        0,  0, 10, 40, 40, 10,  0,  0,  // Rank 4: +40 for e4/d4 (was 20)
+        5,  5, 20, 60, 60, 20,  5,  5,  // Rank 5: +60 for e5/d5
+       10, 10, 30, 80, 80, 30, 10, 10,  // Rank 6: Crushing
+       50, 50, 50, 50, 50, 50, 50, 50,
+        0,  0,  0,  0,  0,  0,  0,  0
+   };
 
     whiteKnightTable = {
         -50,-40,-30,-30,-30,-30,-40,-50,
