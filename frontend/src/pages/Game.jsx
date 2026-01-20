@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { runBenchmark } from "../services/api.js";
+import { runBenchmark, cancelBenchmark } from "../services/api.js";
 
 const ResultCard = ({ label, value, sub, color = "text-white" }) => (
     <div className="bg-gray-700 p-4 rounded text-center shadow-lg border border-gray-600">
@@ -46,11 +46,28 @@ const BenchmarkControl = () => {
 
         try {
             const response = await runBenchmark(payload);
+
+            if (response.status === "cancelled") {
+                setError("Benchmark cancelled by user.");
+                return;
+            }
+
             setResults(response.data);
         } catch (err) {
-            setError(err.message || "Benchmark failed");
+            if (err.message !== "Cancelled by user") {
+                setError(err.message || "Benchmark failed");
+            }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleCancel = async () => {
+        try {
+            await cancelBenchmark();
+            setError("Cancelling...");
+        } catch (err) {
+            console.error("Failed to cancel:", err);
         }
     };
 
@@ -66,16 +83,14 @@ const BenchmarkControl = () => {
                     <div className="flex bg-gray-900 rounded p-1 border border-gray-600">
                         <button
                             onClick={() => setMode("time")}
-                            className={`flex-1 py-2 rounded text-sm font-medium transition-all ${
-                                mode === "time" ? "bg-blue-600 text-white shadow" : "text-gray-400 hover:text-white"
+                            className={`flex-1 py-2 rounded text-sm font-medium transition-all ${mode === "time" ? "bg-blue-600 text-white shadow" : "text-gray-400 hover:text-white"
                             }`}
                         >
                             Fixed Time
                         </button>
                         <button
                             onClick={() => setMode("depth")}
-                            className={`flex-1 py-2 rounded text-sm font-medium transition-all ${
-                                mode === "depth" ? "bg-purple-600 text-white shadow" : "text-gray-400 hover:text-white"
+                            className={`flex-1 py-2 rounded text-sm font-medium transition-all ${mode === "depth" ? "bg-purple-600 text-white shadow" : "text-gray-400 hover:text-white"
                             }`}
                         >
                             Fixed Depth
@@ -133,24 +148,24 @@ const BenchmarkControl = () => {
                 </span>
             </div>
 
-            <button
-                onClick={handleRun}
-                disabled={loading}
-                className={`w-full py-4 rounded-lg font-bold text-lg transition-all shadow-lg
-                    ${loading
-                    ? "bg-gray-700 cursor-wait text-gray-400"
-                    : "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white transform hover:scale-[1.02]"
-                }`}
-            >
-                {loading ? (
+            {!loading ? (
+                <button
+                    onClick={handleRun}
+                    className="w-full py-4 rounded-lg font-bold text-lg transition-all shadow-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white transform hover:scale-[1.02]"
+                >
+                    Run Benchmark
+                </button>
+            ) : (
+                <button
+                    onClick={handleCancel}
+                    className="w-full py-4 rounded-lg font-bold text-lg transition-all shadow-lg bg-red-600 hover:bg-red-500 text-white animate-pulse"
+                >
                     <div className="flex items-center justify-center gap-2">
                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Running Suite...
+                        <span>Running... (Click to Cancel)</span>
                     </div>
-                ) : (
-                    "Run Benchmark"
-                )}
-            </button>
+                </button>
+            )}
 
             {error && (
                 <div className="mt-6 p-4 bg-red-900/30 border border-red-500/50 rounded-lg text-red-200 text-center animate-fade-in">
@@ -201,9 +216,9 @@ const BenchmarkControl = () => {
                     </div>
 
                     <div className="text-center">
-                         <span className="inline-block bg-gray-700/50 px-3 py-1 rounded text-xs text-gray-400">
+                        <span className="inline-block bg-gray-700/50 px-3 py-1 rounded text-xs text-gray-400">
                             Processed {results.nodes.toLocaleString()} nodes in {results.time}s
-                         </span>
+                        </span>
                     </div>
                 </div>
             )}

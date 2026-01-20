@@ -67,3 +67,7 @@ export const runBenchmark = (options) =>
         method: "POST",
         data: options
     });
+
+export const cancelBenchmark = async () => {
+    await request(`/api/engine/cancel`, {method: "POST"});
+};

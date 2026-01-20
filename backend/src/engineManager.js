@@ -265,9 +265,11 @@ export class UciEngine {
             expectedDuration += 60000;
         }
 
+        if (options.evalTime) command += ` eval ${options.evalTime}`;
+
         let calculatedTimeout = expectedDuration * 1.5 + 20000;
 
-        const totalTimeout = Math.max(calculatedTimeout, 600000);
+        const totalTimeout = Math.max(calculatedTimeout, 60000);
 
         console.log(`[Engine] Bench Configured. Timeout set to: ${totalTimeout}ms (${(totalTimeout/1000).toFixed(0)}s)`);
 
@@ -304,5 +306,17 @@ export class UciEngine {
         }
 
         return results;
+    }
+
+    async cancel() {
+        console.log("[Engine] Cancel requested. resetting...");
+
+        if (this.queue.length > 0) {
+            this.queue.forEach(task => task.reject(new Error("Cancelled by user")));
+            this.queue = [];
+        }
+
+        await this.stop();
+        console.log("[Engine] Process killed. Ready for fresh start.");
     }
 }

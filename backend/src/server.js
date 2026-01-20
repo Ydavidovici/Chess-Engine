@@ -118,31 +118,41 @@ app.post("/api/arena/trigger", async (req, res) => {
 
 app.post("/api/engine/bench", async (req, res) => {
     try {
-        const {
-            mode = "depth",
-            depth = 9,
-            time = 1000,
-            evalTime = 2000
-        } = req.body;
+        const { mode = "depth", depth = 9, timeLimit = 1000, evalTime = 2000 } = req.body;
 
-        console.log(`Starting benchmark [Mode: ${mode}, Depth: ${depth}, Time: ${time}ms]...`);
+        console.log(`Starting benchmark [Mode: ${mode}, Depth: ${depth}, Time: ${timeLimit}ms]...`);
 
         const results = await mainEngine.bench({
             mode,
             depth,
-            timeLimit: time,
+            timeLimit,
             evalTime
         });
 
         console.log("Benchmark results:", results);
+        res.json({ status: "success", data: results });
 
-        res.json({
-            status: "success",
-            data: results,
-        });
     } catch (err) {
+        if (err.message === "Cancelled by user") {
+            console.log("Benchmark request cancelled cleanly.");
+            return res.json({
+                status: "cancelled",
+                message: "Benchmark was stopped by the user."
+            });
+        }
+
         console.error("Benchmark failed:", err);
-        res.status(500).json({error: err.message});
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/api/engine/cancel", async (req, res) => {
+    try {
+        await mainEngine.cancel();
+        res.json({ status: "success", message: "Benchmark cancelled" });
+    } catch (err) {
+        console.error("Cancel failed:", err);
+        res.status(500).json({ error: err.message });
     }
 });
 
