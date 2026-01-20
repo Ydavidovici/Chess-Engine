@@ -1,16 +1,29 @@
 #pragma once
+#include "main.h"
 #include <string>
 #include <vector>
 
-class Engine;
+enum class BenchMode {
+    FIXED_DEPTH,
+    FIXED_TIME
+};
+
+struct BenchSettings {
+    bool runEval = true;
+    int evalTimeMs = 2000;
+    bool runSearch = true;
+    BenchMode searchMode = BenchMode::FIXED_DEPTH;
+    int searchDepth = 9;
+    int searchTimeMs = 1000;
+};
 
 class Bench {
 public:
-    static void run(Engine& engine);
+    static const std::vector<std::string> BENCH_FENS;
 
-    static void benchmarkEval(Engine& engine);
-    static void benchmarkSearch(Engine& engine, int depth);
+    static void run(Engine& engine, const BenchSettings& settings);
 
 private:
-    static const std::vector<std::string> BENCH_FENS;
+    static void benchmarkEval(Engine& engine, int durationMs);
+    static void benchmarkSearch(Engine& engine, const BenchSettings& settings);
 };

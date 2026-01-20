@@ -19,7 +19,10 @@ export class UciEngine {
         if (this.process) return;
 
         this.process = spawn({
-            cmd: [this.cmd], stdin: "pipe", stdout: "pipe", stderr: "inherit",
+            cmd: [this.cmd],
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "inherit",
         });
 
         this._readLoop().catch((err) => {
@@ -41,8 +44,7 @@ export class UciEngine {
         if (!this.process) return;
         try {
             await this._sendRaw("quit");
-        } catch (_) {
-        }
+        } catch (_) {}
         this.process.kill();
         this.process = null;
         this.ready = false;
@@ -53,10 +55,6 @@ export class UciEngine {
         await this._sendCommand("isready", (l) => l === "readyok");
     }
 
-    /**
-     * @param {string} fen "startpos" or a FEN string
-     * @param {string[]} moves Array of move strings ["e2e4", "e7e5"]
-     */
     async position(fen, moves = []) {
         let cmd = `position ${fen}`;
         if (moves.length > 0) {
@@ -65,9 +63,6 @@ export class UciEngine {
         await this._sendRaw(cmd);
     }
 
-    /**
-     * @param {Object} options { depth, wtime, btime, movetime }
-     */
     async go(options = {}) {
         let cmd = "go";
         if (options.depth) cmd += ` depth ${options.depth}`;
@@ -76,7 +71,6 @@ export class UciEngine {
         if (options.movetime) cmd += ` movetime ${options.movetime}`;
 
         const line = await this._sendCommand(cmd, (l) => l.startsWith("bestmove"));
-
         return line.split(" ")[1];
     }
 
@@ -85,16 +79,42 @@ export class UciEngine {
         this.process.stdin.write(cmd + "\n");
     }
 
+    /**
+     * Sends a command and waits for a specific response line.
+     * @param {string} command - The UCI command to send
+     * @param {function} stopCondition - Function(line) => bool. Returns true when command is done.
+     * @param {function} callback - Function(line). Called for every line of output.
+     * @param {number} timeoutMs - (Optional) How long to wait before giving up. Default 1000ms.
+     */
+    _sendCommand(command, stopCondition, callback, timeoutMs = 1000) {
+        return new Promise((resolve, reject) => {
+            if (!this.process) return reject(new Error("Engine not running"));
 
-    async _sendCommand(cmd, donePredicate) {
-        return new Promise(async (resolve, reject) => {
-            const item = {donePredicate, resolve, reject};
-            this.queue.push(item);
-            try {
-                await this._sendRaw(cmd);
-            } catch (e) {
-                reject(e);
-            }
+            const task = {
+                command,
+                donePredicate: stopCondition,
+                callback: callback,
+                resolve: (val) => {
+                    clearTimeout(timer);
+                    resolve(val);
+                },
+                reject: (err) => {
+                    clearTimeout(timer);
+                    reject(err);
+                }
+            };
+
+            this.queue.push(task);
+            this.process.stdin.write(command + "\n");
+
+            const timer = setTimeout(() => {
+                const index = this.queue.indexOf(task);
+                if (index !== -1) {
+                    this.queue.splice(index, 1);
+                    console.warn(`[Engine] Command '${command}' timed out after ${timeoutMs}ms. Returning partial data.`);
+                    resolve("TIMEOUT");
+                }
+            }, timeoutMs);
         });
     }
 
@@ -118,25 +138,31 @@ export class UciEngine {
                 console.log("[engine <<]", line);
 
                 if (this.queue.length > 0) {
-                    console.log("[engine queue] size:", this.queue.length);
-                    const current = this.queue[0];
+                    const currentTask = this.queue[0];
+
+                    if (currentTask.callback) {
+                        try {
+                            currentTask.callback(line);
+                        } catch (e) {
+                            console.error("Callback error:", e);
+                        }
+                    }
+
                     let done = false;
                     try {
-                        done = current.donePredicate(line);
+                        done = currentTask.donePredicate(line);
                     } catch (e) {
                         console.error("[engine queue] predicate error:", e);
                     }
+
                     if (done) {
-                        const item = this.queue.shift();
-                        item.resolve(line);
+                        this.queue.shift();
+                        currentTask.resolve(line);
                     }
-                } else {
-                    console.log("[engine queue] empty, ignoring line");
                 }
             }
         }
     }
-
 
     async bestMoveFromFen(fen) {
         if (!this.ready) {
@@ -151,7 +177,6 @@ export class UciEngine {
         const move = bestmoveLine.slice("bestmove".length).trim();
         return move;
     }
-
 
     async printBoard(fen) {
         console.log("fen", fen);
@@ -214,27 +239,69 @@ export class UciEngine {
         console.log("[Lichess Stub] Connected. Waiting for events...");
     }
 
-    async bench() {
+    /**
+     * Runs the benchmark suite with specific settings.
+     * @param {Object} options Configuration for the bench
+     * @param {number} options.depth - Search depth (default: 9)
+     * @param {number} options.evalTime - Time in ms for eval test (default: 2000)
+     * @param {string} options.mode - "depth" or "time"
+     * @param {number} options.timeLimit - Time in ms (if mode is "time")
+     */
+    async bench(options = {}) {
         if (!this.ready) await this.start();
 
+        let command = "bench";
+        if (options.depth) command += ` depth ${options.depth}`;
+        if (options.evalTime) command += ` eval ${options.evalTime}`;
+        if (options.mode === 'time' && options.timeLimit) {
+            command += ` movetime ${options.timeLimit}`;
+        }
+
+        let expectedDuration = (options.evalTime || 2000);
+
+        if (options.mode === 'time' && options.timeLimit) {
+            expectedDuration += (options.timeLimit * 3);
+        } else {
+            expectedDuration += 60000;
+        }
+
+        let calculatedTimeout = expectedDuration * 1.5 + 20000;
+
+        const totalTimeout = Math.max(calculatedTimeout, 600000);
+
+        console.log(`[Engine] Bench Configured. Timeout set to: ${totalTimeout}ms (${(totalTimeout/1000).toFixed(0)}s)`);
+
         const results = {
-            nps: 0,
-            eps: 0,
-            nodes: 0,
-            time: 0,
-            fullOutput: []
+            nps: 0, eps: 0, nodes: 0, time: 0, ordering: 0, qSearch: 0, ttHit: 0,
+            fullOutput: [],
+            isPartial: false
         };
 
-        await this._sendCommand("bench",
+        const status = await this._sendCommand(command,
             (line) => line.includes("Benchmark Complete"),
             (line) => {
                 results.fullOutput.push(line);
 
-                if (line.includes("NPS:")) results.nps = parseInt(line.split(":")[1].trim());
+                const parseVal = (str) => {
+                    const parts = str.split(":")[1];
+                    return parts ? parseFloat(parts.trim().replace('%', '')) : 0;
+                };
+
+                if (line.includes("Global NPS:")) results.nps = parseInt(line.split(":")[1].trim());
                 if (line.includes("EPS:")) results.eps = parseInt(line.split(":")[1].trim());
                 if (line.includes("Total Nodes:")) results.nodes = parseInt(line.split(":")[1].trim());
-            }
+                if (line.includes("Total Time:")) results.time = parseFloat(line.split(":")[1].trim().replace('s',''));
+                if (line.includes("Move Ordering:")) results.ordering = parseVal(line);
+                if (line.includes("Q-Search Load:")) results.qSearch = parseVal(line);
+                if (line.includes("TT Hit Rate:")) results.ttHit = parseVal(line);
+            },
+            totalTimeout
         );
+
+        if (status === "TIMEOUT") {
+            results.isPartial = true;
+            console.warn("[Engine] Benchmark timed out. Returning gathered results.");
+        }
 
         return results;
     }

@@ -118,11 +118,24 @@ app.post("/api/arena/trigger", async (req, res) => {
 
 app.post("/api/engine/bench", async (req, res) => {
     try {
-        console.log("Starting benchmark...");
+        const {
+            mode = "depth",
+            depth = 9,
+            time = 1000,
+            evalTime = 2000
+        } = req.body;
 
-        const results = await mainEngine.bench();
+        console.log(`Starting benchmark [Mode: ${mode}, Depth: ${depth}, Time: ${time}ms]...`);
+
+        const results = await mainEngine.bench({
+            mode,
+            depth,
+            timeLimit: time,
+            evalTime
+        });
 
         console.log("Benchmark results:", results);
+
         res.json({
             status: "success",
             data: results,

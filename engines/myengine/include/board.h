@@ -54,6 +54,7 @@ public:
 
     Color sideToMove() const { return side_to_move; }
 
+    PieceIndex getPieceAt(int square) const;
 private:
     std::array<uint64_t, PieceTypeCount> white_bitboards{};
     std::array<uint64_t, PieceTypeCount> black_bitboards{};

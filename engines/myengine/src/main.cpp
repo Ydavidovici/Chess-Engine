@@ -90,12 +90,21 @@ std::optional<FenAndTail> extractFenAndTail(const std::string& line, const std::
     return result;
 }
 
-
 static std::string trim(const std::string& s) {
     const auto first = s.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return "";
     const auto last = s.find_last_not_of(" \t\r\n");
     return s.substr(first, last - first + 1);
+}
+
+static std::vector<std::string> tokenize(const std::string& line) {
+    std::istringstream iss(line);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (iss >> token) {
+        tokens.push_back(token);
+    }
+    return tokens;
 }
 
 static void split_command(const std::string& line, std::string& cmd, std::string& rest) {
@@ -242,7 +251,6 @@ static void handle_bestmove(const std::string& line, Engine& engine) {
     std::cout.flush();
 }
 
-
 static void handle_printboard(const std::string& line, Engine& engine) {
     auto fenOpt = extractFen(line, "printboard");
 
@@ -258,7 +266,6 @@ static void handle_printboard(const std::string& line, Engine& engine) {
     std::cout << "printboard_done\n";
     std::cout.flush();
 }
-
 
 static void handle_makeMove(const std::string& line, Engine& engine) {
     auto ftOpt = extractFenAndTail(line, "makemove");
@@ -302,10 +309,40 @@ static void handle_makeMove(const std::string& line, Engine& engine) {
 }
 
 static void handle_bench(const std::string& line, Engine& engine) {
-    Bench::run(engine);
+    BenchSettings settings;
+
+    settings.searchDepth = 9;
+    settings.evalTimeMs = 2000;
+    settings.runEval = true;
+    settings.runSearch = true;
+    settings.searchMode = BenchMode::FIXED_DEPTH;
+
+    std::vector<std::string> tokens = tokenize(line);
+
+    for (size_t i = 1; i < tokens.size(); ++i) {
+        const std::string& token = tokens[i];
+
+        if (token == "depth" && i + 1 < tokens.size()) {
+            settings.searchMode = BenchMode::FIXED_DEPTH;
+            settings.searchDepth = std::stoi(tokens[++i]);
+        }
+        else if (token == "movetime" && i + 1 < tokens.size()) {
+            settings.searchMode = BenchMode::FIXED_TIME;
+            settings.searchTimeMs = std::stoi(tokens[++i]);
+        }
+        else if (token == "eval" && i + 1 < tokens.size()) {
+            settings.evalTimeMs = std::stoi(tokens[++i]);
+        }
+        else if (token == "noeval") {
+            settings.runEval = false;
+        }
+        else if (token == "nosearch") {
+            settings.runSearch = false;
+        }
+    }
+
+    Bench::run(engine, settings);
 }
-
-
 
 int main() {
     std::ios::sync_with_stdio(false);

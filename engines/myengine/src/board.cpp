@@ -869,3 +869,19 @@ void Board::printBitboards() const {
         printSingleBitboard(black_bitboards[piece_type_index], black_label);
     }
 }
+
+Board::PieceIndex Board::getPieceAt(int square) const {
+    for (int p = 0; p < PieceTypeCount; ++p) {
+        if (testBit(white_bitboards[p], square)) {
+            return static_cast<PieceIndex>(p);
+        }
+    }
+
+    for (int p = 0; p < PieceTypeCount; ++p) {
+        if (testBit(black_bitboards[p], square)) {
+            return static_cast<PieceIndex>(p);
+        }
+    }
+
+    return PieceTypeCount;
+}

@@ -1,59 +1,69 @@
-import axios from 'axios';
+import axios from "axios";
 
-const API_URL = import.meta.env.API_URL ?? "http://localhost:8000";
+const BASE_URL = import.meta.env.API_URL ?? "http://localhost:8000";
 
-export async function apiRequest(path, options = {}) {
-    const res = await fetch(`${API_URL}${path}`, {
-        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-        ...options,
-    });
-    if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}: ${text}`);
-    }
-    return res.json();
-}
-
-export const startGame = async (player1_id, player2_id) => {
-    const { data } = await axios.post(`${API_URL}/api/start_game`, {
-        player1_id,
-        player2_id,
-    });
-    return data;
-};
-
-export const makeMove = async (fen, move) => {
-    const { data } = await axios.post(`${API_URL}/api/engine/make-move`, {fen, move});
-    return data;
-};
-
-export const getGameStatus = async (game_id) => {
-    const { data } = await axios.get(`${API_URL}/api/game-status/${game_id}`);
-    return data;
-};
-
-export const health = async () => {
+/**
+ * Generic API Request Handler
+ * @param {string} endpoint - The URI path (e.g., '/api/health')
+ * @param {object} config - Configuration object {method, data, headers, ...}
+ */
+export const request = async (endpoint, {method = "GET", data, headers = {}, ...customConfig} = {}) => {
     try {
-        console.log("API_URL:", API_URL);
-        const { data } = await axios.get(`${API_URL}/api/health`);
-        return data;
-    } catch (err) {
-        console.error("health check failed:", err);
-        throw err;
+        const response = await axios({
+            url: `${BASE_URL}${endpoint}`,
+            method,
+            data,
+            headers: {
+                "Content-Type": "application/json",
+                ...headers,
+            },
+            ...customConfig,
+        });
+
+        return response.data;
+    } catch (error) {
+        console.error(`API Request failed: ${method} ${endpoint}`, error);
+        throw error;
     }
 };
 
-export const bestMove = async ({ fen, moves, depth, movetime }) => {
-    const { data } = await axios.post(`${API_URL}/api/engine/best-move`, {fen});
-    return data;
-};
 
-export const printPosition = async (fen) => {
-    const {data} = await axios.post(`${API_URL}/api/engine/print-position`, {fen})
-    return data;
-}
+export const startGame = (player1_id, player2_id) =>
+    request("/api/start_game", {
+        method: "POST",
+        data: {player1_id, player2_id},
+    });
 
-export const runBenchmark = async () => {
-    const { data } = await axios.post(`${API_URL}/api/engine/bench`);
-    return data;
-};
+export const makeMove = (fen, move) =>
+    request("/api/engine/make-move", {
+        method: "POST",
+        data: {fen, move},
+    });
+
+export const getGameStatus = (game_id) =>
+    request(`/api/game-status/${game_id}`, {
+        method: "GET",
+    });
+
+export const health = () =>
+    request("/api/health", {
+        method: "GET",
+    });
+
+export const bestMove = ({fen, moves, depth, movetime}) =>
+    request("/api/engine/best-move", {
+        method: "POST",
+        data: {fen, moves, depth, movetime},
+    });
+
+export const printPosition = (fen) =>
+    request("/api/engine/print-position", {
+        method: "POST",
+        data: {fen},
+    });
+
+export const runBenchmark = (options) =>
+    request("/api/engine/bench", {
+        method: "POST",
+        data: options
+    });
