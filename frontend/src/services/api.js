@@ -27,7 +27,6 @@ export const request = async (endpoint, {method = "GET", data, headers = {}, ...
     }
 };
 
-
 export const startGame = (player1_id, player2_id) =>
     request("/api/start_game", {
         method: "POST",
@@ -71,3 +70,20 @@ export const runBenchmark = (options) =>
 export const cancelBenchmark = async () => {
     await request(`/api/engine/cancel`, {method: "POST"});
 };
+
+export const go = ({fen, moves, options}) =>
+    request("/api/engine/go", {
+        method: "POST",
+        data: {fen, moves, options},
+    });
+
+export const resetGame = () =>
+    request("/api/engine/reset", {
+        method: "POST",
+    });
+
+export const analyze = (fen, depth = 10) =>
+    request("/api/engine/analysis", {
+        method: "POST",
+        data: {fen, depth}
+    });

@@ -56,22 +56,58 @@ export class UciEngine {
     }
 
     async position(fen, moves = []) {
-        let cmd = `position ${fen}`;
+        let cmd;
+        if (fen === "startpos") {
+            cmd = "position startpos";
+        } else {
+            cmd = `position fen ${fen}`;
+        }
+
         if (moves.length > 0) {
             cmd += ` moves ${moves.join(" ")}`;
         }
+
         await this._sendRaw(cmd);
     }
 
     async go(options = {}) {
         let cmd = "go";
         if (options.depth) cmd += ` depth ${options.depth}`;
-        if (options.wtime) cmd += ` wtime ${options.wtime}`;
-        if (options.btime) cmd += ` btime ${options.btime}`;
-        if (options.movetime) cmd += ` movetime ${options.movetime}`;
+        if (options.whiteTime) cmd += ` wtime ${options.whiteTime}`;
+        if (options.blackTime) cmd += ` btime ${options.blackTime}`;
+        if (options.moveTime) cmd += ` movetime ${options.moveTime}`;
+        let safeTimeout = 10000;
 
-        const line = await this._sendCommand(cmd, (l) => l.startsWith("bestmove"));
-        return line.split(" ")[1];
+        if (options.moveTime) {
+            safeTimeout = options.moveTime + 1000;
+        } else if (options.whiteTime || options.blackTime) {
+            safeTimeout = 60000;
+        }
+
+        let currentBestMove = null;
+
+        const response = await this._sendCommand(
+            cmd,
+            (line) => line.startsWith("bestmove"),
+            (line) => {
+                if (line.startsWith("info") && line.includes(" pv ")) {
+                    const parts = line.split(" pv ");
+                    if (parts[1]) {
+                        const moves = parts[1].split(" ");
+                        if (moves[0]) currentBestMove = moves[0];
+                    }
+                }
+            },
+            safeTimeout
+        );
+
+        if (response === "TIMEOUT") {
+            console.warn(`[Engine] Search timed out. Fallback to: ${currentBestMove}`);
+            this._sendRaw("stop");
+            return currentBestMove || "0000";
+        }
+
+        return response.split(" ")[1];
     }
 
     async _sendRaw(cmd) {
