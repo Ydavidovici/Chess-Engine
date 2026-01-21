@@ -52,17 +52,19 @@ int Evaluator::evaluate(const Board& board, Color stm) const {
     int score = 0;
 
     auto evalPieceType = [&](const std::vector<int>& wTable, const std::vector<int>& bTable, Board::PieceIndex pt) {
+        int val = pieceValues[pt];
         uint64_t wbb = board.pieceBB(Color::WHITE, pt);
+
         while (wbb) {
             int sq = __builtin_ctzll(wbb);
-            score += wTable[sq];
+            score += (val + wTable[sq]);
             wbb &= wbb - 1;
         }
 
         uint64_t bbb = board.pieceBB(Color::BLACK, pt);
         while (bbb) {
             int sq = __builtin_ctzll(bbb);
-            score -= bTable[sq];
+            score -= (val + bTable[sq]);
             bbb &= bbb - 1;
         }
     };
