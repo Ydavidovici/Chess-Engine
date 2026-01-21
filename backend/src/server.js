@@ -83,7 +83,7 @@ app.post("/api/engine/go", async (req, res) => {
     try {
         const {fen, moves, options} = req.body;
         await mainEngine.position(fen || "startpos", moves || []);
-        const bestMove = await mainEngine.go(options || {depth: 10});
+        const bestMove = await mainEngine.go(options || {depth: 7});
 
         res.json({bestMove});
     } catch (err) {

@@ -41,16 +41,19 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
         tm_.start(50000, 0, 0);
     }
 
-    Move bestMove;
+    auto rootMoves = board.generateLegalMoves();
+
+    if (rootMoves.empty()) {
+        return Move();
+    }
+
+    Move bestMove = rootMoves[0];
 
     for (int depth = 1; depth <= maxDepth; ++depth) {
         if (tm_.isTimeUp()) break;
 
         int alpha = -INF;
         int beta = INF;
-
-        auto rootMoves = board.generateLegalMoves();
-        if (rootMoves.empty()) break;
 
         orderMoves(board, rootMoves, bestMove);
 
@@ -129,17 +132,27 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
             continue;
         }
 
-        int score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
+        int score;
 
-        if (depth >= 3 && movesSearched >= 4 && !board.inCheck(board.sideToMove()) && !move.isCapture()) {
-            score = -negamax(board, depth - 2, -beta, -alpha, plyFromRoot + 1);
+        if (movesSearched == 0) {
+            score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
         }
         else {
-            score = alpha + 1;
-        }
+            int reduction = 0;
+            if (depth >= 3 && movesSearched >= 4 && !move.isCapture() && !board.inCheck(board.sideToMove())) {
+                reduction = 2;
+                if (depth - 1 - reduction <= 0) reduction = depth - 2;
+            }
 
-        if (score > alpha) {
-            score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
+            score = -negamax(board, depth - 1 - reduction, -alpha - 1, -alpha, plyFromRoot + 1);
+
+            if (score > alpha && reduction > 0) {
+                score = -negamax(board, depth - 1, -alpha - 1, -alpha, plyFromRoot + 1);
+            }
+
+            if (score > alpha && score < beta) {
+                score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
+            }
         }
 
         board.unmakeMove();
