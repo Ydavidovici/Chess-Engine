@@ -18,10 +18,10 @@ static int getMvvLvaScore(const Board& board, const Move& move) {
         else return 0;
     }
 
-    static const int victimScores[] = { 100, 200, 300, 400, 500, 600 };
+    static const int victimScores[] = {100, 200, 300, 400, 500, 600};
     int vScore = (victim < 6) ? victimScores[victim] : 0;
 
-    static const int attackerScores[] = { 1, 2, 3, 4, 5, 6 };
+    static const int attackerScores[] = {1, 2, 3, 4, 5, 6};
     int aScore = (attacker < 6) ? attackerScores[attacker] : 0;
 
     return vScore - aScore;
@@ -36,7 +36,8 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
 
     if (timeLeftMs > 0) {
         tm_.start(timeLeftMs, incrementMs, 0);
-    } else {
+    }
+    else {
         tm_.start(50000, 0, 0);
     }
 
@@ -130,9 +131,10 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
 
         int score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
 
-        if (depth >= 3 && movesSearched >= 4 && !board.inCheck() && !move.isCapture()) {
+        if (depth >= 3 && movesSearched >= 4 && !board.inCheck(board.sideToMove()) && !move.isCapture()) {
             score = -negamax(board, depth - 2, -beta, -alpha, plyFromRoot + 1);
-        } else {
+        }
+        else {
             score = alpha + 1;
         }
 
@@ -175,7 +177,8 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
     if (movesSearched == 0) {
         if (board.inCheck(board.sideToMove())) {
             return -MATE_SCORE + plyFromRoot;
-        } else {
+        }
+        else {
             return 0;
         }
     }
@@ -183,7 +186,8 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
     int flag = TranspositionTable::EXACT;
     if (bestScore <= oldAlpha) {
         flag = TranspositionTable::UPPERBOUND;
-    } else if (bestScore >= beta) {
+    }
+    else if (bestScore >= beta) {
         flag = TranspositionTable::LOWERBOUND;
     }
 

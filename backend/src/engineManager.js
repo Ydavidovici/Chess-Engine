@@ -294,4 +294,52 @@ export class UciEngine extends EventEmitter {
             this._handleCrash();
         }
     }
+
+    async bench(options = {}) {
+        if (!this.ready) await this.start();
+
+        let command = "bench";
+        if (options.depth) command += ` depth ${options.depth}`;
+        if (options.evalTime) command += ` eval ${options.evalTime}`;
+        if (options.mode === "time" && options.timeLimit) {
+            command += ` movetime ${options.timeLimit}`;
+        }
+
+        const results = {
+            nps: 0,
+            eps: 0,
+            nodes: 0,
+            time: 0,
+            ordering: 0,
+            qSearch: 0,
+            ttHit: 0,
+            fullOutput: []
+        };
+
+        const predictedTimeout = options.timeLimit ? (options.timeLimit * 2) : 60000;
+
+        await this._sendCommand(
+            command,
+            (line) => line.includes("Benchmark Complete"),
+            (line) => {
+                results.fullOutput.push(line);
+
+                const parseVal = (str) => {
+                    const parts = str.split(":")[1];
+                    if (!parts) return 0;
+                    return parseFloat(parts.trim().replace("%", ""));
+                };
+
+                if (line.includes("Global NPS:")) results.nps = parseInt(line.split(":")[1].trim());
+                if (line.includes("EPS:")) results.eps = parseInt(line.split(":")[1].trim());
+                if (line.includes("Total Nodes:")) results.nodes = parseInt(line.split(":")[1].trim());
+                if (line.includes("Move Ordering:")) results.ordering = parseVal(line);
+                if (line.includes("Q-Search Load:")) results.qSearch = parseVal(line);
+                if (line.includes("TT Hit Rate:")) results.ttHit = parseVal(line);
+            },
+            predictedTimeout
+        );
+
+        return results;
+    }
 }

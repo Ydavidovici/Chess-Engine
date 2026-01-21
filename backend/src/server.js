@@ -122,7 +122,7 @@ app.post("/api/arena/trigger", async (req, res) => {
 
 app.post("/api/engine/bench", async (req, res) => {
     try {
-        const { mode = "depth", depth = 9, timeLimit = 1000, evalTime = 2000 } = req.body;
+        const { mode = "depth", depth = 9, timeLimit = 10000, evalTime = 2000 } = req.body;
 
         console.log(`Starting benchmark [Mode: ${mode}, Depth: ${depth}, Time: ${timeLimit}ms]...`);
 
