@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <unordered_map>
+#include <vector>
 #include "move.h"
 
 class TranspositionTable {
@@ -11,32 +11,24 @@ public:
     static constexpr int UPPERBOUND = 2;
 
     struct TTEntry {
+        uint64_t key;
         int value;
-        int depth;
         Move bestMove;
+        int depth;
         int flag;
-        static constexpr int EXACT = TranspositionTable::EXACT;
-        static constexpr int LOWERBOUND = TranspositionTable::LOWERBOUND;
-        static constexpr int UPPERBOUND = TranspositionTable::UPPERBOUND;
     };
 
-    TranspositionTable(size_t buckets = 0) {
-        if (buckets) table_.reserve(buckets);
-    }
+    TranspositionTable(size_t sizeInMB = 64);
+
+    void clear();
 
     void store(uint64_t key, int value, int depth, Move bestMove, int flag);
+
     bool probe(uint64_t key, TTEntry& out) const;
 
-    struct ProbeResult {
-        bool found;
-        int value;
-        int depth;
-        Move bestMove;
-        int flag;
-    };
-
-    ProbeResult probe(uint64_t key) const;
-
 private:
-    std::unordered_map<uint64_t, TTEntry> table_;
+    std::vector<TTEntry> table_;
+    size_t numEntries_;
+
+    void resize(size_t sizeInMB);
 };

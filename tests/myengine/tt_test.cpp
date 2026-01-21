@@ -13,17 +13,48 @@ void assert_entry(const TranspositionTable::TTEntry& e, int val, int depth, int 
 
 void test_basic_io() {
     std::cout << "--- test_basic_io ---\n";
-    TranspositionTable tt(1024);
+    TranspositionTable tt(1);
     uint64_t key = 0xAAAA;
     Move m = Move::fromUCI("e2e4");
 
-    tt.store(key, 100, 5, m, TranspositionTable::TTEntry::EXACT);
+    tt.store(key, 100, 5, m, TranspositionTable::EXACT);
 
     TranspositionTable::TTEntry out;
     bool found = tt.probe(key, out);
     assert(found);
-    assert_entry(out, 100, 5, TranspositionTable::TTEntry::EXACT);
+    assert_entry(out, 100, 5, TranspositionTable::EXACT);
     assert(out.bestMove == m);
+    std::cout << "PASS\n";
+}
+
+void test_update_better_depth() {
+    std::cout << "--- test_update_better_depth ---\n";
+    TranspositionTable tt(1);
+    uint64_t key = 0xBBBB;
+
+    // Fix scope here
+    tt.store(key, 10, 2, Move(), TranspositionTable::LOWERBOUND);
+    tt.store(key, 50, 10, Move(), TranspositionTable::EXACT);
+
+    TranspositionTable::TTEntry out;
+    tt.probe(key, out);
+
+    assert_entry(out, 50, 10, TranspositionTable::EXACT);
+    std::cout << "PASS\n";
+}
+
+void test_reject_worse_depth() {
+    std::cout << "--- test_reject_worse_depth ---\n";
+    TranspositionTable tt(1);
+    uint64_t key = 0xCCCC;
+
+    tt.store(key, 1000, 10, Move(), TranspositionTable::EXACT);
+    tt.store(key, -50, 1, Move(), TranspositionTable::UPPERBOUND);
+
+    TranspositionTable::TTEntry out;
+    tt.probe(key, out);
+
+    assert_entry(out, 1000, 10, TranspositionTable::EXACT);
     std::cout << "PASS\n";
 }
 
@@ -34,40 +65,6 @@ void test_missing_key() {
     bool found = tt.probe(0xDEADBEEF, out);
     assert(!found);
     std::cout << "PASS\n";
-}
-
-void test_update_better_depth() {
-    std::cout << "--- test_update_better_depth ---\n";
-    TranspositionTable tt(1024);
-    uint64_t key = 0xBBBB;
-
-    tt.store(key, 10, 2, Move(), TranspositionTable::TTEntry::LOWERBOUND);
-    tt.store(key, 50, 10, Move(), TranspositionTable::TTEntry::EXACT);
-
-    TranspositionTable::TTEntry out;
-    tt.probe(key, out);
-
-    assert_entry(out, 50, 10, TranspositionTable::TTEntry::EXACT);
-    std::cout << "PASS\n";
-}
-
-void test_reject_worse_depth() {
-    std::cout << "--- test_reject_worse_depth ---\n";
-    TranspositionTable tt(1024);
-    uint64_t key = 0xCCCC;
-
-    tt.store(key, 1000, 10, Move(), TranspositionTable::TTEntry::EXACT);
-    tt.store(key, -50, 1, Move(), TranspositionTable::TTEntry::UPPERBOUND);
-
-    TranspositionTable::TTEntry out;
-    tt.probe(key, out);
-
-    if (out.depth == 1) {
-        std::cerr << "FAIL: Valuable Depth 10 entry was overwritten by Depth 1!\n";
-    } else {
-        assert_entry(out, 1000, 10, TranspositionTable::TTEntry::EXACT);
-        std::cout << "PASS\n";
-    }
 }
 
 int main() {

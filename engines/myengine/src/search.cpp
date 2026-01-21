@@ -93,21 +93,21 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
     }
 
     uint64_t key = board.zobristKey();
-    Move ttMove;
-
     TranspositionTable::TTEntry ent;
+    Move ttMove = Move();
+
     if (tt_.probe(key, ent)) {
         ttMove = ent.bestMove;
 
         if (ent.depth >= depth) {
             stats_.ttHits++;
+
             if (ent.flag == TranspositionTable::EXACT) return ent.value;
+
             if (ent.flag == TranspositionTable::LOWERBOUND) alpha = std::max(alpha, ent.value);
             if (ent.flag == TranspositionTable::UPPERBOUND) beta = std::min(beta, ent.value);
-            if (alpha >= beta) {
-                stats_.betaCutoffs++;
-                return ent.value;
-            }
+
+            if (alpha >= beta) return ent.value;
         }
     }
 
@@ -129,6 +129,16 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
         }
 
         int score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
+
+        if (depth >= 3 && movesSearched >= 4 && !board.inCheck() && !move.isCapture()) {
+            score = -negamax(board, depth - 2, -beta, -alpha, plyFromRoot + 1);
+        } else {
+            score = alpha + 1;
+        }
+
+        if (score > alpha) {
+            score = -negamax(board, depth - 1, -beta, -alpha, plyFromRoot + 1);
+        }
 
         board.unmakeMove();
 
