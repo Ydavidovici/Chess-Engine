@@ -87,3 +87,43 @@ export const analyze = (fen, depth = 10) =>
         method: "POST",
         data: {fen, depth}
     });
+
+export const startLichessBot = (token) =>
+    request("/api/lichess/start", {
+        method: "POST",
+        data: { token }
+    });
+
+export const stopLichessBot = () =>
+    request("/api/lichess/stop", {
+        method: "POST"
+    });
+
+export const getLichessStatus = () =>
+    request("/api/lichess/status", {
+        method: "GET"
+    });
+
+export const createOpenChallenge = (limit, increment) =>
+    request("/api/lichess/challenge/open", {
+        method: "POST",
+        data: { limit, increment }
+    });
+
+export const createAiChallenge = (level, limit, increment) =>
+    request("/api/lichess/challenge/ai", {
+        method: "POST",
+        data: { level, limit, increment }
+    });
+
+export const createChallenge = (username, limit, increment) =>
+    request("/api/lichess/challenge", {
+        method: "POST",
+        data: { username, limit, increment }
+    });
+
+export const challengeWeakestBot = (limit, increment) =>
+    request("/api/lichess/challenge/weakest", {
+        method: "POST",
+        data: { limit, increment }
+    });

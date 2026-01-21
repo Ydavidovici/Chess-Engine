@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "node:path";
 import {existsSync} from "fs";
 import {UciEngine} from "./engineManager.js";
+import {LichessBot} from "./lichessBot.js";
 import {db} from "../db/db.js";
 
 const app = express();
@@ -45,7 +46,10 @@ if (!MY_ENGINE_PATH) {
 }
 
 const mainEngine = new UciEngine(MY_ENGINE_PATH, "PrimaryEngine");
+const lichessEngine = new UciEngine(MY_ENGINE_PATH, "LichessEngine");
 mainEngine.start();
+
+let lichessBotInstance = null;
 
 
 app.get("/api/health", (req, res) => {
@@ -154,6 +158,114 @@ app.post("/api/engine/cancel", async (req, res) => {
         console.error("Cancel failed:", err);
         res.status(500).json({ error: err.message });
     }
+});
+
+app.post("/api/lichess/start", async (req, res) => {
+    if (lichessBotInstance) {
+        return res.status(400).json({ error: "Bot is already running." });
+    }
+
+    const token = process.env.lichess_api_token;
+    if (!token) {
+        return res.status(400).json({ error: "Missing Lichess Token" });
+    }
+
+    try {
+        lichessBotInstance = new LichessBot(token, lichessEngine);
+
+        lichessBotInstance.start().catch(err => {
+            console.error("Lichess Bot Crashed:", err);
+            lichessBotInstance = null;
+        });
+
+        res.json({ status: "success", message: "Lichess Bot started and listening for events." });
+
+    } catch (err) {
+        console.error("Failed to start Lichess Bot:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * STOP Lichess Bot
+ */
+app.post("/api/lichess/stop", async (req, res) => {
+    if (!lichessBotInstance) {
+        return res.json({ status: "ignored", message: "Bot was not running." });
+    }
+
+    try {
+        await lichessEngine.stop();
+        lichessBotInstance = null;
+
+        res.json({ status: "success", message: "Lichess Bot stopped." });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * STATUS Check
+ */
+app.get("/api/lichess/status", (req, res) => {
+    res.json({
+        running: !!lichessBotInstance,
+        profile: lichessBotInstance ? lichessBotInstance.botProfile : null,
+        activeGames: lichessBotInstance ? Array.from(lichessBotInstance.activeGames) : []
+    });
+});
+
+/**
+ * CREATE Open Challenge
+ */
+app.post("/api/lichess/challenge/open", async (req, res) => {
+    if (!lichessBotInstance) return res.status(400).json({ error: "Bot not running" });
+    const { limit = 180, increment = 0 } = req.body;
+    try {
+        const result = await lichessBotInstance.createOpenChallenge(limit, increment);
+        res.json({ status: "success", data: result });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * CREATE AI Challenge (Stockfish)
+ */
+app.post("/api/lichess/challenge/ai", async (req, res) => {
+    if (!lichessBotInstance) return res.status(400).json({ error: "Bot not running" });
+    const { level = 1, limit = 180, increment = 0 } = req.body;
+    try {
+        const result = await lichessBotInstance.createAiChallenge(level, limit, increment);
+        res.json({ status: "success", data: result });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * CHALLENGE WEAKEST Bot
+ */
+app.post("/api/lichess/challenge/weakest", async (req, res) => {
+    if (!lichessBotInstance) return res.status(400).json({ error: "Bot not running" });
+    const { limit = 180, increment = 0 } = req.body;
+    try {
+        const result = await lichessBotInstance.huntWeakestBot(limit, increment);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post("/api/start_game", (req, res) => {
+    const { player1_id, player2_id } = req.body;
+    console.log(`[Local Game] Request to start game: ${player1_id} vs ${player2_id}`);
+
+    res.json({
+        status: "started",
+        gameId: "local_game_" + Date.now(),
+        message: "Local game logic not yet fully implemented, but request received."
+    });
 });
 
 const PORT = process.env.PORT || 8000;

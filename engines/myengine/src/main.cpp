@@ -207,23 +207,55 @@ static void handle_position(const std::string& line, Engine& engine) {
 
 static void handle_go(const std::string& line, Engine& engine) {
     PlaySettings settings{};
-    settings.depth = 10;
-    settings.tt_size_mb = 64;
+    settings.depth = 8;
+    settings.tt_size_mb = 1000;
     settings.time_left_ms = 0;
     settings.increment_ms = 0;
     settings.moves_to_go = 0;
 
     std::istringstream iss(line);
     std::string token;
-    iss >> token;
+
+    int wtime = 0, btime = 0, winc = 0, binc = 0, movestogo = 0;
+    int movetime = 0;
+    bool infinite = false;
+
     while (iss >> token) {
-        if (token == "depth") {
-            iss >> settings.depth;
-        }
+        if (token == "go") continue;
+        if (token == "depth") iss >> settings.depth;
+        else if (token == "wtime") iss >> wtime;
+        else if (token == "btime") iss >> btime;
+        else if (token == "winc") iss >> winc;
+        else if (token == "binc") iss >> binc;
+        else if (token == "movestogo") iss >> movestogo;
+        else if (token == "movetime") iss >> movetime;
+        else if (token == "infinite") infinite = true;
     }
 
-    const std::string bestUci = engine.playMove(settings);
+    bool whiteToMove = true;
+    std::string fen = engine.getFEN();
+    std::istringstream fenIss(fen);
+    std::string boardPart, colorPart;
+    if (fenIss >> boardPart >> colorPart) {
+        if (colorPart == "b") whiteToMove = false;
+    }
 
+    if (movetime > 0) {
+        settings.time_left_ms = movetime;
+        settings.increment_ms = 0;
+    } else {
+        settings.time_left_ms = whiteToMove ? wtime : btime;
+        settings.increment_ms = whiteToMove ? winc : binc;
+        settings.moves_to_go = movestogo;
+    }
+
+    if (infinite) {
+        settings.depth = 64;
+        settings.time_left_ms = 0;
+    }
+
+    // 4. Execute
+    const std::string bestUci = engine.playMove(settings);
     std::cout << "bestmove " << bestUci << "\n";
     std::cout.flush();
 }

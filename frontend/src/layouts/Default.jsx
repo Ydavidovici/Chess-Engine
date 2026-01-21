@@ -1,4 +1,3 @@
-// src/layouts/MainLayout.jsx
 import React from "react";
 import { Outlet, NavLink } from "react-router-dom";
 
@@ -11,7 +10,6 @@ export default function Default() {
                         Chess Engine UI
                     </h1>
 
-                    {/* Simple nav */}
                     <nav className="flex gap-4 text-sm">
                         <NavLink
                             to="/"
@@ -32,6 +30,16 @@ export default function Default() {
                             }
                         >
                             Game
+                        </NavLink>
+                        <NavLink
+                            to="/lichess"
+                            className={({ isActive }) =>
+                                `hover:text-white ${
+                                    isActive ? "text-white" : "text-slate-300"
+                                }`
+                            }
+                        >
+                            Lichess
                         </NavLink>
                     </nav>
                 </div>

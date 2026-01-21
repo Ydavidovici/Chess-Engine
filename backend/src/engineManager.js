@@ -1,61 +1,122 @@
 import {spawn} from "bun";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
+import {EventEmitter} from "node:events";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ENGINE_PATH = path.join(__dirname, "..", "..", "engines", "myengine", "build", "myengine");
 
-export class UciEngine {
+/**
+ * Robust UCI Engine Wrapper
+ * Features: Auto-restart on crash, command queueing, strict timeout management.
+ */
+export class UciEngine extends EventEmitter {
     constructor(cmd = ENGINE_PATH) {
+        super();
         this.cmd = cmd;
         this.process = null;
         this.ready = false;
         this.queue = [];
+        this.restarts = 0;
+        this.maxRestarts = 5;
+        this.isShuttingDown = false;
     }
 
+    /**
+     * Starts the engine process and initializes UCI mode.
+     */
     async start() {
         if (this.process) return;
+        this.isShuttingDown = false;
 
-        this.process = spawn({
-            cmd: [this.cmd],
-            stdin: "pipe",
-            stdout: "pipe",
-            stderr: "inherit",
-        });
+        try {
+            console.log(`[Engine] Spawning: ${this.cmd}`);
+            this.process = spawn({
+                cmd: [this.cmd],
+                stdin: "pipe",
+                stdout: "pipe",
+                stderr: "inherit",
+            });
 
-        this._readLoop().catch((err) => {
-            console.error("[engine] readLoop error:", err);
-        });
+            if (!this.process.pid) {
+                throw new Error("Failed to spawn engine process (PID is null).");
+            }
 
-        console.log("[engine >>] uci");
-        await this._sendCommand("uci", (line) => line.startsWith("uciok"));
+            this._readLoop().catch((err) => {
+                console.error("[Engine Error] readLoop crashed:", err);
+                this._handleCrash();
+            });
 
-        console.log("[engine >>] isready");
-        await this._sendCommand("isready", (line) => line.startsWith("readyok"));
+            await this._sendCommand("uci", (line) => line === "uciok", null, 2000);
+            await this._sendCommand("isready", (line) => line === "readyok", null, 2000);
 
-        this.ready = true;
-        console.log("[engine] start complete, ready =", this.ready);
+            this.ready = true;
+            this.restarts = 0;
+            console.log("[Engine] Ready and Listening.");
+
+        } catch (error) {
+            console.error("[Engine Critical] Start failed:", error);
+            this._handleCrash();
+            throw error;
+        }
     }
 
+    /**
+     * Internal: Handles engine crashes by attempting to restart.
+     */
+    async _handleCrash() {
+        if (this.isShuttingDown) return;
+
+        this.ready = false;
+        this.process = null;
+
+        if (this.queue.length > 0) {
+            console.warn(`[Engine] Clearing ${this.queue.length} pending commands due to crash.`);
+            this.queue.forEach(task => task.reject(new Error("Engine crashed")));
+            this.queue = [];
+        }
+
+        if (this.restarts < this.maxRestarts) {
+            this.restarts++;
+            console.warn(`[Engine] Attempting restart ${this.restarts}/${this.maxRestarts} in 1s...`);
+            await new Promise(r => setTimeout(r, 1000));
+            this.start().catch(e => console.error("Restart failed:", e));
+        } else {
+            console.error("[Engine] Max restarts exceeded. Manual intervention required.");
+            this.emit("fatal_error", new Error("Max restarts exceeded"));
+        }
+    }
 
     async stop() {
+        this.isShuttingDown = true;
         if (!this.process) return;
-        try {
-            await this._sendRaw("quit");
-        } catch (_) {}
-        this.process.kill();
-        this.process = null;
+
         this.ready = false;
+
+        try {
+            this.process.stdin.write("quit\n");
+            await new Promise(r => setTimeout(r, 100));
+        } catch (_) {
+        }
+
+        if (this.process) {
+            this.process.kill();
+        }
+        this.process = null;
+        console.log("[Engine] Stopped.");
     }
 
     async uciNewGame() {
+        if (!this.ready) await this.start();
         await this._sendRaw("ucinewgame");
         await this._sendCommand("isready", (l) => l === "readyok");
     }
 
     async position(fen, moves = []) {
+        if (!this.ready) await this.start();
+
         let cmd;
         if (fen === "startpos") {
             cmd = "position startpos";
@@ -70,61 +131,89 @@ export class UciEngine {
         await this._sendRaw(cmd);
     }
 
+    /**
+     * Calculates the best move with safety fallbacks.
+     */
     async go(options = {}) {
+        if (!this.ready) await this.start();
+
         let cmd = "go";
         if (options.depth) cmd += ` depth ${options.depth}`;
         if (options.whiteTime) cmd += ` wtime ${options.whiteTime}`;
         if (options.blackTime) cmd += ` btime ${options.blackTime}`;
+        if (options.whiteInc) cmd += ` winc ${options.whiteInc}`;
+        if (options.blackInc) cmd += ` binc ${options.blackInc}`;
         if (options.moveTime) cmd += ` movetime ${options.moveTime}`;
-        let safeTimeout = 10000;
 
+        let safeTimeout = 60000;
         if (options.moveTime) {
-            safeTimeout = options.moveTime + 1000;
+            safeTimeout = options.moveTime + 2000;
         } else if (options.whiteTime || options.blackTime) {
-            safeTimeout = 60000;
+            safeTimeout = 60000 * 5;
         }
 
-        let currentBestMove = null;
+        let currentBestMove = "(none)";
 
-        const response = await this._sendCommand(
-            cmd,
-            (line) => line.startsWith("bestmove"),
-            (line) => {
-                if (line.startsWith("info") && line.includes(" pv ")) {
-                    const parts = line.split(" pv ");
-                    if (parts[1]) {
-                        const moves = parts[1].split(" ");
-                        if (moves[0]) currentBestMove = moves[0];
+        try {
+            const response = await this._sendCommand(
+                cmd,
+                (line) => line.startsWith("bestmove"),
+                (line) => {
+                    if (line.startsWith("info") && line.includes(" pv ")) {
+                        const parts = line.split(" pv ");
+                        if (parts[1]) {
+                            const moves = parts[1].split(" ");
+                            if (moves[0]) currentBestMove = moves[0];
+                        }
                     }
-                }
-            },
-            safeTimeout
-        );
+                },
+                safeTimeout,
+            );
 
-        if (response === "TIMEOUT") {
-            console.warn(`[Engine] Search timed out. Fallback to: ${currentBestMove}`);
-            this._sendRaw("stop");
-            return currentBestMove || "0000";
+            if (response === "TIMEOUT") {
+                console.warn(`[Engine] Search timed out. Fallback to pv: ${currentBestMove}`);
+                await this._sendRaw("stop");
+                return currentBestMove;
+            }
+
+            return response.split(" ")[1];
+        } catch (e) {
+            console.error("[Engine] Error during 'go':", e);
+            return currentBestMove !== "(none)" ? currentBestMove : "0000";
         }
-
-        return response.split(" ")[1];
-    }
-
-    async _sendRaw(cmd) {
-        if (!this.process) throw new Error("engine not started");
-        this.process.stdin.write(cmd + "\n");
     }
 
     /**
-     * Sends a command and waits for a specific response line.
-     * @param {string} command - The UCI command to send
-     * @param {function} stopCondition - Function(line) => bool. Returns true when command is done.
-     * @param {function} callback - Function(line). Called for every line of output.
-     * @param {number} timeoutMs - (Optional) How long to wait before giving up. Default 1000ms.
+     * Sends command to stdin.
      */
-    _sendCommand(command, stopCondition, callback, timeoutMs = 1000) {
+    async _sendRaw(cmd) {
+        if (!this.process) throw new Error("Engine not started");
+        try {
+            this.process.stdin.write(cmd + "\n");
+            this.process.stdin.flush();
+        } catch (err) {
+            console.error(`[Engine] Failed to write '${cmd}':`, err);
+            this._handleCrash();
+            throw err;
+        }
+    }
+
+    /**
+     * Core Command Handler with Promise Queue
+     */
+    _sendCommand(command, stopCondition, callback, timeoutMs = 2000) {
         return new Promise((resolve, reject) => {
             if (!this.process) return reject(new Error("Engine not running"));
+
+            // Safety timer
+            const timer = setTimeout(() => {
+                const index = this.queue.indexOf(task);
+                if (index !== -1) {
+                    this.queue.splice(index, 1);
+                    console.error(`[Engine] Command '${command}' timed out (${timeoutMs}ms).`);
+                    resolve("TIMEOUT");
+                }
+            }, timeoutMs);
 
             const task = {
                 command,
@@ -137,20 +226,20 @@ export class UciEngine {
                 reject: (err) => {
                     clearTimeout(timer);
                     reject(err);
-                }
+                },
             };
 
             this.queue.push(task);
-            this.process.stdin.write(command + "\n");
 
-            const timer = setTimeout(() => {
-                const index = this.queue.indexOf(task);
-                if (index !== -1) {
-                    this.queue.splice(index, 1);
-                    console.warn(`[Engine] Command '${command}' timed out after ${timeoutMs}ms. Returning partial data.`);
-                    resolve("TIMEOUT");
-                }
-            }, timeoutMs);
+            try {
+                this.process.stdin.write(command + "\n");
+                this.process.stdin.flush();
+            } catch (err) {
+                clearTimeout(timer);
+                const idx = this.queue.indexOf(task);
+                if (idx !== -1) this.queue.splice(idx, 1);
+                reject(err);
+            }
         });
     }
 
@@ -160,199 +249,49 @@ export class UciEngine {
         const decoder = new TextDecoder();
         let buffer = "";
 
-        for await (const chunk of this.process.stdout) {
-            buffer += decoder.decode(chunk);
+        try {
+            for await (const chunk of this.process.stdout) {
+                buffer += decoder.decode(chunk);
 
-            let idx;
-            while ((idx = buffer.indexOf("\n")) >= 0) {
-                const raw = buffer.slice(0, idx);
-                const line = raw.trim();
-                buffer = buffer.slice(idx + 1);
+                let idx;
+                while ((idx = buffer.indexOf("\n")) >= 0) {
+                    const raw = buffer.slice(0, idx);
+                    const line = raw.trim();
+                    buffer = buffer.slice(idx + 1);
 
-                if (!line) continue;
+                    if (!line) continue;
 
-                console.log("[engine <<]", line);
+                    if (this.queue.length > 0) {
+                        const currentTask = this.queue[0];
 
-                if (this.queue.length > 0) {
-                    const currentTask = this.queue[0];
+                        if (currentTask.callback) {
+                            try {
+                                currentTask.callback(line);
+                            } catch (e) {
+                                console.error("[Engine] Callback error:", e);
+                            }
+                        }
 
-                    if (currentTask.callback) {
+                        let done = false;
                         try {
-                            currentTask.callback(line);
+                            done = currentTask.donePredicate(line);
                         } catch (e) {
-                            console.error("Callback error:", e);
+                            console.error("[Engine] Predicate error:", e);
+                        }
+
+                        if (done) {
+                            this.queue.shift();
+                            currentTask.resolve(line);
                         }
                     }
-
-                    let done = false;
-                    try {
-                        done = currentTask.donePredicate(line);
-                    } catch (e) {
-                        console.error("[engine queue] predicate error:", e);
-                    }
-
-                    if (done) {
-                        this.queue.shift();
-                        currentTask.resolve(line);
-                    }
                 }
             }
-        }
-    }
-
-    async bestMoveFromFen(fen) {
-        if (!this.ready) {
-            console.log("[engine wrapper] start() from bestMoveFromFen");
-            await this.start();
-        }
-        console.log("[engine wrapper] queue size before sending:", this.queue.length);
-        const bestmoveLine = await this._sendCommand(`bestmovefromfen ${fen}`, (line) => {
-            return line.startsWith("bestmove");
-        });
-        console.log("[engine wrapper] resolved bestmove line:", bestmoveLine);
-        const move = bestmoveLine.slice("bestmove".length).trim();
-        return move;
-    }
-
-    async printBoard(fen) {
-        console.log("fen", fen);
-        return await this._sendCommand(`printboard ${fen}`, (line) => {
-            return line.startsWith("printboard_done");
-        });
-    }
-
-    async makeMove(fen, move) {
-        console.log("making move", move);
-        return await this._sendCommand(`makemove ${fen} ${move}`, (line) => {
-            return line.startsWith("move_made");
-        });
-    }
-
-    static async playMatch(white, black, options) {
-        console.log(`\n=== MATCH START: ${white.name} (White) vs ${black.name} (Black) ===`);
-
-        await white.start();
-        await black.start();
-
-        await white.uciNewGame();
-        await black.uciNewGame();
-
-        const moves = [];
-        let turn = "white";
-        const maxMoves = options.maxMoves || 200;
-
-        try {
-            while (moves.length < maxMoves) {
-                const activeEngine = turn === "white" ? white : black;
-
-                await activeEngine.position("startpos", moves);
-
-                const bestMove = await activeEngine.go({depth: options.depth});
-
-                if (!bestMove || bestMove === "(none)" || bestMove === "0000") {
-                    console.log(`Game Over. ${activeEngine.name} cannot move.`);
-                    break;
-                }
-
-                console.log(`${moves.length + 1}. ${turn === "white" ? "White" : "Black"} (${activeEngine.name}): ${bestMove}`);
-                moves.push(bestMove);
-
-                turn = turn === "white" ? "black" : "white";
-            }
-        } catch (error) {
-            console.error("Match aborted due to error:", error);
+        } catch (err) {
+            console.error("[Engine] stdout stream error:", err);
+            throw err;
         } finally {
-            console.log(`=== MATCH END ===`);
-            console.log(`Moves: ${moves.join(" ")}`);
-            await white.stop();
-            await black.stop();
+            console.log("[Engine] stdout stream closed.");
+            this._handleCrash();
         }
-    }
-
-    static async playLichessGame(engine, gameId, apiToken) {
-        console.log(`[Lichess Stub] Connecting to game ${gameId}...`);
-        await engine.start();
-        console.log("[Lichess Stub] Connected. Waiting for events...");
-    }
-
-    /**
-     * Runs the benchmark suite with specific settings.
-     * @param {Object} options Configuration for the bench
-     * @param {number} options.depth - Search depth (default: 9)
-     * @param {number} options.evalTime - Time in ms for eval test (default: 2000)
-     * @param {string} options.mode - "depth" or "time"
-     * @param {number} options.timeLimit - Time in ms (if mode is "time")
-     */
-    async bench(options = {}) {
-        if (!this.ready) await this.start();
-
-        let command = "bench";
-        if (options.depth) command += ` depth ${options.depth}`;
-        if (options.evalTime) command += ` eval ${options.evalTime}`;
-        if (options.mode === 'time' && options.timeLimit) {
-            command += ` movetime ${options.timeLimit}`;
-        }
-
-        let expectedDuration = (options.evalTime || 2000);
-
-        if (options.mode === 'time' && options.timeLimit) {
-            expectedDuration += (options.timeLimit * 3);
-        } else {
-            expectedDuration += 60000;
-        }
-
-        if (options.evalTime) command += ` eval ${options.evalTime}`;
-
-        let calculatedTimeout = expectedDuration * 1.5 + 20000;
-
-        const totalTimeout = Math.max(calculatedTimeout, 60000);
-
-        console.log(`[Engine] Bench Configured. Timeout set to: ${totalTimeout}ms (${(totalTimeout/1000).toFixed(0)}s)`);
-
-        const results = {
-            nps: 0, eps: 0, nodes: 0, time: 0, ordering: 0, qSearch: 0, ttHit: 0,
-            fullOutput: [],
-            isPartial: false
-        };
-
-        const status = await this._sendCommand(command,
-            (line) => line.includes("Benchmark Complete"),
-            (line) => {
-                results.fullOutput.push(line);
-
-                const parseVal = (str) => {
-                    const parts = str.split(":")[1];
-                    return parts ? parseFloat(parts.trim().replace('%', '')) : 0;
-                };
-
-                if (line.includes("Global NPS:")) results.nps = parseInt(line.split(":")[1].trim());
-                if (line.includes("EPS:")) results.eps = parseInt(line.split(":")[1].trim());
-                if (line.includes("Total Nodes:")) results.nodes = parseInt(line.split(":")[1].trim());
-                if (line.includes("Total Time:")) results.time = parseFloat(line.split(":")[1].trim().replace('s',''));
-                if (line.includes("Move Ordering:")) results.ordering = parseVal(line);
-                if (line.includes("Q-Search Load:")) results.qSearch = parseVal(line);
-                if (line.includes("TT Hit Rate:")) results.ttHit = parseVal(line);
-            },
-            totalTimeout
-        );
-
-        if (status === "TIMEOUT") {
-            results.isPartial = true;
-            console.warn("[Engine] Benchmark timed out. Returning gathered results.");
-        }
-
-        return results;
-    }
-
-    async cancel() {
-        console.log("[Engine] Cancel requested. resetting...");
-
-        if (this.queue.length > 0) {
-            this.queue.forEach(task => task.reject(new Error("Cancelled by user")));
-            this.queue = [];
-        }
-
-        await this.stop();
-        console.log("[Engine] Process killed. Ready for fresh start.");
     }
 }
