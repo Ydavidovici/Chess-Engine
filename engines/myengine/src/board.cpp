@@ -1028,3 +1028,34 @@ Board::PieceIndex Board::getPieceAt(int square) const {
 
     return PieceTypeCount;
 }
+
+void Board::makeNullMove() {
+    Undo undo;
+    undo.castling_rights = castling_rights;
+    undo.en_passant_square_index = en_passant_square_index;
+    undo.halfmove_clock = halfmove_clock;
+    undo.zobrist_key = current_zobrist_key;
+    undo.move = Move();
+    undo.captured_piece = PieceTypeCount;
+    undo.moved_piece = PieceTypeCount;
+
+    move_history.push_back(undo);
+
+    current_zobrist_key ^= side_key;
+    if (en_passant_square_index != -1) {
+        current_zobrist_key ^= en_passant_keys[en_passant_square_index];
+        en_passant_square_index = -1;
+    }
+
+    side_to_move = (side_to_move == Color::WHITE) ? Color::BLACK : Color::WHITE;
+}
+
+void Board::unmakeNullMove() {
+    const Undo& undo = move_history.back();
+    current_zobrist_key = undo.zobrist_key;
+    castling_rights = undo.castling_rights;
+    en_passant_square_index = undo.en_passant_square_index;
+    halfmove_clock = undo.halfmove_clock;
+    side_to_move = (side_to_move == Color::WHITE) ? Color::BLACK : Color::WHITE;
+    move_history.pop_back();
+}

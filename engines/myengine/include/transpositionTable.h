@@ -18,7 +18,7 @@ public:
         int flag;
     };
 
-    TranspositionTable(size_t sizeInMB = 64);
+    TranspositionTable(size_t sizeInMB = 1024);
 
     void clear();
 

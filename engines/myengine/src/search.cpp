@@ -32,7 +32,6 @@ Search::Search(const Evaluator& evaluator, TranspositionTable& tt)
 
 Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int incrementMs) {
     stats_.reset();
-    std::memset(history_, 0, sizeof history_);
 
     if (timeLeftMs > 0) {
         tm_.start(timeLeftMs, incrementMs, 0);
@@ -105,18 +104,36 @@ int Search::negamax(Board& board, int depth, int alpha, int beta, int plyFromRoo
 
         if (ent.depth >= depth) {
             stats_.ttHits++;
-
             if (ent.flag == TranspositionTable::EXACT) return ent.value;
-
             if (ent.flag == TranspositionTable::LOWERBOUND) alpha = std::max(alpha, ent.value);
             if (ent.flag == TranspositionTable::UPPERBOUND) beta = std::min(beta, ent.value);
-
             if (alpha >= beta) return ent.value;
         }
     }
 
     if (depth == 0) {
         return quiescence(board, alpha, beta, plyFromRoot);
+    }
+
+    if (depth >= 3 && !board.inCheck(board.sideToMove()) && plyFromRoot > 0 && beta < MATE_SCORE) {
+
+        bool hasBigPieces = board.occupancy(board.sideToMove()) & ~board.pieceBB(board.sideToMove(), Board::PAWN);
+
+        if (hasBigPieces) {
+            board.makeNullMove();
+
+            int R = 2;
+
+            int score = -negamax(board, depth - 1 - R, -beta, -beta + 1, plyFromRoot + 1);
+
+            board.unmakeNullMove();
+
+            if (tm_.isTimeUp()) return 0;
+
+            if (score >= beta) {
+                return beta;
+            }
+        }
     }
 
     auto moves = board.generatePseudoMoves();

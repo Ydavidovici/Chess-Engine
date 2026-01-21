@@ -23,8 +23,9 @@ public:
 
     bool makeMove(const Move& move);
     void unmakeMove();
+    void makeNullMove();
+    void unmakeNullMove();
 
-    // Debugging
     void printBoard() const;
     void printFENString() const;
     void printPseudoLegalMoves() const;
