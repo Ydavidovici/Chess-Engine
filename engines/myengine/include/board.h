@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <random>
+#include <mutex>
 
 #include "move.h"
 #include "types.h"
@@ -71,7 +72,7 @@ private:
     static uint64_t en_passant_keys[64];
     static uint64_t castling_keys[16];
     static uint64_t side_key;
-    static bool zobrist_initialized;
+    static std::once_flag zobrist_once_flag_;
 
     void initZobrist();
     uint64_t calculateZobristKey() const;

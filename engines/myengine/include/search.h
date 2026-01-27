@@ -6,12 +6,18 @@
 #include "timeManager.h"
 #include "move.h"
 #include <vector>
+#include <atomic>
+#include <thread>
+#include <cstring>
 
 class Search {
 public:
     Search(const Evaluator& evaluator, TranspositionTable& tt);
 
     Move findBestMove(Board& board, int maxDepth, int timeLeftMs = 0, int incrementMs = 0);
+
+    void setThreadCount(int count);
+    int getThreadCount() const { return numThreads_; }
 
     struct SearchStats {
         long long totalNodes = 0;
@@ -37,19 +43,35 @@ public:
         }
     };
 
-    const SearchStats& getStats() const { return stats_; }
-    void resetStats() { stats_.reset(); }
+    const SearchStats& getStats() const { return aggregateStats_; }
+    void resetStats() { aggregateStats_.reset(); }
 
-    uint64_t getNodes() const { return stats_.totalNodes; }
+    uint64_t getNodes() const { return aggregateStats_.totalNodes; }
 
 private:
+    // Per-thread worker state: each thread gets its own copy
+    struct WorkerState {
+        SearchStats stats;
+        int history[2][64][64];
+
+        void reset() {
+            stats.reset();
+            std::memset(history, 0, sizeof(history));
+        }
+    };
+
     const Evaluator& evaluator_;
     TranspositionTable& tt_;
     TimeManager tm_;
-    SearchStats stats_;
-    int history_[2][64][64];
+    std::atomic<bool> stopFlag_{false};
+    int numThreads_;
+    SearchStats aggregateStats_;
 
-    int negamax(Board& board, int depth, int alpha, int beta, int plyFromRoot);
-    int quiescence(Board& board, int alpha, int beta, int plyFromRoot);
-    void orderMoves(Board& board, std::vector<Move>& moves, const Move& ttMove);
+    bool shouldStop() const;
+
+    void helperThreadMain(WorkerState& ws, Board board, int maxDepth, int threadId);
+
+    int negamax(WorkerState& ws, Board& board, int depth, int alpha, int beta, int plyFromRoot);
+    int quiescence(WorkerState& ws, Board& board, int alpha, int beta, int plyFromRoot);
+    void orderMoves(const WorkerState& ws, Board& board, std::vector<Move>& moves, const Move& ttMove);
 };
