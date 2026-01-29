@@ -12,35 +12,33 @@ uint64_t Board::piece_keys[12][64];
 uint64_t Board::en_passant_keys[64];
 uint64_t Board::castling_keys[16];
 uint64_t Board::side_key;
-bool Board::zobrist_initialized = false;
+std::once_flag Board::zobrist_once_flag_;
 
 Board::Board() {
     initialize();
 }
 
 void Board::initZobrist() {
-    if (zobrist_initialized) return;
+    std::call_once(zobrist_once_flag_, []() {
+        std::mt19937_64 rng(123456789);
+        std::uniform_int_distribution<uint64_t> dist;
 
-    std::mt19937_64 rng(123456789);
-    std::uniform_int_distribution<uint64_t> dist;
-
-    for (int p = 0; p < 12; ++p) {
-        for (int sq = 0; sq < 64; ++sq) {
-            piece_keys[p][sq] = dist(rng);
+        for (int p = 0; p < 12; ++p) {
+            for (int sq = 0; sq < 64; ++sq) {
+                piece_keys[p][sq] = dist(rng);
+            }
         }
-    }
 
-    for (int sq = 0; sq < 64; ++sq) {
-        en_passant_keys[sq] = dist(rng);
-    }
+        for (int sq = 0; sq < 64; ++sq) {
+            en_passant_keys[sq] = dist(rng);
+        }
 
-    for (int c = 0; c < 16; ++c) {
-        castling_keys[c] = dist(rng);
-    }
+        for (int c = 0; c < 16; ++c) {
+            castling_keys[c] = dist(rng);
+        }
 
-    side_key = dist(rng);
-
-    zobrist_initialized = true;
+        side_key = dist(rng);
+    });
 }
 
 uint64_t Board::calculateZobristKey() const {

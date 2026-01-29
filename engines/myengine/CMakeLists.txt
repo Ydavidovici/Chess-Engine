@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
+find_package(Threads REQUIRED)
+
 set(ENGINE_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_library(board STATIC src/board.cpp)
@@ -25,8 +27,9 @@ target_include_directories(search PUBLIC ${ENGINE_INCLUDE_DIR})
 target_include_directories(core_engine PUBLIC ${ENGINE_INCLUDE_DIR})
 target_include_directories(bench PUBLIC ${ENGINE_INCLUDE_DIR})
 
+target_link_libraries(board PUBLIC Threads::Threads)
 target_link_libraries(evaluator PUBLIC move board)
-target_link_libraries(search PUBLIC evaluator tt board move)
+target_link_libraries(search PUBLIC evaluator tt board move Threads::Threads)
 target_link_libraries(core_engine PUBLIC board move evaluator tt search)
 
 target_link_libraries(bench PUBLIC core_engine)
