@@ -35,7 +35,7 @@ static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"bestmovefromfen", handle_bestmove},
     {"printboard", handle_printboard},
     {"makemove", handle_makeMove},
-{"bench", handle_bench},
+    {"bench", handle_bench},
 };
 
 

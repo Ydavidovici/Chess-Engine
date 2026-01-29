@@ -58,22 +58,15 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
 
     Move bestMove = rootMoves[0];
 
-    // Allocate per-thread worker states
     std::vector<WorkerState> workers(numThreads_);
     for (auto& ws : workers) ws.reset();
 
-    // Launch helper threads (threads 1..N-1)
-    // Each gets its own Board copy and searches independently,
-    // sharing the transposition table with the main thread.
     std::vector<std::thread> helpers;
     helpers.reserve(numThreads_ - 1);
     for (int i = 1; i < numThreads_; ++i) {
-        helpers.emplace_back(&Search::helperThreadMain, this,
-                             std::ref(workers[i]), Board(board), maxDepth, i);
+        helpers.emplace_back(&Search::helperThreadMain, this, std::ref(workers[i]), Board(board), maxDepth, i);
     }
 
-    // Main thread (thread 0): standard iterative deepening
-    // Its result is the final best move.
     for (int depth = 1; depth <= maxDepth; ++depth) {
         if (shouldStop()) break;
 
@@ -108,13 +101,10 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
         }
     }
 
-    // Signal all helpers to stop
     stopFlag_.store(true, std::memory_order_relaxed);
 
-    // Wait for all helper threads to finish
     for (auto& t : helpers) t.join();
 
-    // Aggregate stats from all threads
     for (const auto& ws : workers) {
         aggregateStats_ += ws.stats;
     }
@@ -128,9 +118,6 @@ void Search::helperThreadMain(WorkerState& ws, Board board, int maxDepth, int th
 
     Move localBest = moves[0];
 
-    // Depth diversity: odd-indexed helpers skip depth 1
-    // so different threads explore different depths at different times,
-    // populating the shared TT with diverse information.
     int startDepth = 1 + (threadId % 2);
 
     for (int depth = startDepth; depth <= maxDepth; ++depth) {
@@ -172,7 +159,6 @@ int Search::negamax(WorkerState& ws, Board& board, int depth, int alpha, int bet
 
     int oldAlpha = alpha;
 
-    // Check time/stop every 2048 nodes
     if ((ws.stats.totalNodes & 2047) == 0 && shouldStop()) return 0;
 
     if (plyFromRoot > 0 && (board.isThreefoldRepetition() || board.isFiftyMoveDraw())) {
@@ -200,7 +186,6 @@ int Search::negamax(WorkerState& ws, Board& board, int depth, int alpha, int bet
     }
 
     if (depth >= 3 && !board.inCheck(board.sideToMove()) && plyFromRoot > 0 && beta < MATE_SCORE) {
-
         bool hasBigPieces = board.occupancy(board.sideToMove()) & ~board.pieceBB(board.sideToMove(), Board::PAWN);
 
         if (hasBigPieces) {
