@@ -16,7 +16,6 @@ add_library(evaluator STATIC src/evaluator.cpp)
 add_library(tt STATIC src/transpositionTable.cpp)
 add_library(search STATIC src/search.cpp src/timeManager.cpp)
 add_library(core_engine STATIC src/engine.cpp)
-
 add_library(bench STATIC src/bench.cpp)
 
 target_include_directories(board PUBLIC ${ENGINE_INCLUDE_DIR})
@@ -31,34 +30,31 @@ target_link_libraries(board PUBLIC Threads::Threads)
 target_link_libraries(evaluator PUBLIC move board)
 target_link_libraries(search PUBLIC evaluator tt board move Threads::Threads)
 target_link_libraries(core_engine PUBLIC board move evaluator tt search)
-
 target_link_libraries(bench PUBLIC core_engine)
 
 add_executable(myengine src/main.cpp)
-
 target_include_directories(myengine PRIVATE ${ENGINE_INCLUDE_DIR})
 target_link_libraries(myengine PRIVATE core_engine bench)
 
 enable_testing()
 
-add_executable(test_board_move ../../tests/myengine/board_move_tests.cpp)
-add_executable(test_eval ../../tests/myengine/eval_test.cpp)
-add_executable(test_search ../../tests/myengine/search_test.cpp)
-add_executable(test_tt ../../tests/myengine/tt_test.cpp)
+add_executable(test_board_move tests/board_move_tests.cpp)
+add_executable(test_eval tests/eval_test.cpp)
+add_executable(test_search tests/search_test.cpp)
+add_executable(test_tt tests/tt_test.cpp)
 
 foreach (test_exe IN ITEMS test_board_move test_eval test_search test_tt)
-    target_include_directories(${test_exe} PRIVATE ${ENGINE_INCLUDE_DIR})
     target_link_libraries(${test_exe} PRIVATE core_engine)
 endforeach ()
 
 add_test(NAME board_move_tests COMMAND test_board_move)
-set_tests_properties(board_move_tests PROPERTIES LABELS "myengine")
+set_tests_properties(board_move_tests PROPERTIES LABELS "tests")
 
 add_test(NAME eval_test COMMAND test_eval)
-set_tests_properties(eval_test PROPERTIES LABELS "myengine")
+set_tests_properties(eval_test PROPERTIES LABELS "tests")
 
 add_test(NAME search_test COMMAND test_search)
-set_tests_properties(search_test PROPERTIES LABELS "myengine")
+set_tests_properties(search_test PROPERTIES LABELS "tests")
 
 add_test(NAME tt_test COMMAND test_tt)
-set_tests_properties(tt_test PROPERTIES LABELS "myengine")
+set_tests_properties(tt_test PROPERTIES LABELS "tests")
