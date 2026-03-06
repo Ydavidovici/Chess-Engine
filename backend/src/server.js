@@ -152,7 +152,7 @@ app.post("/api/engine/bench", async (req, res) => {
 
 app.post("/api/engine/cancel", async (req, res) => {
     try {
-        await mainEngine.cancel();
+        await mainEngine.stop();
         res.json({ status: "success", message: "Benchmark cancelled" });
     } catch (err) {
         console.error("Cancel failed:", err);
