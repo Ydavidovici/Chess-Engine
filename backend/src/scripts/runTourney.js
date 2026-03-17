@@ -49,18 +49,43 @@ async function runTournament() {
     const args = [
         "-tournament", "gauntlet",
 
-        "-engine", `name=MyEngine`, `cmd=${MY_ENGINE}`, `proto=uci`,
-        "-engine", `name=Stockfish_300`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=10`, `proto=uci`,
-        "-engine", `name=Stockfish_800`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=250`, `proto=uci`,
-        "-engine", `name=Stockfish_1200`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=2000`, `proto=uci`,
+        "-engine", "name=MyEngine", `cmd=${MY_ENGINE}`, "proto=uci",
+
+        "-engine",
+        "name=SF_d1",
+        `cmd=${STOCKFISH_PATH}`,
+        "proto=uci",
+        "option.Skill Level=0",
+        "depth=1",
+
+        "-engine",
+        "name=SF_d2",
+        `cmd=${STOCKFISH_PATH}`,
+        "proto=uci",
+        "option.Skill Level=0",
+        "depth=2",
+
+        "-engine",
+        "name=SF_n1",
+        `cmd=${STOCKFISH_PATH}`,
+        "proto=uci",
+        "option.Skill Level=0",
+        "nodes=1",
+
+        "-engine",
+        "name=SF_n5",
+        `cmd=${STOCKFISH_PATH}`,
+        "proto=uci",
+        "option.Skill Level=0",
+        "nodes=5",
 
         "-each",
         "tc=10+0.1",
 
-        "-rounds", "125",
+        "-rounds", "50",
         "-games", "2",
         "-repeat",
-        "-concurrency", "4",
+        "-concurrency", "2",
         "-ratinginterval", "10",
         "-pgnout", pgnFilename,
 
