@@ -104,6 +104,11 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
                 alpha = score;
             }
         }
+
+        // Only promote to bestMove if this depth completed without a timeout
+        if (!shouldStop() && foundLegalMove) {
+            bestMove = currentBestMove;
+        }
     }
 
     stopFlag_.store(true, std::memory_order_relaxed);
