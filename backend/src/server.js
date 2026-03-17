@@ -15,7 +15,7 @@ app.use(cors({
 app.use(express.json());
 
 const PROD_PATH = path.join(import.meta.dir, "myengine");
-const DEV_PATH = path.resolve(import.meta.dir, "..", "..", "engines", "myengine", "build", "myengine");
+const DEV_PATH = path.join(__dirname, '../../engines/myengine/build/myengine.exe');
 const STOCKFISH_PATH = "/usr/bin/stockfish";
 
 let selectedPath = null;
