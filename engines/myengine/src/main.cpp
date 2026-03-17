@@ -24,6 +24,7 @@ static void handle_bestmove(const std::string& line, Engine& engine);
 static void handle_printboard(const std::string& line, Engine& engine);
 static void handle_makeMove(const std::string& line, Engine& engine);
 static void handle_bench(const std::string& line, Engine& engine);
+static void handle_eval(const std::string& line, Engine& engine);
 
 static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"uci", handle_uci},
@@ -36,6 +37,7 @@ static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"printboard", handle_printboard},
     {"makemove", handle_makeMove},
     {"bench", handle_bench},
+    {"eval", handle_eval},
 };
 
 
@@ -203,6 +205,14 @@ static void handle_position(const std::string& line, Engine& engine) {
             }
         }
     }
+}
+
+static void handle_eval(const std::string& line, Engine& engine) {
+    int score = engine.evaluateCurrentPosition();
+
+    std::cout << "Score: " << score << "\n";
+    std::cout << "Eval Complete\n";
+    std::cout.flush();
 }
 
 static void handle_go(const std::string& line, Engine& engine) {

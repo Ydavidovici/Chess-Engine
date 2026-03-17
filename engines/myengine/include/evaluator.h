@@ -11,7 +11,7 @@ public:
     Evaluator();
 
     int evaluate(const Board& board, Color side_to_move) const;
-    int evaluateTerminal(const Board& board, Color side_to_move) const;
+    static int evaluateTerminal(const Board& board, Color side_to_move) ;
     uint64_t generateZobristHash(const Board& board, bool sideToMove) const;
 
 private:

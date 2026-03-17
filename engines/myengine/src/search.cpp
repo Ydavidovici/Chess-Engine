@@ -75,15 +75,25 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
 
         orderMoves(workers[0], board, rootMoves, bestMove);
 
-        Move currentBestMove = rootMoves[0];
+        Move currentBestMove;
         int currentBestScore = -INF;
+        bool foundLegalMove = false;
 
         for (const auto& move : rootMoves) {
-            board.makeMove(move);
+            if (!board.makeMove(move)) {
+                continue; // Skip illegal pseudo-moves
+            }
+
+            // Safely default to the very first legal move we prove is playable
+            if (!foundLegalMove) {
+                currentBestMove = move;
+                foundLegalMove = true;
+            }
+
             int score = -negamax(workers[0], board, depth - 1, -beta, -alpha, 1);
             board.unmakeMove();
 
-            if (shouldStop()) break;
+            if (shouldStop()) break; // If we break now, currentBestMove is safe!
 
             if (score > currentBestScore) {
                 currentBestScore = score;
@@ -95,9 +105,9 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
             }
         }
 
-        if (!shouldStop()) {
+        // Only promote to bestMove if this depth completed without a timeout
+        if (!shouldStop() && foundLegalMove) {
             bestMove = currentBestMove;
-            std::cout << "info depth " << depth << " score cp " << currentBestScore << " pv " << bestMove.toString() << "\n";
         }
     }
 
@@ -116,7 +126,8 @@ void Search::helperThreadMain(WorkerState& ws, Board board, int maxDepth, int th
     auto moves = board.generateLegalMoves();
     if (moves.empty()) return;
 
-    Move localBest = moves[0];
+    Move localBest; // Leave empty initially, don't blindly trust moves[0]
+    bool foundAnyLegal = false;
 
     int startDepth = 1 + (threadId % 2);
 
@@ -128,11 +139,27 @@ void Search::helperThreadMain(WorkerState& ws, Board board, int maxDepth, int th
 
         orderMoves(ws, board, moves, localBest);
 
-        Move currentBest = moves[0];
+        Move currentBest;
         int currentBestScore = -INF;
+        bool foundLegalMove = false;
 
         for (const auto& move : moves) {
-            board.makeMove(move);
+            if (!board.makeMove(move)) {
+                continue; // Skip illegal pseudo-moves
+            }
+
+            // Safely lock in the very first legal move we find
+            if (!foundLegalMove) {
+                currentBest = move;
+                foundLegalMove = true;
+
+                // Set the baseline for the whole thread just in case it crashes early
+                if (!foundAnyLegal) {
+                    localBest = move;
+                    foundAnyLegal = true;
+                }
+            }
+
             int score = -negamax(ws, board, depth - 1, -beta, -alpha, 1);
             board.unmakeMove();
 
@@ -148,7 +175,8 @@ void Search::helperThreadMain(WorkerState& ws, Board board, int maxDepth, int th
             }
         }
 
-        if (!shouldStop()) {
+        // Only update the thread's best move if we completed the depth without timing out
+        if (!shouldStop() && foundLegalMove) {
             localBest = currentBest;
         }
     }

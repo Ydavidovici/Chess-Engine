@@ -27,3 +27,9 @@ ehthumbs.db
 Thumbs.db
 
 engines/stockfish
+/engines/tscp/
+/engines/stockfish/
+/engines/cinnamon/
+/engines/stash/
+/engines/ethereal/
+/tools/
