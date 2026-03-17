@@ -54,8 +54,6 @@ async function runTournament() {
         "-engine", `name=Stockfish_800`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=250`, `proto=uci`,
         "-engine", `name=Stockfish_1200`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=2000`, `proto=uci`,
 
-        "-engine", `name=TSCP_1700`, `cmd=${TSCP_PATH}`, `proto=xboard`,
-
         "-each",
         "tc=10+0.1",
 
