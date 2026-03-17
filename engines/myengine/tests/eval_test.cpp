@@ -53,10 +53,10 @@ void test_symmetry() {
     Evaluator evaluator;
     Board board;
 
-    board.loadFEN("2qk4/8/8/8/8/8/8/2QK3N w - - 0 1");
+    board.loadFEN("3k4/8/8/8/8/8/8/3KQ3 b - - 0 1");
     int whiteScore = evaluator.evaluate(board, Color::WHITE);
 
-    board.loadFEN("2qk4/8/8/8/4N3/8/8/2QK4 w - - 0 1");
+    board.loadFEN("3kq3/8/8/8/8/8/8/3K4 b - - 0 1");
     int blackScore = evaluator.evaluate(board, Color::BLACK);
 
     if (whiteScore == blackScore) {
