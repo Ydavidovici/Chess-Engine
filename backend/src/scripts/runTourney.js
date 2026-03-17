@@ -19,6 +19,11 @@ const STOCKFISH_PATH = path.join(ENGINES_DIR, "stockfish/stockfish/stockfish-win
 async function runTournament() {
     console.log("🔥 Starting 1,000-Game Baseline Gauntlet! 🔥\n");
 
+    const now = new Date();
+    const pad = (n) => n.toString().padStart(2, '0');
+    const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const pgnFilename = `baseline_1000_games_${timestamp}.pgn`;
+
     const args = [
         // Tells Cutechess to make Engine #1 play against everyone else, but they don't play each other
         "-tournament", "gauntlet",
@@ -41,7 +46,7 @@ async function runTournament() {
         "-repeat",
         "-concurrency", "4",
         "-ratinginterval", "10",
-        "-pgnout", "baseline_1000_games.pgn",
+        "-pgnout", pgnFilename,
 
         "-openings",
         `file=${BOOK_PATH}`,
