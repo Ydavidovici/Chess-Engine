@@ -11,6 +11,7 @@
  */
 
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -279,25 +280,39 @@ static void test_perf_nodes_scale_with_depth() {
     std::cout << "PASS\n\n";
 }
 
-// Measure nodes-per-second.  Only assert a very conservative lower bound
-// (500 NPS) to avoid flakiness on slow CI machines; primary value is the
-// printed report.
+// Nodes-per-second table D1–D6.  Primary baseline for speed regressions.
+// After any change, compare this table to catch slowdowns in eval or movegen.
 static void test_perf_nps_benchmark() {
     std::cout << "--- test_perf_nps_benchmark ---\n";
 
-    SearchResult r = run_search_full(
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", 5);
+    const char* fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-    long long nps = (r.elapsedMs > 0)
-        ? (r.stats.totalNodes * 1000LL / r.elapsedMs)
-        : r.stats.totalNodes;
+    std::cout << "  " << std::left
+              << std::setw(7)  << "Depth"
+              << std::setw(10) << "Nodes"
+              << std::setw(10) << "QNodes"
+              << std::setw(8)  << "ms"
+              << "NPS\n";
+    std::cout << "  " << std::string(46, '-') << "\n";
 
-    std::cout << "  depth=5  totalNodes=" << r.stats.totalNodes
-              << "  ms=" << r.elapsedMs
-              << "  NPS=" << nps << "\n";
+    long long nps5 = 0;
+    for (int d = 1; d <= 6; ++d) {
+        SearchResult r = run_search_full(fen, d);
+        long long nps = (r.elapsedMs > 0)
+            ? r.stats.totalNodes * 1000LL / r.elapsedMs
+            : r.stats.totalNodes * 1000LL;  // sub-ms: treat as 1 ms
 
-    assert(r.stats.totalNodes > 0);
-    assert(nps >= 500 && "NPS sanity: should exceed 500 nodes/sec");
+        std::cout << "  " << std::left
+                  << std::setw(7)  << d
+                  << std::setw(10) << r.stats.totalNodes
+                  << std::setw(10) << r.stats.qNodes
+                  << std::setw(8)  << r.elapsedMs
+                  << nps << "\n";
+
+        if (d == 5) nps5 = nps;
+    }
+
+    assert(nps5 >= 500 && "NPS at depth 5 must exceed 500 nodes/sec");
     std::cout << "PASS\n\n";
 }
 
@@ -364,6 +379,110 @@ static void test_perf_warm_tt_reduces_nodes() {
     std::cout << "  warmed: nodes=" << nodes2 << "  ttHits=" << hits2 << "\n";
 
     assert(hits2 >= hits1 && "warmed TT must hit at least as often as fresh TT");
+    std::cout << "PASS\n\n";
+}
+
+
+// Effective branching factor (EBF) = nodes(d) / nodes(d-1).
+// Ideal alpha-beta with perfect ordering achieves EBF ≈ sqrt(b) ≈ 5–6.
+// With move ordering and pruning the real EBF should stay well under 15.
+// A sudden EBF spike after a change means pruning broke somewhere.
+static void test_perf_branching_factor() {
+    std::cout << "--- test_perf_branching_factor ---\n";
+
+    const char* fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+    long long nodes[7] = {};
+    for (int d = 1; d <= 6; ++d)
+        nodes[d] = run_search_full(fen, d).stats.totalNodes;
+
+    std::cout << "  " << std::left
+              << std::setw(12) << "Transition"
+              << std::setw(12) << "N(d-1)"
+              << std::setw(12) << "N(d)"
+              << "EBF\n";
+    std::cout << "  " << std::string(44, '-') << "\n";
+
+    double maxEBF = 0.0;
+    for (int d = 2; d <= 6; ++d) {
+        double ebf = (nodes[d - 1] > 0)
+            ? static_cast<double>(nodes[d]) / nodes[d - 1]
+            : 0.0;
+        std::cout << "  " << std::left
+                  << std::setw(12) << (std::to_string(d-1) + " -> " + std::to_string(d))
+                  << std::setw(12) << nodes[d - 1]
+                  << std::setw(12) << nodes[d]
+                  << std::fixed << std::setprecision(2) << ebf << "\n";
+        if (ebf > maxEBF) maxEBF = ebf;
+    }
+
+    // Alpha-beta + move ordering should keep EBF well under 15
+    assert(maxEBF < 15.0 && "EBF must be < 15: pruning or move ordering may be broken");
+    std::cout << "PASS\n\n";
+}
+
+// Multi-position benchmark table — the single best reference for spotting
+// regressions or improvements after a code change.  Run this before and
+// after any change; compare Nodes, NPS, TT%, and FM% columns.
+//
+//  Nodes   — lower is better (pruning efficiency)
+//  NPS     — higher is better (raw eval/movegen speed)
+//  TT%     — ttHits / totalNodes × 100  (higher = TT working well)
+//  FM%     — firstMoveCutoffs / betaCutoffs × 100  (higher = move ordering better)
+//  Q%      — qNodes / totalNodes × 100  (fraction of work in qsearch)
+static void test_perf_benchmark_table() {
+    std::cout << "--- test_perf_benchmark_table ---\n";
+
+    struct Pos { const char* label; const char* fen; };
+    const Pos positions[] = {
+        { "Startpos",   "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" },
+        { "Italian",    "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1" },
+        { "Middlegame", "r1bq1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R1BQR1K1 w - - 0 1" },
+        { "Endgame",    "8/5k2/3p4/1p1Pp2p/pP2Pp1P/P4P2/8/1K6 w - - 0 1" },
+        { "Tactical",   "4r1k1/8/8/8/4N3/8/8/7K w - - 0 1" },
+    };
+    const int depths[] = { 4, 6 };
+
+    // Header
+    std::cout << "\n  " << std::left
+              << std::setw(12) << "Position"
+              << std::setw(5)  << "D"
+              << std::setw(10) << "Nodes"
+              << std::setw(9)  << "NPS"
+              << std::setw(7)  << "TT%"
+              << std::setw(7)  << "FM%"
+              << std::setw(7)  << "Q%"
+              << "\n";
+    std::cout << "  " << std::string(60, '-') << "\n";
+
+    for (const auto& pos : positions) {
+        for (int d : depths) {
+            SearchResult r = run_search_full(pos.fen, d);
+            long long nps = (r.elapsedMs > 0)
+                ? r.stats.totalNodes * 1000LL / r.elapsedMs
+                : r.stats.totalNodes * 1000LL;
+            double ttPct = (r.stats.totalNodes > 0)
+                ? 100.0 * r.stats.ttHits / r.stats.totalNodes : 0.0;
+            double fmPct = (r.stats.betaCutoffs > 0)
+                ? 100.0 * r.stats.firstMoveCutoffs / r.stats.betaCutoffs : 0.0;
+            double qPct  = (r.stats.totalNodes > 0)
+                ? 100.0 * r.stats.qNodes / r.stats.totalNodes : 0.0;
+
+            std::cout << "  " << std::left
+                      << std::setw(12) << pos.label
+                      << std::setw(5)  << d
+                      << std::setw(10) << r.stats.totalNodes
+                      << std::setw(9)  << nps
+                      << std::fixed << std::setprecision(1)
+                      << std::setw(7) << ttPct
+                      << std::setw(7) << fmPct
+                      << std::setw(7) << qPct
+                      << "\n";
+        }
+        std::cout << "\n";
+    }
+
+    std::cout << "  (Nodes/NPS: lower/higher = better  |  TT%/FM%/Q%: higher = better)\n";
     std::cout << "PASS\n\n";
 }
 
@@ -579,6 +698,8 @@ int main() {
     test_perf_tt_hits_active();
     test_perf_time_controlled_search();
     test_perf_warm_tt_reduces_nodes();
+    test_perf_branching_factor();
+    test_perf_benchmark_table();
 
     std::cout << "========== SECTION 5: Correctness Coverage ==========\n\n";
     test_coverage_mate_in_1_positions();
