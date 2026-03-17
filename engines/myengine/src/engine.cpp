@@ -32,11 +32,20 @@ int Engine::evaluateCurrentPosition() {
     return evaluator.evaluate(board, board.sideToMove());
 }
 
-bool Engine::applyMove(const std::string& uci) {
-    Move m = Move::fromUCI(uci);
-    if (!board.makeMove(m)) return false;
-    history.push_back(uci);
-    return true;
+bool Engine::applyMove(const std::string& moveStr) {
+    Move parsed_move = Move::fromUCI(moveStr);
+
+    std::vector<Move> legal_moves = board.generateLegalMoves();
+
+    for (const Move& legal_move : legal_moves) {
+        if (legal_move.start == parsed_move.start &&
+            legal_move.end == parsed_move.end &&
+            legal_move.promo == parsed_move.promo) {
+
+            return board.makeMove(legal_move);
+            }
+    }
+    return false;
 }
 
 bool Engine::undoMove() {

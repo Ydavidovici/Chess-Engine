@@ -1,0 +1,730 @@
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "MyEngine"]
+[Black "Stockfish_300"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "r1bqk2r/pp1pbppp/4pn2/4n3/2P5/1N4P1/PP1BPPBP/RN1QK2R w KQkq - 0 1"]
+[GameDuration "00:00:01"]
+[GameEndTime "2026-03-16T21:24:48.179 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:46.183 Eastern Daylight Time"]
+[PlyCount "19"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. Ba5 {+1.25/8 0.088s} Nxc4 {-1.16/2 0.001s} 2. Bxd8 {+4.35/8 0.22s}
+Ng4 {-3.41/2 0.001s} 3. Bxe7 {+9.55/8 0.28s} Nge3 {-5.31/2 0.010s}
+4. fxe3 {+10.55/8 0.15s} f5 {-6.51/2 0s} 5. Qd4 {+13.85/8 0.28s} f4 {-7.62/2 0s}
+6. Qxg7 {+16.70/8 0.37s} d6 {-8.65/2 0s} 7. Bf6 {+999.93/8 0.19s}
+Bd7 {-7.99/2 0s} 8. Qxh8+ {+999.95/8 0.11s} Kf7 {-9.26/3 0.001s}
+9. Qg7+ {+999.97/8 0.22s} Ke8 {-10.11/3 0s}
+10. Qe7# {+999.99/8 0.054s, White mates} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "Stockfish_300"]
+[Black "MyEngine"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "r1bqk2r/pp1pbppp/4pn2/4n3/2P5/1N4P1/PP1BPPBP/RN1QK2R w KQkq - 0 1"]
+[GameDuration "00:00:05"]
+[GameEndTime "2026-03-16T21:24:51.558 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:46.183 Eastern Daylight Time"]
+[PlyCount "58"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. Ba5 {+0.50/2 0.003s} b6 {-1.10/8 0.28s} 2. Bxa8 {+0.82/2 0.002s}
+Ba6 {-1.00/8 0.29s} 3. Bxb6 {+0.68/2 0.010s} Qxa8 {+1.50/8 0.16s}
+4. Rg1 {-3.28/2 0.001s} axb6 {+1.90/8 0.26s} 5. Qc2 {-4.55/2 0s}
+Nxc4 {+2.19/8 0.29s} 6. N1d2 {-5.11/2 0s} d5 {+2.15/8 0.19s}
+7. Rc1 {-4.85/2 0.002s} e5 {+2.50/8 0.19s} 8. Rh1 {-4.33/2 0.002s}
+Nxd2 {+2.70/8 0.24s} 9. Qxd2 {-4.03/2 0s} Bc4 {+3.30/8 0.17s}
+10. Qc2 {-4.42/2 0.001s} Qxa2 {+3.60/8 0.14s} 11. Qc3 {-2.81/2 0.001s}
+Qxb3 {+5.65/8 0.11s} 12. Qxe5 {-3.44/2 0.001s} Qb4+ {+5.60/8 0.23s}
+13. Kf1 {-3.39/2 0s} d4 {+5.80/8 0.33s} 14. b3 {-3.36/2 0s} Bd5 {+6.40/8 0.46s}
+15. f3 {-2.55/2 0.001s} O-O {+6.55/8 0.20s} 16. Rc7 {-5.56/2 0.001s}
+Be6 {+6.15/8 0.32s} 17. Kf2 {-4.96/2 0.001s} Bd6 {+11.40/8 0.30s}
+18. Qxd6 {-6.08/2 0.001s} Qxd6 {+11.85/8 0.31s} 19. Rhc1 {-7.51/2 0.004s}
+Qe5 {+12.60/8 0.089s} 20. Re7 {-5.94/2 0.003s} Qe3+ {+17.40/8 0.13s}
+21. Kg2 {-7.45/2 0s} Qxe2+ {+18.40/8 0.028s} 22. Kh1 {-6.85/2 0s}
+Qxf3+ {+19.45/8 0.068s} 23. Kg1 {-5.03/3 0.001s} Qe3+ {+19.55/8 0.040s}
+24. Kg2 {-7.25/2 0.007s} Qxc1 {+19.95/8 0.083s} 25. g4 {-7.91/2 0s}
+d3 {+23.60/8 0.077s} 26. h3 {-7.80/2 0s} d2 {+26.85/8 0.089s}
+27. Rc7 {-8.46/2 0s} Qxc7 {+999.92/8 0.071s} 28. Kg1 {-9.23/2 0.001s}
+Qg3+ {+999.97/8 0.076s} 29. Kh1 {-M2/1 0s} d1=Q# {+999.99/8 0.040s, Black mates}
+0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "MyEngine"]
+[Black "Stockfish_800"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "r2qkb1r/pp1n2pp/2p1pn2/3p1p2/3P1B2/2PBPN2/PP3PPP/R2QK2R w KQkq - 0 1"]
+[GameDuration "00:00:04"]
+[GameEndTime "2026-03-16T21:24:51.111 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:46.192 Eastern Daylight Time"]
+[PlyCount "47"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. c4 {+0.35/8 0.29s} Be7 {+1.92/2 0.003s} 2. Qb3 {+0.45/8 0.24s}
+Qa5+ {-0.39/2 0.002s} 3. Kf1 {+0.60/8 0.19s} Qb4 {-0.62/2 0.003s}
+4. Ng5 {+0.60/8 0.14s} Nf8 {-0.59/2 0.002s} 5. Qxb4 {+0.70/8 0.37s}
+Bxb4 {-0.76/2 0.001s} 6. cxd5 {+0.55/8 0.26s} h6 {-0.48/2 0.001s}
+7. Nxe6 {+3.45/8 0.19s} g5 {-2.74/2 0.002s} 8. Be5 {+4.16/8 0.20s}
+Nxe6 {-3.40/2 0.001s} 9. dxe6 {+4.75/8 0.076s} Rf8 {-3.94/2 0.001s}
+10. Bxf5 {+4.95/8 0.13s} Ke7 {-3.60/2 0.001s} 11. e4 {+5.10/8 0.13s}
+Rad8 {-3.61/2 0.002s} 12. Rc1 {+5.10/8 0.11s} Nxe4 {-4.04/2 0.002s}
+13. Bxe4 {+5.10/8 0.23s} Kxe6 {-3.15/2 0.001s} 14. Rc2 {+5.10/8 0.36s}
+g4 {-3.50/2 0.001s} 15. h3 {+5.15/8 0.43s} Rd7 {-3.41/2 0.001s}
+16. hxg4 {+7.20/8 0.14s} Ke7 {-5.87/2 0s} 17. Bf5 {+7.25/8 0.35s}
+Rxf5 {-5.16/2 0s} 18. gxf5 {+8.95/8 0.29s} Rxd4 {-6.19/2 0s}
+19. Bxd4 {+12.75/8 0.078s} Kf8 {-6.83/2 0s} 20. Rxh6 {+13.45/8 0.27s}
+Ba5 {-7.10/2 0.001s} 21. Rh7 {+14.75/8 0.094s} Ke8 {-7.28/2 0.001s}
+22. Rxb7 {+17.94/8 0.14s} c5 {-7.40/4 0.003s} 23. Rxc5 {+19.03/8 0.079s}
+Bc3 {-7.73/3 0.002s} 24. Rc8# {+999.99/8 0.048s, White mates} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "Stockfish_800"]
+[Black "MyEngine"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "r2qkb1r/pp1n2pp/2p1pn2/3p1p2/3P1B2/2PBPN2/PP3PPP/R2QK2R w KQkq - 0 1"]
+[GameDuration "00:00:01"]
+[GameEndTime "2026-03-16T21:24:47.897 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:46.272 Eastern Daylight Time"]
+[PlyCount "11"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. Ng5 {+0.74/2 0.002s} Qe7 {-0.29/8 0.37s} 2. Qc2 {+0.87/2 0.001s}
+c5 {-0.15/8 0.15s} 3. Qb3 {+1.09/2 0.001s} O-O-O {-0.15/8 0.32s}
+4. Qa4 {+1.14/2 0.001s} c4 {+0.15/8 0.32s} 5. Bxc4 {+1.68/2 0.002s}
+Nb6 {+2.20/8 0.26s} 6. Qxa7 {+0.49/2 0.002s, Black makes an illegal move: a8a7}
+1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "MyEngine"]
+[Black "Stockfish_1200"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "r2qk2r/pp2ppb1/n2p1np1/2pP3p/2P1P1bP/2N2N2/PP2BPP1/R1BQK2R w KQkq - 0 1"]
+[GameDuration "00:00:02"]
+[GameEndTime "2026-03-16T21:24:50.826 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:48.773 Eastern Daylight Time"]
+[PlyCount "10"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. Bf4 {+1.45/8 0.35s} O-O {-0.75/3 0.006s} 2. Qb3 {+1.50/8 0.46s}
+Nc7 {-0.54/3 0.025s} 3. Qxb7 {+1.85/8 0.45s} Qd7 {+0.84/3 0.003s}
+4. Nb5 {+2.60/8 0.34s} Rab8 {+1.32/5 0.004s} 5. Qxb8 {+7.45/8 0.31s}
+Rxb8 {+5.08/4 0.003s, White makes an illegal move: c7e8} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "Stockfish_1200"]
+[Black "MyEngine"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "r2qk2r/pp2ppb1/n2p1np1/2pP3p/2P1P1bP/2N2N2/PP2BPP1/R1BQK2R w KQkq - 0 1"]
+[GameDuration "00:00:01"]
+[GameEndTime "2026-03-16T21:24:50.738 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:48.928 Eastern Daylight Time"]
+[PlyCount "9"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. Ng5 {+1.02/4 0.006s} e5 {-1.05/8 0.45s} 2. f3 {+1.51/5 0.005s}
+Bd7 {-0.90/8 0.28s} 3. Bd2 {+1.42/7 0.003s} Qb6 {-0.75/8 0.43s}
+4. O-O {+1.72/7 0.004s} Qxb2 {-0.75/8 0.28s}
+5. Rf2 {+2.97/6 0.013s, Black makes an illegal move: a1b1} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "MyEngine"]
+[Black "TSCP_1700"]
+[Result "1-0"]
+[FEN "rnb1kb1r/3ppppp/8/qppPP3/8/5Q2/PP1n1PPP/R1B1KBNR w KQkq - 0 1"]
+[GameDuration "00:00:00"]
+[GameEndTime "2026-03-16T21:24:59.385 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:58.860 Eastern Daylight Time"]
+[PlyCount "1"]
+[SetUp "1"]
+[Termination "illegal move"]
+[TimeControl "10+0.1"]
+
+1. Bxd2 {+1.65/8 0.18s, Black makes an illegal move: e2e4} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "1"]
+[White "TSCP_1700"]
+[Black "MyEngine"]
+[Result "0-1"]
+[FEN "rnb1kb1r/3ppppp/8/qppPP3/8/5Q2/PP1n1PPP/R1B1KBNR w KQkq - 0 1"]
+[GameDuration "00:00:00"]
+[GameEndTime "2026-03-16T21:24:59.182 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:58.845 Eastern Daylight Time"]
+[PlyCount "0"]
+[SetUp "1"]
+[Termination "illegal move"]
+[TimeControl "10+0.1"]
+
+{White makes an illegal move: e2e4} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "MyEngine"]
+[Black "Stockfish_300"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "r2qk2r/pbpnbppp/1p1p1n2/4p3/2PPP3/P1NB4/1PQ1NPPP/R1B1K2R w KQkq - 0 1"]
+[GameDuration "00:00:06"]
+[GameEndTime "2026-03-16T21:24:58.443 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:51.995 Eastern Daylight Time"]
+[PlyCount "85"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. Kf1 {+0.75/8 0.20s} c6 {-0.14/2 0.003s} 2. Be3 {+0.80/8 0.28s}
+c5 {+0.05/2 0.002s} 3. d5 {+0.95/8 0.10s} g6 {-0.62/2 0.001s}
+4. Rd1 {+1.10/8 0.26s} Bc8 {-0.44/2 0.007s} 5. Ng1 {+1.15/8 0.29s}
+h5 {-0.40/2 0.001s} 6. Nf3 {+1.25/8 0.22s} h4 {-0.54/2 0.001s}
+7. h3 {+1.25/8 0.28s} a6 {-0.75/2 0.001s} 8. Rd2 {+1.35/8 0.14s}
+Nf8 {-0.40/2 0.001s} 9. Rh2 {+1.40/8 0.20s} a5 {+0.04/2 0.001s}
+10. Qa4+ {+1.51/8 0.19s} Qd7 {-0.56/2 0.001s} 11. Qxd7+ {+1.70/8 0.33s}
+N6xd7 {-0.21/2 0s} 12. Nb5 {+1.55/8 0.34s} Ba6 {-0.65/2 0.001s}
+13. Nc7+ {+4.35/8 0.065s} Kd8 {-4.98/4 0.010s} 14. Nxa8 {+4.70/8 0.064s}
+Rh5 {-4.66/2 0s} 15. b4 {+5.40/8 0.098s} f5 {-4.14/2 0.001s}
+16. exf5 {+5.30/8 0.23s} e4 {-4.35/2 0.002s} 17. fxg6 {+6.55/8 0.45s}
+Nxg6 {-1.56/2 0.001s} 18. Bxe4 {+6.50/8 0.11s} Bxc4+ {-4.06/2 0.002s}
+19. Kg1 {+6.55/8 0.036s} Nge5 {-4.90/2 0s} 20. Rc2 {+6.50/8 0.21s}
+cxb4 {-3.50/2 0.001s} 21. Nxe5 {+7.65/8 0.16s} Nxe5 {-3.70/2 0.006s}
+22. Bxb6+ {+8.35/8 0.19s} Kc8 {-3.43/2 0s} 23. f4 {+8.75/8 0.14s}
+Kb7 {-4.24/2 0.001s} 24. fxe5 {+9.05/8 0.059s} Rxe5 {-5.27/2 0s}
+25. Rxc4 {+10.10/8 0.13s} Bg5 {-4.94/2 0s} 26. Bxa5 {+10.85/8 0.064s}
+Kxa8 {-4.71/2 0s} 27. Bxb4 {+10.85/8 0.13s} Bh6 {-4.44/2 0s}
+28. Bxd6 {+12.25/8 0.086s} Rxe4 {-5.01/2 0s} 29. Rxe4 {+13.95/8 0.23s}
+Bd2 {-5.45/2 0.001s} 30. Ra4+ {+14.90/8 0.17s} Kb7 {-5.06/2 0.001s}
+31. Rxh4 {+14.95/8 0.016s} Be3+ {-5.14/2 0s} 32. Kh1 {+14.95/8 0.13s}
+Bf2 {-4.75/2 0s} 33. Ra4 {+15.15/8 0.030s} Be3 {-4.92/2 0s}
+34. Be5 {+15.14/8 0.065s} Kb6 {-4.70/2 0s} 35. d6 {+15.15/8 0.025s}
+Kb7 {-5.10/2 0s} 36. Rc4 {+16.70/8 0.11s} Ka8 {-4.90/2 0s}
+37. d7 {+16.80/8 0.20s} Bg5 {-5.80/2 0.001s} 38. h4 {+18.15/8 0.033s}
+Bxh4 {-6.25/2 0.001s} 39. Rcxh4 {+24.70/8 0.021s} Ka7 {-8.14/2 0s}
+40. Ra4+ {+999.93/8 0.035s} Kb7 {-8.61/2 0s} 41. d8=Q {+999.95/8 0.025s}
+Kc6 {-9.29/3 0s} 42. Rb4 {+999.97/8 0.088s} Kc5 {-9.14/3 0.001s}
+43. Qd6# {+999.99/8 0.092s, White mates} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "Stockfish_300"]
+[Black "MyEngine"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "r2qk2r/pbpnbppp/1p1p1n2/4p3/2PPP3/P1NB4/1PQ1NPPP/R1B1K2R w KQkq - 0 1"]
+[GameDuration "00:00:01"]
+[GameEndTime "2026-03-16T21:24:53.271 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:51.561 Eastern Daylight Time"]
+[PlyCount "21"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. d5 {+0.71/2 0.002s} O-O {-0.80/8 0.12s} 2. O-O {+0.65/2 0.001s}
+Nc5 {-0.80/8 0.14s} 3. Ra2 {+0.37/2 0.001s} Nxd3 {-0.70/8 0.20s}
+4. Qxd3 {+0.49/2 0.001s} Nd7 {-0.75/8 0.16s} 5. b4 {+0.21/2 0.001s}
+a5 {-0.70/8 0.074s} 6. Rb2 {+0.06/2 0.001s} axb4 {-0.65/8 0.21s}
+7. Nb1 {-0.01/2 0.002s} Nc5 {+0.90/8 0.10s} 8. Qe3 {-2.43/2 0.001s}
+bxa3 {+0.90/8 0.16s} 9. Rd2 {-2.48/2 0.001s} a2 {+5.55/8 0.13s}
+10. Nbc3 {-5.41/2 0.001s} a1=Q {+9.45/8 0.26s}
+11. Bb2 {-4.97/2 0.001s, Black makes an illegal move: d2b2} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "MyEngine"]
+[Black "Stockfish_800"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "rnbqk2r/pp2bpp1/5n1p/2P5/3p3B/2NB4/PPP2PPP/R2QK1NR w KQkq - 0 1"]
+[GameDuration "00:00:01"]
+[GameEndTime "2026-03-16T21:24:55.906 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:54.213 Eastern Daylight Time"]
+[PlyCount "16"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. Bxf6 {-0.05/8 0.33s} gxf6 {-0.58/2 0.002s} 2. Na4 {0.00/8 0.33s}
+Bd7 {-0.17/2 0.002s} 3. Be4 {-0.35/8 0.11s} Qa5+ {+7.80/2 0.002s}
+4. Qd2 {0.00/8 0.13s} Qxd2+ {+0.41/2 0.002s} 5. Kxd2 {-0.45/8 0.23s}
+d3 {+0.38/2 0.001s} 6. Bxb7 {+2.20/8 0.060s} O-O {-2.60/2 0.001s}
+7. Bxa8 {+3.45/8 0.27s} Nc6 {-2.98/2 0.001s} 8. cxd3 {+6.30/8 0.14s}
+Re8 {-3.99/2 0s, White makes an illegal move: g8g7} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "Stockfish_800"]
+[Black "MyEngine"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "rnbqk2r/pp2bpp1/5n1p/2P5/3p3B/2NB4/PPP2PPP/R2QK1NR w KQkq - 0 1"]
+[GameDuration "00:00:02"]
+[GameEndTime "2026-03-16T21:24:58.211 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:55.910 Eastern Daylight Time"]
+[PlyCount "23"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. Nb5 {+0.54/2 0.001s} Bxc5 {+0.30/8 0.22s} 2. Nf3 {+0.18/2 0.001s}
+O-O {-0.05/8 0.52s} 3. Qd2 {+0.53/2 0.001s} a6 {+0.50/8 0.22s}
+4. Bxf6 {-1.18/2 0.001s} Qxf6 {-0.35/8 0.16s} 5. Na3 {-0.19/2 0.001s}
+Nc6 {+0.65/8 0.32s} 6. O-O-O {-1.32/2 0.001s} Bh3 {+1.15/8 0.17s}
+7. Ne1 {-1.64/2 0.002s} Bb4 {+1.55/8 0.15s} 8. c3 {-2.83/2 0.001s}
+dxc3 {+4.55/8 0.096s} 9. Qxc3 {-3.58/2 0.002s} Bxc3 {+8.00/8 0.13s}
+10. Nc4 {-5.54/2 0s} b5 {+10.85/8 0.20s} 11. Bh7+ {-5.24/2 0.001s}
+Kxh7 {+13.80/8 0.033s}
+12. Rd5 {-5.78/2 0.001s, Black makes an illegal move: b2c3} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "MyEngine"]
+[Black "Stockfish_1200"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "rn1qkb1r/p4ppp/2p2n2/1p6/3Np3/2N1P1Pb/PP1PBP1P/R1BQK2R w KQkq - 0 1"]
+[GameDuration "00:00:02"]
+[GameEndTime "2026-03-16T21:25:01.017 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:58.815 Eastern Daylight Time"]
+[PlyCount "26"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. Qc2 {+0.74/8 0.22s} Be7 {-0.39/3 0.002s} 2. Nxe4 {+1.25/8 0.16s}
+O-O {-1.26/5 0.003s} 3. Bf3 {+1.75/8 0.19s} h6 {-0.71/5 0.003s}
+4. Nxb5 {+2.35/8 0.35s} Ng4 {+0.27/5 0.003s} 5. Nec3 {+2.35/8 0.18s}
+Ne5 {+1.20/5 0.002s} 6. Be4 {+2.20/8 0.28s} cxb5 {+2.84/4 0.002s}
+7. Bxa8 {+3.40/8 0.14s} Na6 {+2.40/5 0.002s} 8. Bd5 {+3.30/8 0.16s}
+Nb4 {+5.38/5 0.004s} 9. Qb3 {+3.40/8 0.16s} Nxd5 {+3.47/6 0.004s}
+10. Qxd5 {+3.50/8 0.077s} Bf6 {+1.55/4 0.002s} 11. d4 {+3.90/8 0.12s}
+Nd3+ {-1.66/3 0.002s} 12. Ke2 {+4.00/8 0.059s} Be6 {-1.42/4 0.003s}
+13. Qxd8 {+7.20/8 0.043s}
+Nxc1+ {-3.63/5 0.002s, White makes an illegal move: f6d8} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "Stockfish_1200"]
+[Black "MyEngine"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "rn1qkb1r/p4ppp/2p2n2/1p6/3Np3/2N1P1Pb/PP1PBP1P/R1BQK2R w KQkq - 0 1"]
+[GameDuration "00:00:02"]
+[GameEndTime "2026-03-16T21:25:01.012 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:58.816 Eastern Daylight Time"]
+[PlyCount "28"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. g4 {+0.47/4 0.006s} b4 {+0.80/8 0.21s} 2. Rg1 {-0.24/4 0.002s}
+bxc3 {+2.65/8 0.17s} 3. bxc3 {-1.07/5 0.003s} Bd6 {+2.60/8 0.46s}
+4. Nf5 {-1.37/6 0.005s} Bxh2 {+2.90/8 0.11s} 5. d4 {-1.31/5 0.003s}
+Bxg1 {+7.10/8 0.20s} 6. Qc2 {-2.35/6 0.003s} O-O {+7.65/8 0.34s}
+7. Bc4 {-2.88/6 0.003s} Bxg4 {+9.25/8 0.13s} 8. Nh6+ {-5.49/7 0.002s}
+gxh6 {+11.90/8 0.035s} 9. Rb1 {-5.95/9 0.004s} Nbd7 {+12.50/8 0.16s}
+10. Rb8 {-6.45/8 0.003s} Qxb8 {+17.74/8 0.069s} 11. Qd2 {-7.86/8 0.003s}
+Bh2 {+17.85/8 0.12s} 12. Ba3 {-8.07/8 0.003s} Bd6 {+17.95/8 0.061s}
+13. Bxd6 {-7.36/7 0.002s} Qb1+ {+999.97/8 0.012s} 14. Qd1 {-M2/245 0.023s}
+Qxd1# {+999.99/8 0.015s, Black mates} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "MyEngine"]
+[Black "TSCP_1700"]
+[Result "1-0"]
+[FEN "rnbq1rk1/p3b1pp/1pp1pn2/3p1p2/2P5/1PN2NP1/PB1PPPBP/R2Q1RK1 w - - 0 1"]
+[GameDuration "00:00:00"]
+[GameEndTime "2026-03-16T21:25:00.080 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:59.384 Eastern Daylight Time"]
+[PlyCount "1"]
+[SetUp "1"]
+[Termination "illegal move"]
+[TimeControl "10+0.1"]
+
+1. d4 {0.00/8 0.36s, Black makes an illegal move: d7d5} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "2"]
+[White "TSCP_1700"]
+[Black "MyEngine"]
+[Result "0-1"]
+[FEN "rnbq1rk1/p3b1pp/1pp1pn2/3p1p2/2P5/1PN2NP1/PB1PPPBP/R2Q1RK1 w - - 0 1"]
+[GameDuration "00:00:25"]
+[GameEndTime "2026-03-16T21:25:25.301 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:24:59.587 Eastern Daylight Time"]
+[PlyCount "2"]
+[SetUp "1"]
+[Termination "stalled connection"]
+[TimeControl "10+0.1"]
+
+1. e4 {+0.13/6 0.34s} fxe4 {+1.39/8 0.30s, White's connection stalls} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "MyEngine"]
+[Black "Stockfish_300"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "r1b2rk1/ppp1qppp/n4n2/1Nb5/5B2/4PN2/PPP2PPP/R2QKB1R w KQ - 0 1"]
+[GameDuration "00:00:08"]
+[GameEndTime "2026-03-16T21:25:09.657 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:01.086 Eastern Daylight Time"]
+[PlyCount "49"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. Bd3 {+1.10/8 0.69s} Bb6 {-1.07/2 0.002s} 2. Kf1 {+1.10/8 0.30s}
+Nc5 {-0.03/2 0.001s} 3. Ne5 {+1.10/8 0.47s} a6 {+1.02/2 0.016s}
+4. Nc3 {+1.20/8 0.42s} Rd8 {+0.45/2 0s} 5. Qf3 {+1.30/8 0.34s}
+Ba5 {+0.12/2 0.001s} 6. e4 {+1.25/8 0.43s} Be6 {+1.01/2 0.001s}
+7. a3 {+1.30/8 0.71s} c6 {+1.11/2 0.001s} 8. b4 {+1.55/8 0.31s}
+Bc7 {-0.07/2 0.002s} 9. bxc5 {+1.45/8 0.55s} Rac8 {-1.19/2 0s}
+10. Na4 {+4.55/8 0.46s} g6 {-1.56/2 0.001s} 11. Nb6 {+5.00/8 0.32s}
+Bxe5 {-2.16/2 0.001s} 12. Bxe5 {+6.95/8 0.31s} Ng4 {-2.71/2 0.001s}
+13. Bd6 {+7.20/8 0.27s} Qh4 {-3.82/2 0.001s} 14. Nxc8 {+7.10/8 0.49s}
+Rxc8 {-4.60/2 0s} 15. Rb1 {+7.81/8 0.24s} Rf8 {-4.23/2 0.001s}
+16. h3 {+8.20/8 0.53s} f5 {-4.75/2 0.002s} 17. g3 {+9.55/8 0.26s}
+Bd5 {-4.71/2 0.002s} 18. gxh4 {+16.95/8 0.24s} Bxe4 {-6.69/2 0s}
+19. Bxe4 {+19.20/8 0.11s} Rf6 {-7.62/2 0.001s} 20. hxg4 {+22.10/8 0.29s}
+Rxd6 {-8.78/2 0s} 21. cxd6 {+26.25/8 0.16s} fxe4 {-8.21/2 0s}
+22. Qxe4 {+29.20/8 0.094s} Kf8 {-9.42/2 0s} 23. Rxb7 {+999.95/8 0.14s}
+c5 {-9.17/2 0.001s} 24. Qe7+ {+999.97/8 0.18s} Kg8 {-13.58/2 0.001s}
+25. Rb8# {+999.99/8 0.15s, White mates} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "Stockfish_300"]
+[Black "MyEngine"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "r1b2rk1/ppp1qppp/n4n2/1Nb5/5B2/4PN2/PPP2PPP/R2QKB1R w KQ - 0 1"]
+[GameDuration "00:00:05"]
+[GameEndTime "2026-03-16T21:25:07.279 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:01.782 Eastern Daylight Time"]
+[PlyCount "32"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. a3 {+0.89/2 0.002s} Bb6 {-1.05/8 0.30s} 2. Bd3 {+0.91/2 0.012s}
+Nc5 {-1.05/8 0.47s} 3. Nc3 {+0.38/2 0.001s} Rd8 {-1.05/8 0.56s}
+4. Bg5 {+0.36/2 0.001s} Bf5 {-0.60/8 0.25s} 5. Bxf5 {-0.14/2 0.002s}
+Rxd1+ {-0.80/8 0.31s} 6. Kxd1 {-0.39/2 0s} g6 {-0.30/8 0.26s}
+7. Bd3 {-1.47/2 0.001s} Rd8 {-0.40/8 0.33s} 8. Ke2 {-1.13/2 0.001s}
+Qd6 {-0.65/8 0.37s} 9. Rad1 {-0.09/2 0.002s} Qe6 {-0.75/8 0.28s}
+10. Bxf6 {-0.53/2 0.001s} Qxf6 {-0.75/8 0.48s} 11. h4 {-1.03/2 0.001s}
+Ba5 {-0.20/8 0.28s} 12. Ne4 {-1.74/2 0.002s} Nxe4 {+0.41/8 0.29s}
+13. Rdg1 {-1.84/2 0s} Rxd3 {+5.75/8 0.26s} 14. g4 {-5.16/2 0s}
+Rd5 {+8.35/8 0.35s} 15. g5 {-6.78/2 0s} Qa6+ {+999.97/8 0.099s}
+16. c4 {-M2/4 0s} Qxc4# {+999.99/8 0.55s, Black mates} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "MyEngine"]
+[Black "Stockfish_800"]
+[Result "1-0"]
+[BlackTimeControl "10+0.1"]
+[FEN "rn2kb1r/1b1p1ppp/pq2pn2/2p5/Pp1P4/2N2NP1/1PP1PPBP/R1BQR1K1 w kq - 0 1"]
+[GameDuration "00:00:10"]
+[GameEndTime "2026-03-16T21:25:12.220 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:01.962 Eastern Daylight Time"]
+[PlyCount "71"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. a5 {-0.50/8 0.42s} Qa7 {-0.61/2 0.002s} 2. Na4 {+0.05/8 0.42s}
+Be7 {-0.97/2 0.005s} 3. Nb6 {+1.30/8 0.31s} cxd4 {-2.07/2 0.001s}
+4. Nxa8 {+1.40/8 0.27s} Bxa8 {-2.05/2 0.001s} 5. Nxd4 {+1.45/8 0.31s}
+Ng4 {-2.04/2 0.001s} 6. Bxa8 {+2.90/8 0.25s} Qxa8 {-2.30/2 0.001s}
+7. e4 {+2.95/8 0.33s} Nf6 {-2.20/2 0.002s} 8. e5 {+2.65/8 0.37s}
+Nd5 {-2.35/2 0.001s} 9. Qd3 {+2.55/8 0.28s} h6 {-2.24/2 0.002s}
+10. Bd2 {+2.55/8 0.52s} Bc5 {-2.29/2 0.001s} 11. Nb3 {+2.70/8 0.53s}
+Bf8 {-2.50/2 0.001s} 12. c3 {+2.65/8 0.41s} f5 {-2.93/2 0.001s}
+13. exf6 {+3.30/8 0.30s} Kf7 {-4.69/2 0.002s} 14. fxg7 {+2.55/8 0.55s}
+Kxg7 {-5.20/2 0.001s} 15. cxb4 {+3.20/8 0.40s} Bxb4 {-5.16/2 0.002s}
+16. Bxb4 {+5.05/8 0.31s} Nxb4 {-6.98/2 0.003s} 17. Qc3+ {+5.05/8 0.26s}
+Kg8 {-5.98/4 0.001s} 18. Qxb4 {+5.15/8 0.23s} Qf3 {-5.99/2 0.001s}
+19. Qxb8+ {+8.65/8 0.090s} Kg7 {-6.17/5 0.001s} 20. Qb6 {+9.20/8 0.26s}
+d5 {-4.48/2 0s} 21. Rxe6 {+13.00/8 0.18s} Rc8 {-4.49/2 0s}
+22. Re7+ {+999.95/8 0.13s} Kf8 {-6.15/3 0.001s} 23. Qf6+ {+999.97/8 0.14s}
+Qxf6 {-0.02/5 0.003s} 24. Re2 {0.00/8 0.18s} h5 {+0.98/2 0.001s}
+25. Rd1 {+0.15/8 0.26s} h4 {-0.35/2 0.001s} 26. Rxd5 {+1.40/8 0.16s}
+Rb8 {-0.43/2 0s} 27. Nd4 {+2.45/8 0.16s} h3 {-1.48/2 0.001s}
+28. Rf5 {+5.65/8 0.15s} Kf7 {-4.86/2 0.001s} 29. Rxf6+ {+6.60/8 0.080s}
+Kg7 {-6.30/4 0.001s} 30. Rxa6 {+12.60/8 0.031s} Rc8 {-5.44/2 0s}
+31. Nf5+ {+12.60/8 0.28s} Kf7 {-5.61/4 0s} 32. Nd6+ {+17.90/8 0.15s}
+Kg6 {-5.98/3 0s} 33. Nxc8+ {+18.20/8 0.20s} Kh7 {-6.55/4 0.001s}
+34. Rd6 {+999.95/8 0.40s} Kh8 {-M4/7 0.001s} 35. Re7 {+999.97/8 0.40s}
+Kg8 {-M2/124 0.012s} 36. Rd8# {+999.99/8 0.40s, White mates} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "Stockfish_800"]
+[Black "MyEngine"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "rn2kb1r/1b1p1ppp/pq2pn2/2p5/Pp1P4/2N2NP1/1PP1PPBP/R1BQR1K1 w kq - 0 1"]
+[GameDuration "00:00:04"]
+[GameEndTime "2026-03-16T21:25:12.841 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:08.266 Eastern Daylight Time"]
+[PlyCount "32"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. a5 {-0.03/2 0.002s} Qd8 {+0.40/8 0.28s} 2. Na2 {+0.61/2 0.001s}
+d5 {+0.99/8 0.35s} 3. c3 {+0.12/2 0.001s} Qxa5 {+0.90/8 0.23s}
+4. dxc5 {+0.02/2 0.001s} Bxc5 {+1.30/8 0.16s} 5. Bf4 {+0.06/2 0.002s}
+Qb6 {+1.95/8 0.18s} 6. Nd4 {-0.65/2 0.002s} Nbd7 {+2.40/8 0.36s}
+7. Nc1 {-0.47/2 0.001s} e5 {+3.90/8 0.23s} 8. Ncb3 {-2.01/2 0.002s}
+exf4 {+3.80/8 0.23s} 9. e4 {-2.26/2 0.002s} dxe4 {+4.85/8 0.45s}
+10. Bxe4 {-2.85/2 0.001s} Nxe4 {+6.65/8 0.21s} 11. Qg4 {-3.90/2 0.001s}
+bxc3 {+7.25/8 0.77s} 12. Qxg7 {-3.39/2 0s} cxb2 {+7.95/8 0.49s}
+13. Nxc5 {-2.23/2 0.008s} bxa1=Q {+9.10/8 0.20s} 14. Rxa1 {-2.44/2 0.001s}
+Qxc5 {+9.90/8 0.14s} 15. Nf5 {-4.16/2 0.003s} Qxf2+ {+999.97/8 0.075s}
+16. Kh1 {-M2/113 0.013s} Nxg3# {+999.99/8 0.11s, Black mates} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "MyEngine"]
+[Black "Stockfish_1200"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "r1b1kb1r/pp3npp/1qn1p3/2ppPp2/3P1P2/2PB1N2/PP4PP/R1BQK1NR w KQkq - 0 1"]
+[GameDuration "00:00:03"]
+[GameEndTime "2026-03-16T21:25:14.129 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:10.630 Eastern Daylight Time"]
+[PlyCount "24"]
+[SetUp "1"]
+[Termination "illegal move"]
+[WhiteTimeControl "10+0.1"]
+
+1. Ne2 {+0.35/8 0.25s} c4 {-1.00/5 0.006s} 2. Bc2 {+0.40/8 0.12s}
+Na5 {-1.11/5 0.005s} 3. Rb1 {+0.55/8 0.51s} Bd7 {-1.51/4 0.003s}
+4. O-O {+0.60/8 0.40s} g6 {-1.09/4 0.004s} 5. Be3 {+0.80/8 0.34s}
+Qc7 {-1.13/4 0.008s} 6. b3 {+0.80/8 0.20s} Nh6 {-0.87/3 0.004s}
+7. h3 {+0.90/8 0.19s} Nf7 {-1.20/6 0.005s} 8. Kh2 {+0.90/8 0.15s}
+O-O-O {-1.01/5 0.007s} 9. Qd2 {+0.85/8 0.24s} Kb8 {-0.94/6 0.005s}
+10. Ng3 {+0.85/8 0.35s} Be7 {-0.79/4 0.004s} 11. b4 {+1.10/8 0.15s}
+Nc6 {-0.69/4 0.003s} 12. b5 {+1.05/8 0.17s}
+Na5 {-0.81/4 0.004s, White makes an illegal move: h1e1} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "Stockfish_1200"]
+[Black "MyEngine"]
+[Result "0-1"]
+[BlackTimeControl "10+0.1"]
+[FEN "r1b1kb1r/pp3npp/1qn1p3/2ppPp2/3P1P2/2PB1N2/PP4PP/R1BQK1NR w KQkq - 0 1"]
+[GameDuration "00:00:08"]
+[GameEndTime "2026-03-16T21:25:21.347 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:13.325 Eastern Daylight Time"]
+[PlyCount "76"]
+[SetUp "1"]
+[WhiteTimeControl "10+0.1"]
+
+1. a4 {+1.08/5 0.007s} cxd4 {+0.70/8 0.21s} 2. Nxd4 {+1.08/4 0.002s}
+Bc5 {-0.05/8 0.26s} 3. Ndf3 {+1.15/4 0.005s} g5 {0.00/8 0.31s}
+4. b4 {+1.20/6 0.006s} Bxg1 {+1.20/8 0.21s} 5. Rxg1 {+1.48/4 0.005s}
+gxf4 {+1.35/8 0.20s} 6. b5 {+1.68/5 0.005s} Ncxe5 {+2.60/8 0.10s}
+7. Nd4 {-1.88/5 0.005s} Nxd3+ {+3.00/8 0.098s} 8. Qxd3 {-2.28/9 0.006s}
+e5 {+3.20/8 0.061s} 9. Bxf4 {-2.02/6 0.004s} exf4 {+4.10/8 0.13s}
+10. g3 {-2.32/7 0.003s} Ne5 {+4.70/8 0.17s} 11. Qe2 {-0.05/6 0.004s}
+Qc7 {+4.20/8 0.078s} 12. Kd1 {-2.65/5 0.004s} Kf7 {+4.80/8 0.11s}
+13. Qh5+ {-1.63/4 0.004s} Ng6 {+4.70/8 0.071s} 14. Kc2 {-1.41/4 0.003s}
+Bd7 {+3.95/8 0.15s} 15. Rae1 {-1.57/4 0.004s} fxg3 {+4.80/8 0.25s}
+16. Kb2 {-1.72/4 0.003s} gxh2 {+6.60/8 0.23s} 17. Rg2 {-2.56/5 0.003s}
+Rac8 {+5.85/8 0.47s} 18. Rc2 {-2.87/4 0.003s} Qg3 {+5.90/8 0.42s}
+19. Ree2 {-2.56/4 0.003s} h1=Q {+5.85/8 0.26s} 20. Qxh1 {-3.21/5 0.003s}
+Nf4 {+5.85/8 0.12s} 21. b6 {-2.91/5 0.004s} Qg6 {+6.95/8 0.36s}
+22. bxa7 {-1.97/4 0.005s} Bxa4 {+6.85/8 0.84s} 23. Rcd2 {-1.60/3 0.004s}
+Qb6+ {+6.90/8 0.28s} 24. Ka2 {-2.64/6 0.005s} Qxa7 {+6.75/8 0.80s}
+25. Qf3 {-1.56/6 0.002s} Bd1+ {+8.45/8 0.22s} 26. Kb1 {-2.28/8 0.005s}
+Qb6+ {+8.40/8 0.16s} 27. Rb2 {-2.55/8 0.004s} Qc7 {+8.15/8 0.17s}
+28. Ne6 {-2.75/5 0.002s} Bxe2 {+10.35/8 0.11s} 29. Rxe2 {-3.56/5 0.002s}
+Qb6+ {+9.15/8 0.058s} 30. Rb2 {-5.03/7 0.003s} Qg1+ {+8.70/8 0.078s}
+31. Kc2 {-4.89/9 0.003s} Nxe6 {+9.35/8 0.17s} 32. Qxf5+ {-3.39/7 0.003s}
+Ke7 {+9.30/8 0.037s} 33. Rb1 {-3.40/6 0.003s} Nd4+ {+18.90/8 0.10s}
+34. Kd3 {-7.97/9 0.004s} Qxb1+ {+22.80/8 0.081s} 35. Ke3 {-9.62/9 0.003s}
+Nxf5+ {+999.92/8 0.097s} 36. Kf2 {-11.15/9 0.003s} Rxc3 {+999.95/8 0.13s}
+37. Ke2 {-M4/24 0.005s} Qb2+ {+999.97/8 0.12s} 38. Kf1 {-M2/177 0.016s}
+Rc1# {+999.99/8 0.067s, Black mates} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "MyEngine"]
+[Black "TSCP_1700"]
+[Result "1-0"]
+[FEN "rnb2rk1/pp2pp1p/3p1np1/q1pP4/4P3/2P2P2/P1PQB1PP/R1B1K1NR w KQ - 0 1"]
+[GameDuration "00:00:00"]
+[GameEndTime "2026-03-16T21:25:21.478 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:20.954 Eastern Daylight Time"]
+[PlyCount "1"]
+[SetUp "1"]
+[Termination "illegal move"]
+[TimeControl "10+0.1"]
+
+1. Bb2 {+0.70/8 0.18s, Black makes an illegal move: e2e4} 1-0
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "3"]
+[White "TSCP_1700"]
+[Black "MyEngine"]
+[Result "0-1"]
+[FEN "rnb2rk1/pp2pp1p/3p1np1/q1pP4/4P3/2P2P2/P1PQB1PP/R1B1K1NR w KQ - 0 1"]
+[GameDuration "00:00:00"]
+[GameEndTime "2026-03-16T21:25:22.488 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:22.142 Eastern Daylight Time"]
+[PlyCount "0"]
+[SetUp "1"]
+[Termination "illegal move"]
+[TimeControl "10+0.1"]
+
+{White makes an illegal move: e2e4} 0-1
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "4"]
+[White "MyEngine"]
+[Black "Stockfish_300"]
+[Result "*"]
+[BlackTimeControl "10+0.1"]
+[FEN "rnbqk2r/p2nbppp/1pp1p3/3pP3/3P1B2/2NB1N2/PPP2PPP/R2Q1RK1 w kq - 0 1"]
+[GameDuration "00:00:03"]
+[GameEndTime "2026-03-16T21:25:25.469 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:21.896 Eastern Daylight Time"]
+[PlyCount "32"]
+[SetUp "1"]
+[Termination "unterminated"]
+[WhiteTimeControl "10+0.1"]
+
+1. Be3 {+1.10/8 0.23s} Ba6 {-1.14/2 0.001s} 2. Qe2 {+1.20/8 0.24s}
+Bb7 {-0.68/2 0.002s} 3. Ne1 {+1.05/8 0.35s} Qc8 {-0.99/2 0.001s}
+4. Qg4 {+1.10/8 0.21s} h5 {-1.60/2 0.001s} 5. Qxg7 {+2.60/8 0.098s}
+Rf8 {-3.93/2 0.002s} 6. Qh7 {+2.85/8 0.15s} Qc7 {-3.50/2 0.002s}
+7. Bh6 {+4.35/8 0.17s} c5 {-3.88/2 0.002s} 8. Nb5 {+3.40/8 0.23s}
+Qc8 {-3.94/2 0s} 9. Bxf8 {+3.80/8 0.37s} Bxf8 {-4.44/2 0s}
+10. Qg8 {+4.90/8 0.21s} a6 {-3.79/2 0.001s} 11. Nd6+ {+9.95/8 0.20s}
+Kd8 {-7.61/2 0.001s} 12. Nxc8 {+10.10/8 0.23s} Bxc8 {-7.61/2 0s}
+13. Qxf7 {+10.30/8 0.15s} cxd4 {-7.49/2 0s} 14. Nf3 {+11.30/8 0.087s}
+Bc5 {-7.28/2 0s} 15. Qxe6 {+11.10/8 0.31s} Kc7 {-8.41/2 0s}
+16. Qxd5 {+11.94/8 0.24s} Nc6 {-8.03/2 0s, No result} *
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "4"]
+[White "Stockfish_300"]
+[Black "MyEngine"]
+[Result "*"]
+[BlackTimeControl "10+0.1"]
+[FEN "rnbqk2r/p2nbppp/1pp1p3/3pP3/3P1B2/2NB1N2/PPP2PPP/R2Q1RK1 w kq - 0 1"]
+[GameDuration "00:00:03"]
+[GameEndTime "2026-03-16T21:25:25.469 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:22.426 Eastern Daylight Time"]
+[PlyCount "31"]
+[SetUp "1"]
+[Termination "unterminated"]
+[WhiteTimeControl "10+0.1"]
+
+1. Be3 {+0.99/2 0.002s} c5 {-0.90/8 0.30s} 2. Ne2 {+0.51/2 0.001s}
+c4 {+0.50/8 0.21s} 3. Bxh7 {-2.20/2 0.001s} Rxh7 {+1.00/8 0.096s}
+4. Re1 {-2.37/2 0.001s} Nc6 {+1.40/8 0.15s} 5. b3 {-2.48/2 0.002s}
+f6 {+1.69/8 0.17s} 6. Nf4 {-1.20/2 0.001s} Ndxe5 {+1.89/8 0.29s}
+7. dxe5 {+0.27/2 0.001s} fxe5 {+1.80/8 0.27s} 8. Ng6 {+0.59/2 0.001s}
+Bb4 {+1.70/8 0.24s} 9. Nfxe5 {+1.18/2 0.002s} Nxe5 {+1.86/8 0.18s}
+10. Nxe5 {+0.40/2 0.001s} Bxe1 {+1.70/8 0.17s} 11. Qg4 {+0.40/2 0.001s}
+Bxf2+ {+2.85/8 0.15s} 12. Bxf2 {+1.01/2 0.001s} Qf6 {+2.85/8 0.14s}
+13. Bd4 {+0.52/2 0.001s} b5 {+2.80/8 0.20s} 14. Rf1 {+2.02/2 0s}
+Qh6 {+2.65/8 0.14s} 15. b4 {+1.71/2 0.001s} Qxh2+ {+3.85/8 0.25s}
+16. Kf2 {+0.67/2 0s, No result} *
+
+[Event "?"]
+[Site "?"]
+[Date "2026.03.16"]
+[Round "4"]
+[White "MyEngine"]
+[Black "Stockfish_800"]
+[Result "*"]
+[BlackTimeControl "10+0.1"]
+[FEN "r1bqr1k1/p1pp1ppp/1pn2n2/4p3/2P5/P1N1P1P1/1P1P1PBP/R1BQK2R w KQ - 0 1"]
+[GameDuration "00:00:01"]
+[GameEndTime "2026-03-16T21:25:25.469 Eastern Daylight Time"]
+[GameStartTime "2026-03-16T21:25:23.677 Eastern Daylight Time"]
+[PlyCount "16"]
+[SetUp "1"]
+[Termination "unterminated"]
+[WhiteTimeControl "10+0.1"]
+
+1. f4 {+0.25/8 0.35s} e4 {-0.06/2 0.002s} 2. Qc2 {+0.95/8 0.16s}
+Bb7 {-0.39/2 0.001s} 3. Nd5 {+0.35/8 0.20s} Nxd5 {+0.18/2 0.007s}
+4. cxd5 {+0.40/8 0.26s} Na5 {+0.20/2 0.005s} 5. Bxe4 {+1.65/8 0.12s}
+Qf6 {+0.45/2 0.001s} 6. Bxh7+ {+1.90/8 0.27s} Kh8 {+1.05/5 0.002s}
+7. Be4 {+1.70/8 0.14s} b5 {+1.41/2 0.001s} 8. Qxc7 {+2.45/8 0.26s}
+Rac8 {+0.91/2 0.001s, No result} *
+

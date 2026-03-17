@@ -1,6 +1,9 @@
-import { spawn } from "bun";
+import {spawn} from "bun";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import {fileURLToPath} from "node:url";
+import {execSync} from "node:child_process";
+import fs from "node:fs";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,32 +16,47 @@ const BOOK_PATH = path.join(TOOLS_DIR, "UHO_4060_v1.epd");
 const MY_ENGINE = path.join(ENGINES_DIR, "myengine/build/myengine.exe");
 const TSCP_PATH = path.join(ENGINES_DIR, "tscp/tscp181/tscp181.exe");
 const STOCKFISH_PATH = path.join(ENGINES_DIR, "stockfish/stockfish/stockfish-windows-x86-64-avx2.exe");
+const STORAGE_DIR = path.join(__dirname, "../storage");
+
+function cleanupEngines() {
+    console.log("\n🧹 Sweeping up orphaned engine processes...");
+    try {
+        execSync("taskkill /F /IM myengine.exe /T", { stdio: "ignore" });
+        execSync("taskkill /F /IM cutechess-cli.exe /T", { stdio: "ignore" });
+        execSync("taskkill /F /IM tscp181.exe /T", { stdio: "ignore" });
+        console.log("✅ Cleanup complete.");
+    } catch (e) {}
+}
+
+process.on("SIGINT", () => { cleanupEngines(); process.exit(0); });
+process.on("exit", () => { cleanupEngines(); });
 
 // =========================================================
 
 async function runTournament() {
     console.log("🔥 Starting 1,000-Game Baseline Gauntlet! 🔥\n");
 
+    if (!fs.existsSync(STORAGE_DIR)) {
+        fs.mkdirSync(STORAGE_DIR, { recursive: true });
+        console.log(`📁 Created new storage directory at: ${STORAGE_DIR}`);
+    }
+
     const now = new Date();
     const pad = (n) => n.toString().padStart(2, '0');
     const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
-    const pgnFilename = `baseline_1000_games_${timestamp}.pgn`;
+    const pgnFilename = path.join(STORAGE_DIR, `tournament_${timestamp}.pgn`);
 
     const args = [
-        // Tells Cutechess to make Engine #1 play against everyone else, but they don't play each other
         "-tournament", "gauntlet",
 
-        // Add proto=uci to MyEngine and Stockfish
         "-engine", `name=MyEngine`, `cmd=${MY_ENGINE}`, `proto=uci`,
         "-engine", `name=Stockfish_300`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=10`, `proto=uci`,
         "-engine", `name=Stockfish_800`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=250`, `proto=uci`,
         "-engine", `name=Stockfish_1200`, `cmd=${STOCKFISH_PATH}`, `option.Skill Level=0`, `nodes=2000`, `proto=uci`,
 
-        // Add proto=xboard to TSCP
         "-engine", `name=TSCP_1700`, `cmd=${TSCP_PATH}`, `proto=xboard`,
 
         "-each",
-        // "proto=uci", <--- REMOVE THIS LINE
         "tc=10+0.1",
 
         "-rounds", "125",

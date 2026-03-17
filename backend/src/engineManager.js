@@ -326,7 +326,7 @@ export class CutechessManager extends EventEmitter {
         }
 
         args.push(
-            "-each", "proto=uci", `tc=${timeControl}`,
+            "-each", `tc=${timeControl}`,
             "-rounds", rounds.toString(),
             "-games", "2",
             "-repeat",
