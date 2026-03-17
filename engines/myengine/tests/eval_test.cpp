@@ -4,8 +4,8 @@
 #include "evaluator.h"
 #include "board.h"
 
-void assert_score(const Evaluator& ev, Board& b, Color stm, int min_val, int max_val, const char* label) {
-    int score = ev.evaluate(b, stm);
+void assert_score(const Evaluator& evaluator, Board& board, Color sideToMove, int min_val, int max_val, const char* label) {
+    int score = evaluator.evaluate(board, sideToMove);
     if (score < min_val || score > max_val) {
         std::cerr << "FAIL " << label << ": Score " << score
             << " not in range [" << min_val << ", " << max_val << "]\n";
@@ -16,27 +16,27 @@ void assert_score(const Evaluator& ev, Board& b, Color stm, int min_val, int max
 
 void test_material() {
     std::cout << "--- test_material ---\n";
-    Evaluator ev;
-    Board b;
+    Evaluator evaluator;
+    Board board;
 
-    b.loadFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    assert_score(ev, b, Color::WHITE, -20, 20, "Start Position (Equal)");
+    board.loadFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    assert_score(evaluator, board, Color::WHITE, -20, 20, "Start Position (Equal)");
 
-    b.loadFEN("rnbqkbnr/1ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    assert_score(ev, b, Color::WHITE, 80, 150, "White up 1 Pawn");
-    assert_score(ev, b, Color::BLACK, -150, -80, "Black down 1 Pawn (Negamax)");
+    board.loadFEN("rnbqkbnr/1ppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    assert_score(evaluator, board, Color::WHITE, 80, 150, "White up 1 Pawn");
+    assert_score(evaluator, board, Color::BLACK, -150, -80, "Black down 1 Pawn (Negamax)");
 }
 
 void test_positional() {
     std::cout << "--- test_positional ---\n";
-    Evaluator ev;
-    Board b;
+    Evaluator evaluator;
+    Board board;
 
-    b.loadFEN("7k/8/8/8/8/8/8/7N w - - 0 1");
-    int scoreBad = ev.evaluate(b, Color::WHITE);
+    board.loadFEN("2qk4/8/8/8/8/8/8/2QK3N w - - 0 1");
+    int scoreBad = evaluator.evaluate(board, Color::WHITE);
 
-    b.loadFEN("7k/8/8/8/4N3/8/8/8 w - - 0 1");
-    int scoreGood = ev.evaluate(b, Color::WHITE);
+    board.loadFEN("2qk4/8/8/8/4N3/8/8/2QK4 w - - 0 1");
+    int scoreGood = evaluator.evaluate(board, Color::WHITE);
 
     if (scoreGood > scoreBad) {
         std::cout << "PASS PST Logic (Center " << scoreGood << " > Rim " << scoreBad << ")\n";
@@ -50,14 +50,14 @@ void test_positional() {
 
 void test_symmetry() {
     std::cout << "--- test_symmetry ---\n";
-    Evaluator ev;
-    Board b;
+    Evaluator evaluator;
+    Board board;
 
-    b.loadFEN("7k/8/8/8/4P3/8/8/K7 w - - 0 1");
-    int whiteScore = ev.evaluate(b, Color::WHITE);
+    board.loadFEN("2qk4/8/8/8/8/8/8/2QK3N w - - 0 1");
+    int whiteScore = evaluator.evaluate(board, Color::WHITE);
 
-    b.loadFEN("k7/8/8/4p3/8/8/8/7K b - - 0 1");
-    int blackScore = ev.evaluate(b, Color::BLACK);
+    board.loadFEN("2qk4/8/8/8/4N3/8/8/2QK4 w - - 0 1");
+    int blackScore = evaluator.evaluate(board, Color::BLACK);
 
     if (whiteScore == blackScore) {
         std::cout << "PASS Symmetry (White " << whiteScore << " == Black " << blackScore << ")\n";
@@ -70,14 +70,14 @@ void test_symmetry() {
 
 void test_terminal_logic() {
     std::cout << "--- test_terminal_logic ---\n";
-    Evaluator ev;
-    Board b;
+    Evaluator evaluator;
+    Board board;
 
-    b.loadFEN("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
+    board.loadFEN("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
 
-    b.loadFEN("6k1/6Q1/6K1/8/8/8/8/8 b - - 0 1");
+    board.loadFEN("6k1/6Q1/6K1/8/8/8/8/8 b - - 0 1");
 
-    int mateScore = ev.evaluateTerminal(b, Color::BLACK);
+    int mateScore = evaluator.evaluateTerminal(board, Color::BLACK);
     if (mateScore == -100000) std::cout << "PASS Checkmate detection\n";
     else std::cerr << "FAIL Checkmate detection (Got " << mateScore << ")\n";
 }

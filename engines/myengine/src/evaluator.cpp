@@ -8,64 +8,64 @@ Evaluator::Evaluator() {
     initializePieceSquareTables();
 
     std::mt19937_64 rng(123456789);
-    std::uniform_int_distribution<uint64_t> dist;
+    std::uniform_int_distribution<uint64_t> distribution;
 
     zobristKeys.assign(12, std::vector<uint64_t>(64));
 
     for (auto& pieceType : zobristKeys) {
         for (auto& squareKey : pieceType) {
-            squareKey = dist(rng);
+            squareKey = distribution(rng);
         }
     }
-    zobristSide = dist(rng);
+    zobristSide = distribution(rng);
 }
 
 uint64_t Evaluator::generateZobristHash(const Board& board, bool sideToMove) const {
-    uint64_t h = 0;
+    uint64_t hash = 0;
 
-    for (int sq = 0; sq < 64; ++sq) {
-        uint64_t bit = 1ULL << sq;
+    for (int square = 0; square < 64; ++square) {
+        uint64_t bit = 1ULL << square;
 
-        for (int pi = 0; pi < 6; ++pi) {
-            if (board.pieceBB(Color::WHITE, static_cast<Board::PieceIndex>(pi)) & bit) {
-                h ^= zobristKeys[pi][sq];
+        for (int piece = 0; piece < 6; ++piece) {
+            if (board.pieceBB(Color::WHITE, static_cast<Board::PieceIndex>(piece)) & bit) {
+                hash ^= zobristKeys[piece][square];
                 break;
             }
         }
 
-        for (int pi = 0; pi < 6; ++pi) {
-            if (board.pieceBB(Color::BLACK, static_cast<Board::PieceIndex>(pi)) & bit) {
-                h ^= zobristKeys[pi + 6][sq];
+        for (int piece = 0; piece < 6; ++piece) {
+            if (board.pieceBB(Color::BLACK, static_cast<Board::PieceIndex>(piece)) & bit) {
+                hash ^= zobristKeys[piece + 6][square];
                 break;
             }
         }
     }
 
     if (sideToMove) {
-        h ^= zobristSide;
+        hash ^= zobristSide;
     }
 
-    return h;
+    return hash;
 }
 
-int Evaluator::evaluate(const Board& board, Color stm) const {
+int Evaluator::evaluate(const Board& board, Color sideToMove) const {
     int score = 0;
 
-    auto evalPieceType = [&](const std::vector<int>& wTable, const std::vector<int>& bTable, Board::PieceIndex pt) {
-        int val = pieceValues[pt];
-        uint64_t wbb = board.pieceBB(Color::WHITE, pt);
+    auto evalPieceType = [&](const std::vector<int>& whiteTable, const std::vector<int>& blackTable, Board::PieceIndex pieceTable) {
+        int value = pieceValues[pieceTable];
 
-        while (wbb) {
-            int sq = __builtin_ctzll(wbb);
-            score += (val + wTable[sq]);
-            wbb &= wbb - 1;
+        uint64_t whiteBitBoard = board.pieceBB(Color::WHITE, pieceTable);
+        while (whiteBitBoard) {
+            int square = __builtin_ctzll(whiteBitBoard);
+            score += (value + whiteTable[square]);
+            whiteBitBoard &= whiteBitBoard - 1;
         }
 
-        uint64_t bbb = board.pieceBB(Color::BLACK, pt);
-        while (bbb) {
-            int sq = __builtin_ctzll(bbb);
-            score -= (val + bTable[sq]);
-            bbb &= bbb - 1;
+        uint64_t blackBitBoard = board.pieceBB(Color::BLACK, pieceTable);
+        while (blackBitBoard) {
+            int square = __builtin_ctzll(blackBitBoard);
+            score -= (value + blackTable[square]);
+            blackBitBoard &= blackBitBoard - 1;
         }
     };
 
@@ -74,24 +74,23 @@ int Evaluator::evaluate(const Board& board, Color stm) const {
     evalPieceType(whiteBishopTable, blackBishopTable, Board::BISHOP);
     evalPieceType(whiteRookTable, blackRookTable, Board::ROOK);
     evalPieceType(whiteQueenTable, blackQueenTable, Board::QUEEN);
-
     evalPieceType(whiteKingTableMG, blackKingTableMG, Board::KING);
 
-    return (stm == Color::WHITE ? score : -score);
+    return (sideToMove == Color::WHITE ? score : -score);
 }
 
-int Evaluator::evaluateTerminal(const Board& board, Color stm) const {
-    if (board.isCheckmate(stm)) return -MATE_SCORE;
+int Evaluator::evaluateTerminal(const Board& board, const Color side_to_move) {
+    if (board.isCheckmate(side_to_move)) return -MATE_SCORE;
     return 0;
 }
 
 int Evaluator::evaluateMaterial(const Board& board) const {
-    auto countSetBits = [](uint64_t b) { return __builtin_popcountll(b); };
+    auto countSetBits = [](const uint64_t bits) {return __builtin_popcountll(bits);};
 
     int score = 0;
     for (int pt = 0; pt < PST_COUNT; ++pt) {
-        int whiteCount = countSetBits(board.pieceBB(Color::WHITE, static_cast<Board::PieceIndex>(pt)));
-        int blackCount = countSetBits(board.pieceBB(Color::BLACK, static_cast<Board::PieceIndex>(pt)));
+        const int whiteCount = countSetBits(board.pieceBB(Color::WHITE, static_cast<Board::PieceIndex>(pt)));
+        const int blackCount = countSetBits(board.pieceBB(Color::BLACK, static_cast<Board::PieceIndex>(pt)));
 
         score += pieceValues[pt] * (whiteCount - blackCount);
     }
@@ -101,11 +100,11 @@ int Evaluator::evaluateMaterial(const Board& board) const {
 int Evaluator::evaluatePositional(const Board& board) const {
     int score = 0;
 
-    auto applyPST = [&](uint64_t bb, const std::vector<int>& table, int sign) {
-        while (bb) {
-            int sq = __builtin_ctzll(bb);
-            score += sign * table[sq];
-            bb &= bb - 1;
+    auto applyPST = [&](uint64_t bitboard, const std::vector<int>& table, const int sign) {
+        while (bitboard) {
+            int square = __builtin_ctzll(bitboard);
+            score += sign * table[square];
+            bitboard &= bitboard - 1;
         }
     };
 
@@ -133,91 +132,87 @@ void Evaluator::initializePieceSquareTables() {
     // Rank 7 is massive (promotion threat).
     // -----------------------------------------------------------
     whitePawnTable = {
-        0,  0,  0,  0,  0,  0,  0,  0,
-        5, 10, 10,-20,-20, 10, 10,  5,
-        5, -5,  0,  5,  5,  0, -5,  5,
-        0,  0, 10, 40, 40, 10,  0,  0,  // Rank 4: +40 for e4/d4 (was 20)
-        5,  5, 20, 60, 60, 20,  5,  5,  // Rank 5: +60 for e5/d5
-       10, 10, 30, 80, 80, 30, 10, 10,  // Rank 6: Crushing
-       50, 50, 50, 50, 50, 50, 50, 50,
-        0,  0,  0,  0,  0,  0,  0,  0
-   };
+        0, 0, 0, 0, 0, 0, 0, 0,
+        5, 10, 10, -20, -20, 10, 10, 5,
+        5, -5, 0, 5, 5, 0, -5, 5,
+        0, 0, 10, 40, 40, 10, 0, 0, // Rank 4: +40 for e4/d4 (was 20)
+        5, 5, 20, 60, 60, 20, 5, 5, // Rank 5: +60 for e5/d5
+        10, 10, 30, 80, 80, 30, 10, 10, // Rank 6: Crushing
+        50, 50, 50, 50, 50, 50, 50, 50,
+        0, 0, 0, 0, 0, 0, 0, 0
+    };
 
     whiteKnightTable = {
-        -50,-40,-30,-30,-30,-30,-40,-50,
-        -40,-20,  0,  0,  0,  0,-20,-40,
-        -30,  0, 10, 15, 15, 10,  0,-30,
-        -30,  5, 15, 20, 20, 15,  5,-30,
-        -30,  0, 15, 20, 20, 15,  0,-30,
-        -30,  5, 10, 15, 15, 10,  5,-30,
-        -40,-20,  0,  5,  5,  0,-20,-40,
-        -50,-40,-30,-30,-30,-30,-40,-50
+        -50, -40, -30, -30, -30, -30, -40, -50,
+        -40, -20, 0, 0, 0, 0, -20, -40,
+        -30, 0, 10, 15, 15, 10, 0, -30,
+        -30, 5, 15, 20, 20, 15, 5, -30,
+        -30, 0, 15, 20, 20, 15, 0, -30,
+        -30, 5, 10, 15, 15, 10, 5, -30,
+        -40, -20, 0, 5, 5, 0, -20, -40,
+        -50, -40, -30, -30, -30, -30, -40, -50
     };
 
     whiteBishopTable = {
-        -20,-10,-10,-10,-10,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5, 10, 10,  5,  0,-10,
-        -10,  5,  5, 10, 10,  5,  5,-10,
-        -10,  0, 10, 10, 10, 10,  0,-10,
-        -10, 10, 10, 10, 10, 10, 10,-10,
-        -10,  5,  0,  0,  0,  0,  5,-10,
-        -20,-10,-10,-10,-10,-10,-10,-20
+        -20, -10, -10, -10, -10, -10, -10, -20,
+        -10, 0, 0, 0, 0, 0, 0, -10,
+        -10, 0, 5, 10, 10, 5, 0, -10,
+        -10, 5, 5, 10, 10, 5, 5, -10,
+        -10, 0, 10, 10, 10, 10, 0, -10,
+        -10, 10, 10, 10, 10, 10, 10, -10,
+        -10, 5, 0, 0, 0, 0, 5, -10,
+        -20, -10, -10, -10, -10, -10, -10, -20
     };
 
     whiteRookTable = {
-         0,  0,  0,  0,  0,  0,  0,  0,
-         5, 10, 10, 10, 10, 10, 10,  5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-        -5,  0,  0,  0,  0,  0,  0, -5,
-         0,  0,  0,  5,  5,  0,  0,  0
+        0, 0, 0, 0, 0, 0, 0, 0,
+        5, 10, 10, 10, 10, 10, 10, 5,
+        -5, 0, 0, 0, 0, 0, 0, -5,
+        -5, 0, 0, 0, 0, 0, 0, -5,
+        -5, 0, 0, 0, 0, 0, 0, -5,
+        -5, 0, 0, 0, 0, 0, 0, -5,
+        -5, 0, 0, 0, 0, 0, 0, -5,
+        0, 0, 0, 5, 5, 0, 0, 0
     };
 
     whiteQueenTable = {
-        -20,-10,-10, -5, -5,-10,-10,-20,
-        -10,  0,  0,  0,  0,  0,  0,-10,
-        -10,  0,  5,  5,  5,  5,  0,-10,
-         -5,  0,  5,  5,  5,  5,  0, -5,
-          0,  0,  5,  5,  5,  5,  0, -5,
-        -10,  5,  5,  5,  5,  5,  0,-10,
-        -10,  0,  5,  0,  0,  0,  0,-10,
-        -20,-10,-10, -5, -5,-10,-10,-20
+        -20, -10, -10, -5, -5, -10, -10, -20,
+        -10, 0, 0, 0, 0, 0, 0, -10,
+        -10, 0, 5, 5, 5, 5, 0, -10,
+        -5, 0, 5, 5, 5, 5, 0, -5,
+        0, 0, 5, 5, 5, 5, 0, -5,
+        -10, 5, 5, 5, 5, 5, 0, -10,
+        -10, 0, 5, 0, 0, 0, 0, -10,
+        -20, -10, -10, -5, -5, -10, -10, -20
     };
 
     // Castling incentives
     whiteKingTableMG = {
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -30,-40,-40,-50,-50,-40,-40,-30,
-        -20,-30,-30,-40,-40,-30,-30,-20,
-        -10,-20,-20,-20,-20,-20,-20,-10,
-         20, 20,  0,  0,  0,  0, 20, 20,
-         20, 30, 10,  0,  0, 10, 30, 20
+        -30, -40, -40, -50, -50, -40, -40, -30,
+        -30, -40, -40, -50, -50, -40, -40, -30,
+        -30, -40, -40, -50, -50, -40, -40, -30,
+        -30, -40, -40, -50, -50, -40, -40, -30,
+        -20, -30, -30, -40, -40, -30, -30, -20,
+        -10, -20, -20, -20, -20, -20, -20, -10,
+        20, 20, 0, 0, 0, 0, 20, 20,
+        20, 30, 10, 0, 0, 10, 30, 20
     };
 
     whiteKingTableEG = {
-        -50,-40,-30,-20,-20,-30,-40,-50,
-        -30,-20,-10,  0,  0,-10,-20,-30,
-        -30,-10, 20, 30, 30, 20,-10,-30,
-        -30,-10, 30, 40, 40, 30,-10,-30,
-        -30,-10, 30, 40, 40, 30,-10,-30,
-        -30,-10, 20, 30, 30, 20,-10,-30,
-        -30,-30,  0,  0,  0,  0,-30,-30,
-        -50,-30,-30,-30,-30,-30,-30,-50
+        -50, -40, -30, -20, -20, -30, -40, -50,
+        -30, -20, -10, 0, 0, -10, -20, -30,
+        -30, -10, 20, 30, 30, 20, -10, -30,
+        -30, -10, 30, 40, 40, 30, -10, -30,
+        -30, -10, 30, 40, 40, 30, -10, -30,
+        -30, -10, 20, 30, 30, 20, -10, -30,
+        -30, -30, 0, 0, 0, 0, -30, -30,
+        -50, -30, -30, -30, -30, -30, -30, -50
     };
 
-    // -----------------------------------------------------------
-    // 2. SAFE MIRRORING (Vertical Flip)
-    // Instead of reverse(), we manually map White[i] to Black[i^56]
-    // -----------------------------------------------------------
     auto mirror = [](const std::vector<int>& white, std::vector<int>& black) {
         black.resize(64);
         for (int i = 0; i < 64; ++i) {
-            black[i] = white[i ^ 56]; // A1 (0) -> A8 (56)
+            black[i] = white[i ^ 56];
         }
     };
 
