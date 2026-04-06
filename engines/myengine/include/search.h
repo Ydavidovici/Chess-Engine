@@ -1,40 +1,77 @@
-// include/search.h
 #pragma once
 
 #include "board.h"
-#include "move.h"
 #include "evaluator.h"
 #include "transpositionTable.h"
 #include "timeManager.h"
-#include <limits>
+#include "move.h"
 #include <vector>
-#include <cstdint>
+#include <atomic>
+#include <thread>
+#include <cstring>
 
 class Search {
 public:
-    static constexpr int INF = std::numeric_limits<int>::max() / 2;
+    Search(const Evaluator& evaluator, TranspositionTable& tt);
 
-    Search(const Evaluator &evaluator, TranspositionTable &tt);
+    Move findBestMove(Board& board, int maxDepth, int timeLeftMs = 0, int incrementMs = 0);
 
-    /**
-     * Legacy overload: no time management (infinite time budget).
-     */
-    Move findBestMove(Board &board,
-                      Color stm,
-                      int maxDepth);
+    void setThreadCount(int count);
+    int getThreadCount() const { return numThreads_; }
 
-    /**
-     * Timed search up to maxDepth plies, subject to given TimeManager.
-     */
-    Move findBestMove(Board &board,
-                      Color stm,
-                      int maxDepth,
-                      TimeManager &tm);
+    struct SearchStats {
+        long long totalNodes = 0;
+        long long qNodes = 0;
+        long long ttHits = 0;
+        long long betaCutoffs = 0;
+        long long firstMoveCutoffs = 0;
+
+        void operator+=(const SearchStats& other) {
+            totalNodes += other.totalNodes;
+            qNodes += other.qNodes;
+            ttHits += other.ttHits;
+            betaCutoffs += other.betaCutoffs;
+            firstMoveCutoffs += other.firstMoveCutoffs;
+        }
+
+        void reset() {
+            totalNodes = 0;
+            qNodes = 0;
+            ttHits = 0;
+            betaCutoffs = 0;
+            firstMoveCutoffs = 0;
+        }
+    };
+
+    const SearchStats& getStats() const { return aggregateStats_; }
+    void resetStats() { aggregateStats_.reset(); }
+
+    uint64_t getNodes() const { return aggregateStats_.totalNodes; }
 
 private:
-    const Evaluator &evaluator_;
-    TranspositionTable &tt_;
+    // Per-thread worker state: each thread gets its own copy
+    struct WorkerState {
+        SearchStats stats;
+        int history[2][64][64];
 
-    int negamax(Board &board, int depth, int alpha, int beta, Color stm, TimeManager &tm);
-    int quiescence(Board &board, int alpha, int beta, Color stm, TimeManager &tm);
+        void reset() {
+            stats.reset();
+            std::memset(history, 0, sizeof(history));
+        }
+    };
+
+    const Evaluator& evaluator_;
+    TranspositionTable& tt_;
+    TimeManager tm_;
+    std::atomic<bool> stopFlag_{false};
+    int numThreads_;
+    SearchStats aggregateStats_;
+
+    bool shouldStop() const;
+
+    void helperThreadMain(WorkerState& ws, Board board, int maxDepth, int threadId);
+
+    int negamax(WorkerState& ws, Board& board, int depth, int alpha, int beta, int plyFromRoot);
+    int quiescence(WorkerState& ws, Board& board, int alpha, int beta, int plyFromRoot);
+    void orderMoves(const WorkerState& ws, Board& board, std::vector<Move>& moves, const Move& ttMove);
 };

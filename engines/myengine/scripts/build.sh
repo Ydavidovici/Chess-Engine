@@ -12,6 +12,7 @@ BUILD_TYPE=${1:-Release}
 
 echo "=== Configuring (CMAKE_BUILD_TYPE=${BUILD_TYPE}) ==="
 cmake -S "${ENGINE_ROOT}" -B "${BUILD_DIR}" \
+  -G "MinGW Makefiles" \
   -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
 
 echo "=== Building ==="

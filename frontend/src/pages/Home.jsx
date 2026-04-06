@@ -1,9 +1,6 @@
-// src/pages/Home.jsx
 import {useState, useEffect} from "react";
-import ChessboardComponent from "../components/Chessboard.jsx";
-import Sidebar from "../components/Sidebar.jsx";
-import {health, startGame} from "../services/api.js";
-import "../../styles/app.css"
+import {health} from "../services/api.js";
+import "../../styles/app.css";
 
 export default function Home() {
     const [player1, setPlayer1] = useState("");
@@ -24,25 +21,9 @@ export default function Home() {
         runHealthCheck();
     });
 
-    const handleStartGame = async () => {
-        try {
-            const data = await startGame({
-                player1Id: player1,
-                player2Id: player2,
-            });
-
-            const newGameId = data.game_id;
-            setGameId(newGameId);
-            setGameStatus("In Progress");
-
-        } catch (error) {
-            console.error("Error starting game:", error);
-        }
-    };
-
     return (
-        <div className="bg-blue-500">
-            hello world!
+        <div className="bg-blue-500 flex flex-col items-center justify-center">
+            we live
         </div>
     );
 }

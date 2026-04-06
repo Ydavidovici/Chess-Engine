@@ -1,47 +1,34 @@
 #pragma once
 
 #include <cstdint>
-#include <unordered_map>
+#include <vector>
 #include "move.h"
 
 class TranspositionTable {
 public:
-        static constexpr int EXACT = 0;
-        static constexpr int LOWERBOUND = 1;
-        static constexpr int UPPERBOUND  = 2;
+    static constexpr int EXACT = 0;
+    static constexpr int LOWERBOUND = 1;
+    static constexpr int UPPERBOUND = 2;
+
     struct TTEntry {
-        int    value;
-        int    depth;
-        Move   bestMove;
-        int    flag;
-        static constexpr int EXACT      = TranspositionTable::EXACT;
-        static constexpr int LOWERBOUND = TranspositionTable::LOWERBOUND;
-        static constexpr int UPPERBOUND = TranspositionTable::UPPERBOUND;
-    };
-
-    TranspositionTable(size_t buckets = 0) {
-        if (buckets) table_.reserve(buckets);
-    }
-
-    void store(uint64_t key,
-               int value,
-               int depth,
-               Move bestMove,
-               int flag);
-
-    // **Legacy** probe API (must come after TTEntry is defined):
-    bool probe(uint64_t key, TTEntry &out) const;
-
-    // **New** probe API:
-    struct ProbeResult {
-        bool found;
-        int  value;
-        int  depth;
+        uint64_t key;
+        int value;
         Move bestMove;
-        int  flag;
+        int depth;
+        int flag;
     };
-    ProbeResult probe(uint64_t key) const;
+
+    TranspositionTable(size_t sizeInMB = 1024);
+
+    void clear();
+
+    void store(uint64_t key, int value, int depth, Move bestMove, int flag);
+
+    bool probe(uint64_t key, TTEntry& out) const;
 
 private:
-    std::unordered_map<uint64_t, TTEntry> table_;
+    std::vector<TTEntry> table_;
+    size_t numEntries_;
+
+    void resize(size_t sizeInMB);
 };

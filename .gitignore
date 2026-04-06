@@ -26,4 +26,10 @@ venv.bak/
 ehthumbs.db
 Thumbs.db
 
-engine
+engines/stockfish
+/engines/tscp/
+/engines/stockfish/
+/engines/cinnamon/
+/engines/stash/
+/engines/ethereal/
+/tools/
