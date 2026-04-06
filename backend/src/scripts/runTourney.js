@@ -31,8 +31,6 @@ function cleanupEngines() {
 process.on("SIGINT", () => { cleanupEngines(); process.exit(0); });
 process.on("exit", () => { cleanupEngines(); });
 
-// =========================================================
-
 async function runTournament() {
     console.log("🔥 Starting 1,000-Game Baseline Gauntlet! 🔥\n");
 
