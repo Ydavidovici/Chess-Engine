@@ -1,14 +1,13 @@
-import { spawn } from "bun";
-import { mkdir, writeFile } from "fs/promises";
-import { join, resolve } from "path";
-import { cpus } from "os";
-import packageJson from "./package.json"; // Bun handles JSON imports automatically
+import {spawn} from "bun";
+import {mkdir, writeFile} from "fs/promises";
+import {join, resolve} from "path";
+import {cpus} from "os";
+import packageJson from "../../package.json";
 
-// --- CONFIGURATION ---
-const ENGINE_SOURCE = resolve("../engines/myengine");
+const ENGINE_SOURCE = resolve("../../engines/myengine");
 const BUILD_ROOT = resolve("./builds");
-const BACKEND_ENTRY = "./src/server.js";
-const EXECUTABLE_NAME = "myengine"; // Must match add_executable in CMakeLists.txt
+const BACKEND_ENTRY = "../../server.js";
+const EXECUTABLE_NAME = "myengine";
 
 async function run(cmd, cwd) {
     console.log(`> ${cmd.join(" ")}`);
@@ -33,7 +32,7 @@ async function build() {
     const descIndex = args.indexOf("--desc");
     if (descIndex !== -1 && args[descIndex + 1]) {
         description = args[descIndex + 1];
-        args.splice(descIndex, 2); // Remove flag from args
+        args.splice(descIndex, 2);
     }
 
     const versionRegex = /^\d+\.\d+\.\d+(-[\w\.]+)?$/;
@@ -41,10 +40,10 @@ async function build() {
         finalVersion = args[0];
         console.log(`📌 Manual version override: ${finalVersion}`);
     } else {
-        const parts = finalVersion.split('.').map(Number);
+        const parts = finalVersion.split(".").map(Number);
         if (parts.length === 3) {
             parts[2] += 1;
-            finalVersion = parts.join('.');
+            finalVersion = parts.join(".");
             console.log(`🔄 Auto-incrementing to: ${finalVersion}`);
         } else {
             finalVersion = `${finalVersion}.1`;
@@ -66,14 +65,14 @@ async function build() {
 
     console.log(`🚀 Orchestrating Build: ${versionFolderName}`);
 
-    await mkdir(cmakeBuildDir, { recursive: true });
+    await mkdir(cmakeBuildDir, {recursive: true});
 
     try {
         await run([
             "cmake",
             "-S", ENGINE_SOURCE,
             "-B", cmakeBuildDir,
-            "-DCMAKE_BUILD_TYPE=Release"
+            "-DCMAKE_BUILD_TYPE=Release",
         ], process.cwd());
 
         const coreCount = cpus().length.toString();
@@ -81,7 +80,7 @@ async function build() {
             "cmake",
             "--build", cmakeBuildDir,
             "--config", "Release",
-            "-j", coreCount
+            "-j", coreCount,
         ], process.cwd());
 
         console.log("🍞 Bundling Bun Backend...");
@@ -106,7 +105,7 @@ async function build() {
             description: description || "None",
             buildDate: new Date().toISOString(),
             folder: versionFolderName,
-            cmakeType: "Release"
+            cmakeType: "Release",
         };
         await writeFile(join(versionDir, "meta.json"), JSON.stringify(metaData, null, 2));
 

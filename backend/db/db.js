@@ -1,18 +1,20 @@
-import { Database } from "bun:sqlite";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { players, games, gameMoves } from "./schema.js";
+import {Database} from "bun:sqlite";
+import {drizzle} from "drizzle-orm/bun-sqlite";
+import {players, games, gameMoves} from "./schema.js";
 import path from "node:path";
 
 const __dirname = import.meta.dirname;
 const __filename = import.meta.filename;
 
+// fixme: why use drizzle if we can use bun
 
-const sqlite = new Database(path.join(__dirname, "myengine.db"), { create: true });
+
+const sqlite = new Database(path.join(__dirname, "myengine.db"), {create: true});
 
 export const db = drizzle(sqlite, {
-  schema: {
-    players,
-    games,
-    gameMoves,
-  },
+    schema: {
+        players,
+        games,
+        gameMoves,
+    },
 });
