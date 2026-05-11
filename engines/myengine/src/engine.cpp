@@ -2,14 +2,12 @@
 
 Engine::Engine()
     : tt(64), searcher(evaluator, tt) {
-    board.initialize();
     history.clear();
 }
 
 Engine::~Engine() = default;
 
 void Engine::reset() {
-    board.initialize();
     history.clear();
 }
 

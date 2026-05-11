@@ -58,3 +58,11 @@ set_tests_properties(search_test PROPERTIES LABELS "tests")
 
 add_test(NAME tt_test COMMAND test_tt)
 set_tests_properties(tt_test PROPERTIES LABELS "tests")
+
+add_executable(perf_board_move tests/Performance/board_move_performance.cpp)
+
+target_link_libraries(perf_board_move PRIVATE core_engine)
+target_link_options(perf_board_move PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_test(NAME board_move_perf COMMAND perf_board_move)
+set_tests_properties(board_move_perf PROPERTIES LABELS "performance")

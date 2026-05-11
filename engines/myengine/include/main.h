@@ -37,8 +37,6 @@ public:
     bool isGameOver() const;
     GameData getGameData() const;
 
-    // --- NEW: Getters for Benchmarking ---
-    // These allow the Bench class to access internal components
     Search& getSearch() { return searcher; }
     Evaluator& getEvaluator() { return evaluator; }
     Board& getBoard() { return board; }
