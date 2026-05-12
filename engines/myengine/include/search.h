@@ -22,7 +22,8 @@ public:
     struct SearchStats {
         long long totalNodes = 0;
         long long qNodes = 0;
-        long long ttHits = 0;
+        long long ttHits = 0;       // probe found entry AND depth sufficient for score cutoff
+        long long ttProbes = 0;     // probe found any entry (depth-independent; used for move ordering)
         long long betaCutoffs = 0;
         long long firstMoveCutoffs = 0;
 
@@ -30,6 +31,7 @@ public:
             totalNodes += other.totalNodes;
             qNodes += other.qNodes;
             ttHits += other.ttHits;
+            ttProbes += other.ttProbes;
             betaCutoffs += other.betaCutoffs;
             firstMoveCutoffs += other.firstMoveCutoffs;
         }
@@ -38,6 +40,7 @@ public:
             totalNodes = 0;
             qNodes = 0;
             ttHits = 0;
+            ttProbes = 0;
             betaCutoffs = 0;
             firstMoveCutoffs = 0;
         }

@@ -65,7 +65,7 @@ Board::Board() {
 
     current_zobrist_key = calculateZobristKey(*this);
 
-    std::cout << "[DEBUG] Initial Zobrist Key: " << current_zobrist_key << std::endl;
+    // std::cout << "[DEBUG] Initial Zobrist Key: " << current_zobrist_key << std::endl;
 }
 
 uint64_t Board::calculateZobristKey(const Board& board) {
