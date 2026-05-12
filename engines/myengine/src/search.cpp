@@ -39,12 +39,12 @@ bool Search::shouldStop() const {
     return stopFlag_.load(std::memory_order_relaxed) || tm_.isTimeUp();
 }
 
-Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int incrementMs) {
+Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int incrementMs, int movesToGo) {
     aggregateStats_.reset();
     stopFlag_.store(false, std::memory_order_relaxed);
 
     if (timeLeftMs > 0) {
-        tm_.start(timeLeftMs, incrementMs, 0);
+        tm_.start(timeLeftMs, incrementMs, movesToGo);
     }
     else {
         tm_.start(50000, 0, 0);
