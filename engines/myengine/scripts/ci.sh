@@ -2,17 +2,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILD_DIR=build
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+ENGINE_ROOT="${SCRIPT_DIR}/.."
+BUILD_DIR="${ENGINE_ROOT}/build"
+
 rm -rf "$BUILD_DIR"
-echo "=== Cleaned $BUILD_DIR ==="
+echo "=== Cleaned build ==="
 
-mkdir "$BUILD_DIR"
-echo "=== Created $BUILD_DIR ==="
+cmake -S "$ENGINE_ROOT" -B "$BUILD_DIR" \
+  -G "MinGW Makefiles" \
+  -DCMAKE_BUILD_TYPE=Release
 
-pushd "$BUILD_DIR" >/dev/null
-cmake .. -DBUILD_PYTHON_BINDINGS=OFF
-cmake --build .
+cmake --build "$BUILD_DIR" -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+
+cd "$BUILD_DIR"
 ctest --output-on-failure
-popd >/dev/null
 
 echo "=== CI: build + test succeeded ==="
