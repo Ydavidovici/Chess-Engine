@@ -36,7 +36,7 @@ void Search::setThreadCount(int count) {
 }
 
 bool Search::shouldStop() const {
-    return stopFlag_.load(std::memory_order_relaxed) || tm_.isTimeUp();
+    return stopFlag_.load(std::memory_order_relaxed) || tm_.isHardTimeUp();
 }
 
 Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int incrementMs, int movesToGo) {
@@ -57,6 +57,8 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
     }
 
     Move bestMove = rootMoves[0];
+    Move prevBestMove;
+    bool hasPrevBest = false;
 
     std::vector<WorkerState> workers(numThreads_);
     for (auto& ws : workers) ws.reset();
@@ -69,6 +71,7 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
 
     for (int depth = 1; depth <= maxDepth; ++depth) {
         if (shouldStop()) break;
+        if (depth > 1 && tm_.isSoftTimeUp()) break;
 
         int alpha = -INF;
         int beta = INF;
@@ -106,6 +109,10 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
 
         if (!shouldStop() && foundLegalMove) {
             bestMove = currentBestMove;
+            const bool changed = hasPrevBest && !(bestMove == prevBestMove);
+            tm_.onIterationComplete(changed);
+            prevBestMove = bestMove;
+            hasPrevBest = true;
         }
     }
 
