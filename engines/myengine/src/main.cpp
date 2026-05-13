@@ -142,6 +142,9 @@ static bool dispatch_uci(const std::string& rawLine, Engine& engine) {
 }
 
 static void handle_uci(const std::string& line, Engine& engine) {
+    // TODO: OwnBook advertises "default true" but is effectively off until a BookFile is
+    // loaded. Consider advertising "default false" to match actual behaviour, or set
+    // use_book=true only after a successful load (see TODO in main.h).
     std::cout << "option name OwnBook type check default true\n";
     std::cout << "option name BookFile type string default \n";
     std::cout << "option name BookMaxFullmove type spin default 20 min 1 max 200\n";

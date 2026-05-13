@@ -59,6 +59,9 @@ private:
     Search searcher;
 
     Book opening_book;
+    // TODO: use_book defaults to true even when no book file is loaded, which causes
+    // handle_uci to advertise "OwnBook default true" while the feature is effectively off.
+    // Consider defaulting to false and flipping to true only on a successful BookFile load.
     bool use_book = true;
     int book_max_fullmove = 20;
 };

@@ -197,6 +197,9 @@ static void writeBE(std::ofstream& ofs, uint64_t v, int bytes) {
 
 static std::string makeTempBook(const std::vector<std::tuple<uint64_t, uint16_t, uint16_t>>& entries) {
     // Polyglot requires entries sorted by key; caller supplies sorted.
+    // FIXME: std::tmpnam is deprecated and triggers compiler warnings (another process can
+    // claim the name between generation and open). Replace with std::filesystem::temp_directory_path()
+    // plus a unique suffix, or platform-specific mkstemp / GetTempPath on Windows.
     std::string path = std::string(std::tmpnam(nullptr)) + ".bin";
     std::ofstream ofs(path, std::ios::binary);
     for (auto& [key, move, weight] : entries) {
@@ -274,6 +277,9 @@ static void test_probe_miss_returns_invalid() {
 // Verify the engine cutoff: position at fullmove > BookMaxFullmove
 // must not consult the book. We assert the precondition (fullmoveNumber
 // accessor) the cutoff logic in Engine::playMove relies on.
+// TODO: this only verifies the precondition, not the actual cutoff behaviour.
+// Add an integration test: load a book, set book_max_fullmove=1, advance to
+// move 2, call playMove, and assert a search result is returned (not a book move).
 static void test_cutoff_accessor() {
     std::cout << "--- test_cutoff_accessor ---\n";
     Engine eng;

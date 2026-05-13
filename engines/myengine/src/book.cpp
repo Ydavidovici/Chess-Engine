@@ -9,6 +9,10 @@
 
 namespace {
 
+// FIXME: polyPiece assumes Board::PieceIndex ordering is PAWN=0, KNIGHT=1, BISHOP=2,
+// ROOK=3, QUEEN=4, KING=5 (matching Polyglot's BP/WP/BN/WN/... interleaving). If
+// PieceIndex is ever reordered the hash silently breaks even though tests pass today.
+// Add a static_assert on the expected enum values to catch this at compile time.
 constexpr int polyPiece(Board::PieceIndex pt, Color c) {
     // Polyglot: BP=0,WP=1,BN=2,WN=3,BB=4,WB=5,BR=6,WR=7,BQ=8,WQ=9,BK=10,WK=11
     return 2 * static_cast<int>(pt) + (c == Color::WHITE ? 1 : 0);
@@ -45,6 +49,7 @@ uint64_t Book::polyglotKey(const Board& board) {
             uint64_t bb = board.pieceBB(c, piece);
             int piece_idx = polyPiece(piece, c);
             while (bb) {
+                // FIXME: __builtin_ctzll is GCC/Clang-only; use std::countr_zero (C++20 <bit>) for portability.
                 int sq = __builtin_ctzll(bb);
                 bb &= bb - 1;
                 key ^= polyglot::kRandom64[polyglot::kRandomPiece + 64 * piece_idx + sq];
@@ -114,6 +119,9 @@ Move Book::decodeMove(uint16_t raw, const Board& board) {
         }
     }
 
+    // FIXME: generateLegalMoves() is called once per book entry via gatherLegal -> decodeMove.
+    // For popular positions with many matching entries this generates legal moves N times.
+    // Pre-generate the list once in gatherLegal and pass it here to avoid the redundancy.
     auto legal = board.generateLegalMoves();
     for (const auto& m : legal) {
         if (m.start != from_sq || m.end != to_sq) continue;
@@ -170,6 +178,8 @@ std::vector<std::pair<Move, uint16_t>> Book::gatherLegal(uint64_t key, const Boa
     auto cmp = [](const Entry& e, uint64_t k) { return e.key < k; };
     auto lo = std::lower_bound(entries_.begin(), entries_.end(), key, cmp);
 
+    // FIXME: decodeMove calls generateLegalMoves() internally once per matching entry.
+    // Generate legal moves once here and pass them through instead of re-generating each time.
     std::vector<std::pair<Move, uint16_t>> out;
     for (auto it = lo; it != entries_.end() && it->key == key; ++it) {
         Move m = decodeMove(it->move, board);
