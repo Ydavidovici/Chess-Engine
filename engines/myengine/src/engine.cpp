@@ -62,6 +62,17 @@ std::vector<std::string> Engine::legalMoves() const {
 }
 
 std::string Engine::playMove(const PlaySettings& settings) {
+    // Book probe: handles transposition naturally (hash-keyed), bounded by fullmove cutoff.
+    if (use_book && opening_book.isLoaded() && board.fullmoveNumber() <= book_max_fullmove) {
+        Move book_move = opening_book.probe(board);
+        if (book_move.isValid()) {
+            board.makeMove(book_move);
+            std::string uci = book_move.toString();
+            history.push_back(uci);
+            return uci;
+        }
+    }
+
     Move best = searcher.findBestMove(
         board,
         settings.depth,

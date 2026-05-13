@@ -50,10 +50,9 @@ public:
 
     uint64_t zobristKey() const {return current_zobrist_key;}
 
-    // FIXME: polyglot?
-    uint64_t getPolyglotPieceKey(int piece, int square) const {
-        return piece_keys[piece][square];
-    }
+    int fullmoveNumber() const {return fullmove_number;}
+    int enPassantSquare() const {return en_passant_square_index;}
+    uint8_t castlingRights() const {return castling_rights;}
 
     static uint64_t calculateZobristKey(const Board& board);
 
