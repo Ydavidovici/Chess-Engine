@@ -1,5 +1,6 @@
 #pragma once
 #include "board.h"
+#include "book.h"
 #include "evaluator.h"
 #include "search.h"
 #include "transpositionTable.h"
@@ -41,6 +42,13 @@ public:
     Evaluator& getEvaluator() { return evaluator; }
     Board& getBoard() { return board; }
     const Board& getBoard() const { return board; }
+    Book& getOpeningBook() { return opening_book; }
+    const Book& getOpeningBook() const { return opening_book; }
+
+    bool loadOpeningBook(const std::string& path) { return opening_book.load(path); }
+    void setUseBook(bool on) { use_book = on; }
+    void setBookMaxFullmove(int n) { book_max_fullmove = n; }
+    int bookMaxFullmove() const { return book_max_fullmove; }
 
 private:
     Board board;
@@ -49,4 +57,11 @@ private:
     TranspositionTable tt;
     Evaluator evaluator;
     Search searcher;
+
+    Book opening_book;
+    // TODO: use_book defaults to true even when no book file is loaded, which causes
+    // handle_uci to advertise "OwnBook default true" while the feature is effectively off.
+    // Consider defaulting to false and flipping to true only on a successful BookFile load.
+    bool use_book = true;
+    int book_max_fullmove = 20;
 };

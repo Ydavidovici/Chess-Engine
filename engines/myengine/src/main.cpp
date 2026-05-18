@@ -25,6 +25,7 @@ static void handle_printboard(const std::string& line, Engine& engine);
 static void handle_makeMove(const std::string& line, Engine& engine);
 static void handle_bench(const std::string& line, Engine& engine);
 static void handle_eval(const std::string& line, Engine& engine);
+static void handle_setoption(const std::string& line, Engine& engine);
 
 static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"uci", handle_uci},
@@ -38,6 +39,7 @@ static std::unordered_map<std::string, CommandHandler> UCI_COMMANDS = {
     {"makemove", handle_makeMove},
     {"bench", handle_bench},
     {"eval", handle_eval},
+    {"setoption", handle_setoption},
 };
 
 
@@ -140,7 +142,56 @@ static bool dispatch_uci(const std::string& rawLine, Engine& engine) {
 }
 
 static void handle_uci(const std::string& line, Engine& engine) {
+    // TODO: OwnBook advertises "default true" but is effectively off until a BookFile is
+    // loaded. Consider advertising "default false" to match actual behaviour, or set
+    // use_book=true only after a successful load (see TODO in main.h).
+    std::cout << "option name OwnBook type check default true\n";
+    std::cout << "option name BookFile type string default \n";
+    std::cout << "option name BookMaxFullmove type spin default 20 min 1 max 200\n";
     std::cout << "uciok\n";
+    std::cout.flush();
+}
+
+static void handle_setoption(const std::string& line, Engine& engine) {
+    // Expected: "setoption name <Name> value <Value>" where Name/Value may contain spaces.
+    auto npos = line.find(" name ");
+    if (npos == std::string::npos) return;
+    std::string after_name = line.substr(npos + 6);
+
+    std::string name;
+    std::string value;
+    auto vpos = after_name.find(" value ");
+    if (vpos == std::string::npos) {
+        name = trim(after_name);
+    } else {
+        name = trim(after_name.substr(0, vpos));
+        value = trim(after_name.substr(vpos + 7));
+    }
+
+    if (name == "BookFile") {
+        if (value.empty()) {
+            engine.getOpeningBook().clear();
+            std::cout << "info string opening book cleared\n";
+        } else if (engine.loadOpeningBook(value)) {
+            std::cout << "info string opening book loaded ("
+                      << engine.getOpeningBook().size() << " entries)\n";
+        } else {
+            std::cout << "info string failed to load opening book: " << value << "\n";
+        }
+    } else if (name == "OwnBook") {
+        bool on = (value == "true" || value == "True" || value == "1");
+        engine.setUseBook(on);
+        std::cout << "info string OwnBook=" << (on ? "true" : "false") << "\n";
+    } else if (name == "BookMaxFullmove") {
+        try {
+            engine.setBookMaxFullmove(std::stoi(value));
+            std::cout << "info string BookMaxFullmove=" << engine.bookMaxFullmove() << "\n";
+        } catch (...) {
+            std::cout << "info string invalid BookMaxFullmove\n";
+        }
+    } else {
+        std::cout << "info string unknown option: " << name << "\n";
+    }
     std::cout.flush();
 }
 
