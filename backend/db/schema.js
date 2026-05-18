@@ -14,6 +14,16 @@ export const games = sqliteTable("games", {
     termination: text("termination"),
     startedAt: text("started_at").default(sql`CURRENT_TIMESTAMP`),
     finishedAt: text("finished_at"),
+    // Lichess-specific columns (null for local games)
+    source: text("source").default("local"),
+    lichessGameId: text("lichess_game_id").unique(),
+    variant: text("variant"),
+    rated: integer("rated"),
+    timeControl: text("time_control"),
+    whiteRating: integer("white_rating"),
+    blackRating: integer("black_rating"),
+    openingEco: text("opening_eco"),
+    openingName: text("opening_name"),
 });
 
 export const gameMoves = sqliteTable("game_moves", {
@@ -24,6 +34,6 @@ export const gameMoves = sqliteTable("game_moves", {
     fenAfter: text("fen_after"),
 }, (table) => {
     return {
-        gameIdx: index("game_idx").on(table.gameId)
+        gameIdx: index("game_idx").on(table.gameId),
     };
 });
