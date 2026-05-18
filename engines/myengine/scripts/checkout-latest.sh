@@ -14,4 +14,4 @@ branch="release-${latest#v}"
 git checkout -B "$branch" "$latest"
 
 echo "🌱 Working on branch ${branch} (from ${latest})"
-exec ./build.sh
+exec "$(dirname "${BASH_SOURCE[0]}")/build.sh"
