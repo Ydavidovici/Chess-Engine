@@ -11,8 +11,7 @@ public:
     Evaluator();
 
     int evaluate(const Board& board, Color side_to_move) const;
-    static int evaluateTerminal(const Board& board, Color side_to_move) ;
-    uint64_t generateZobristHash(const Board& board, bool sideToMove) const;
+    static int evaluateTerminal(const Board& board, Color side_to_move);
 
 private:
     int evaluateMaterial(const Board& board) const;
@@ -35,9 +34,6 @@ private:
     std::vector<int> blackQueenTable;
     std::vector<int> blackKingTableMG;
     std::vector<int> blackKingTableEG;
-
-    std::vector<std::vector<uint64_t>> zobristKeys;
-    uint64_t zobristSide;
 
     void initializePieceSquareTables();
 };

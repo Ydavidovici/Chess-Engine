@@ -1,4 +1,5 @@
 #include "main.h"
+#include "bench.h"
 
 Engine::Engine()
     : tt(64), searcher(evaluator, tt) {
@@ -46,21 +47,6 @@ bool Engine::applyMove(const std::string& moveStr) {
     return false;
 }
 
-bool Engine::undoMove() {
-    if (history.empty()) return false;
-    board.unmakeMove();
-    history.pop_back();
-    return true;
-}
-
-std::vector<std::string> Engine::legalMoves() const {
-    auto mv = board.generateLegalMoves();
-    std::vector<std::string> out;
-    out.reserve(mv.size());
-    for (auto& m : mv) out.push_back(m.toString());
-    return out;
-}
-
 std::string Engine::playMove(const PlaySettings& settings) {
     // Book probe: handles transposition naturally (hash-keyed), bounded by fullmove cutoff.
     if (use_book && opening_book.isLoaded() && board.fullmoveNumber() <= book_max_fullmove) {
@@ -95,8 +81,6 @@ bool Engine::isGameOver() const {
         || board.isInsufficientMaterial();
 }
 
-GameData Engine::getGameData() const {
-    GameData gd;
-    gd.moves = history;
-    return gd;
+void Engine::runBench(const BenchSettings& settings) {
+    Bench::run(*this, settings);
 }

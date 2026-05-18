@@ -13,12 +13,9 @@ struct PlaySettings {
     int time_left_ms;
     int increment_ms;
     int moves_to_go;
-    int tt_size_mb;
 };
 
-struct GameData {
-    std::vector<std::string> moves;
-};
+struct BenchSettings;
 
 class Engine {
 public:
@@ -29,17 +26,13 @@ public:
     bool setPosition(const std::string &fen);
 
     std::string playMove(const PlaySettings &settings);
+    void runBench(const BenchSettings& settings);
 
     std::string getFEN() const;
     int evaluateCurrentPosition();
     bool applyMove(const std::string &uci);
-    bool undoMove();
-    std::vector<std::string> legalMoves() const;
     bool isGameOver() const;
-    GameData getGameData() const;
 
-    Search& getSearch() { return searcher; }
-    Evaluator& getEvaluator() { return evaluator; }
     Board& getBoard() { return board; }
     const Board& getBoard() const { return board; }
     Book& getOpeningBook() { return opening_book; }
@@ -64,4 +57,6 @@ private:
     // Consider defaulting to false and flipping to true only on a successful BookFile load.
     bool use_book = true;
     int book_max_fullmove = 20;
+
+    friend class Bench;
 };

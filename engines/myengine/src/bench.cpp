@@ -39,7 +39,7 @@ void Bench::benchmarkEval(Engine& engine, int durationMs) {
 
         for (const auto& fen : BENCH_FENS) {
             engine.setPosition(fen);
-            volatile int score = engine.getEvaluator().evaluate(engine.getBoard(), engine.getBoard().sideToMove());
+            volatile int score = engine.evaluator.evaluate(engine.board, engine.board.sideToMove());
             count++;
         }
     }
@@ -71,7 +71,7 @@ void Bench::benchmarkSearch(Engine& engine, const BenchSettings& config) {
 
     for (const auto& fen : BENCH_FENS) {
         engine.setPosition(fen);
-        engine.getSearch().resetStats();
+        engine.searcher.resetStats();
 
         PlaySettings settings{};
 
@@ -91,7 +91,7 @@ void Bench::benchmarkSearch(Engine& engine, const BenchSettings& config) {
         auto end = std::chrono::high_resolution_clock::now();
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 
-        Search::SearchStats currentStats = engine.getSearch().getStats();
+        Search::SearchStats currentStats = engine.searcher.getStats();
         cumulativeStats += currentStats;
         totalTimeMs += ms;
 
