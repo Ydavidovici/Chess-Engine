@@ -46,11 +46,9 @@ add_executable(test_eval tests/eval_test.cpp)
 add_executable(test_search tests/search_test.cpp)
 add_executable(test_transposition_table tests/transposition_table_test.cpp)
 add_executable(test_book tests/book_test.cpp)
-
-foreach (test_exe IN ITEMS test_board_move test_eval test_search test_transposition_table test_book)
 add_executable(test_time_manager tests/time_manager_test.cpp)
 
-foreach (test_exe IN ITEMS test_board_move test_eval test_search test_transposition_table test_time_manager)
+foreach (test_exe IN ITEMS test_board_move test_eval test_search test_transposition_table test_book test_time_manager)
     target_link_libraries(${test_exe} PRIVATE core_engine)
 endforeach ()
 
