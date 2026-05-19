@@ -28,11 +28,6 @@ public:
 
     void printBoard() const;
 
-    // FIXME: is_square_attacked is a public alias for the private isSquareAttacked.
-    // Decide whether any external caller actually needs this, or if it can be removed.
-    bool is_square_attacked(int squareIndex, Color attackingColor) const {
-        return isSquareAttacked(squareIndex, attackingColor);
-    }
     bool inCheck(Color color) const;
     bool hasLegalMoves(Color color) const;
     bool isCheckmate(Color color) const;
@@ -52,11 +47,6 @@ public:
     int enPassantSquare() const {return en_passant_square_index;}
     uint8_t castlingRights() const {return castling_rights;}
 
-    // FIXME: calculateZobristKey computes the hash from scratch (used for initialization
-    // and one perf test); zobristKey() returns the incrementally-maintained hash used
-    // everywhere else. Decide if calculateZobristKey should be private — it's only called
-    // internally by loadFEN and by board_move_performance.cpp.
-    static uint64_t calculateZobristKey(const Board& board);
 
 private:
     std::array<uint64_t, PieceTypeCount> white_bitboards{};
@@ -100,6 +90,7 @@ private:
 
     bool isSquareAttacked(int squareIndex, Color attackingColor) const;
     int findKing(Color color) const;
+    static uint64_t calculateZobristKey(const Board& board);
 
     void printFENString() const;
     void printPseudoLegalMoves() const;
