@@ -26,7 +26,6 @@ public:
     bool setPosition(const std::string &fen);
 
     std::string playMove(const PlaySettings &settings);
-    void runBench(const BenchSettings& settings);
 
     std::string getFEN() const;
     int evaluateCurrentPosition();

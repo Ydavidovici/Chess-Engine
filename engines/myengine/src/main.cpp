@@ -290,7 +290,7 @@ static void handle_bench(const std::string& line, Engine& engine) {
         }
     }
 
-    engine.runBench(settings);
+    Bench::run(engine, settings);
 }
 
 int main() {

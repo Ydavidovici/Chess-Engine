@@ -1,5 +1,4 @@
 #include "main.h"
-#include "bench.h"
 
 Engine::Engine()
     : tt(64), searcher(evaluator, tt) {
@@ -81,6 +80,3 @@ bool Engine::isGameOver() const {
         || board.isInsufficientMaterial();
 }
 
-void Engine::runBench(const BenchSettings& settings) {
-    Bench::run(*this, settings);
-}
