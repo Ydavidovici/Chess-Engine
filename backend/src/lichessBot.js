@@ -2,7 +2,6 @@ import {eq} from "drizzle-orm";
 import {db} from "../db/db.js";
 import {players, games, gameMoves} from "../db/schema.js";
 
-// Engine outputs uppercase promotions (e7e8Q); Lichess requires lowercase (e7e8q)
 function normalizeMove(move) {
     if (move && move.length === 5) {
         return move.slice(0, 4) + move[4].toLowerCase();
@@ -10,10 +9,24 @@ function normalizeMove(move) {
     return move;
 }
 
-// Simple time allocation: remaining/30 + increment*0.85, clamped 200ms–10s
-function computeMoveTime(remainingMs, incMs) {
-    const estimate = Math.floor(remainingMs / 30 + (incMs || 0) * 0.85);
-    return Math.max(200, Math.min(estimate, 10000));
+function computeMoveTime(remainingMs, incMs, totalTimeMs) {
+    const inc = incMs ?? 0;
+
+    if (remainingMs == null) return 5000;
+
+    const total = totalTimeMs ?? remainingMs;
+
+    let cap;
+    if      (total >= 1_500_000) cap = 60_000;
+    else if (total >=   480_000) cap = 15_000;
+    else if (total >=   180_000) cap =  5_000;
+    else if (total >=    60_000) cap =  2_000;
+    else                         cap =  1_000;
+
+    const estimate = Math.floor(remainingMs / 30 + inc * 0.85);
+    const safety   = Math.floor(remainingMs * 0.8);
+
+    return Math.max(200, Math.min(estimate, cap, safety));
 }
 
 function mapResult(status, winner) {
@@ -38,20 +51,16 @@ export class LichessBot {
         this.activeGames = new Set();
         this.botProfile = null;
 
-        // Stream lifecycle
         this.eventController = null;
-        this.gameControllers = new Map(); // lichessGameId -> AbortController
+        this.gameControllers = new Map();
 
-        // DB state per game
-        this.dbGameIds = new Map();  // lichessGameId -> db games.id
-        this.savedPlies = new Map(); // lichessGameId -> number of plies already written
+        this.dbGameIds = new Map();
+        this.savedPlies = new Map();
 
         this.engine.on("fatal_error", (err) => {
             console.error("!! ENGINE FATAL ERROR !!", err);
         });
     }
-
-    // ─── Lifecycle ────────────────────────────────────────────────────────────
 
     async start() {
         console.log("[Bot] Starting...");
@@ -88,8 +97,6 @@ export class LichessBot {
         console.log("[Bot] Stopped.");
     }
 
-    // ─── Event stream ─────────────────────────────────────────────────────────
-
     async streamEvents() {
         this.eventController = new AbortController();
         console.log("[Bot] Listening for events...");
@@ -123,8 +130,6 @@ export class LichessBot {
         }
     }
 
-    // ─── Challenge handling ───────────────────────────────────────────────────
-
     async handleChallenge(challenge) {
         const variant = challenge.variant?.key;
 
@@ -134,7 +139,6 @@ export class LichessBot {
             return;
         }
 
-        // One game at a time to avoid shared-engine state corruption
         if (this.activeGames.size >= 1) {
             console.log(`[Challenge ${challenge.id}] Declining — already in a game`);
             await this.declineChallenge(challenge.id, "later");
@@ -157,8 +161,6 @@ export class LichessBot {
         }).catch(() => {});
     }
 
-    // ─── Game loop ────────────────────────────────────────────────────────────
-
     async playGame(gameId) {
         if (this.activeGames.has(gameId)) return;
         this.activeGames.add(gameId);
@@ -169,6 +171,7 @@ export class LichessBot {
 
         let myColor = null;
         let initialFen = "startpos";
+        let totalTimeMs = null;
 
         try {
             const res = await fetch(`https://lichess.org/api/bot/game/stream/${gameId}`, {
@@ -195,6 +198,8 @@ export class LichessBot {
                     status = obj.state?.status ?? "started";
                     winner = obj.state?.winner ?? null;
 
+                    totalTimeMs = obj.clock?.initial ?? null;
+
                     await this.engine.uciNewGame();
                     await this.createDbGame(gameId, {
                         whiteUsername,
@@ -208,7 +213,6 @@ export class LichessBot {
                         blackRating: obj.black?.rating ?? null,
                     });
 
-                    // Save any moves already on the board (reconnection case)
                     await this.saveNewMoves(gameId, movesStr);
 
                 } else if (obj.type === "gameState") {
@@ -230,7 +234,7 @@ export class LichessBot {
                 }
 
                 if (myColor && this.isMyTurn(initialFen, movesStr, myColor)) {
-                    await this.makeMove(gameId, initialFen, movesStr, myColor, timeInfo);
+                    await this.makeMove(gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs);
                 }
             });
 
@@ -245,7 +249,7 @@ export class LichessBot {
         }
     }
 
-    async makeMove(gameId, initialFen, movesStr, myColor, timeInfo) {
+    async makeMove(gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs) {
         console.log(`[${gameId}] My turn (${myColor}).`);
 
         const movesArray = movesStr.trim() === "" ? [] : movesStr.trim().split(" ");
@@ -253,7 +257,7 @@ export class LichessBot {
 
         const myTime = myColor === "w" ? timeInfo.wtime : timeInfo.btime;
         const myInc  = myColor === "w" ? timeInfo.winc  : timeInfo.binc;
-        const moveTimeMs = computeMoveTime(myTime ?? 30000, myInc ?? 0);
+        const moveTimeMs = computeMoveTime(myTime, myInc, totalTimeMs);
 
         const rawMove = await this.engine.go({moveTime: moveTimeMs});
         const bestMove = normalizeMove(rawMove);
@@ -295,8 +299,6 @@ export class LichessBot {
             headers: this.authHeader,
         }).catch(() => {});
     }
-
-    // ─── DB helpers ───────────────────────────────────────────────────────────
 
     async upsertPlayer(username) {
         await db.insert(players).values({name: username}).onConflictDoNothing();
@@ -363,14 +365,12 @@ export class LichessBot {
         this.savedPlies.delete(lichessGameId);
     }
 
-    // ─── Challenge creation ───────────────────────────────────────────────────
-
-    async createChallenge(username, limit, increment) {
-        console.log(`Challenging ${username}...`);
+    async createChallenge(username, limit, increment, rated = true) {
+        console.log(`Challenging ${username} (${limit}+${increment}, ${rated ? "rated" : "casual"})...`);
         const body = new URLSearchParams({
             "clock.limit": limit,
             "clock.increment": increment,
-            rated: "true",
+            rated: rated ? "true" : "false",
         });
         const res = await fetch(`https://lichess.org/api/challenge/${username}`, {
             method: "POST",
@@ -381,12 +381,12 @@ export class LichessBot {
         return res.json();
     }
 
-    async createOpenChallenge(limit, increment) {
-        console.log("Creating open challenge...");
+    async createOpenChallenge(limit, increment, rated = true) {
+        console.log(`Creating open challenge (${limit}+${increment}, ${rated ? "rated" : "casual"})...`);
         const body = new URLSearchParams({
             "clock.limit": limit,
             "clock.increment": increment,
-            rated: "true",
+            rated: rated ? "true" : "false",
         });
         const res = await fetch("https://lichess.org/api/challenge/open", {
             method: "POST",
@@ -420,8 +420,8 @@ export class LichessBot {
         }).catch(() => {});
     }
 
-    async huntWeakestBot(limit, increment) {
-        console.log("Hunting weakest bot...");
+    async huntWeakestBot(limit, increment, rated = true) {
+        console.log(`Hunting weakest bot (${limit}+${increment}, ${rated ? "rated" : "casual"})...`);
 
         const res = await fetch("https://lichess.org/api/bot/online?nb=50", {
             headers: {Accept: "application/x-ndjson"},
@@ -447,7 +447,7 @@ export class LichessBot {
                 const body = new URLSearchParams({
                     "clock.limit": limit,
                     "clock.increment": increment,
-                    rated: "true",
+                    rated: rated ? "true" : "false",
                 });
                 const cRes = await fetch(`https://lichess.org/api/challenge/${target.username}`, {
                     method: "POST",
@@ -471,14 +471,11 @@ export class LichessBot {
         throw new Error("Hunt failed — all candidates ignored our challenges.");
     }
 
-    // ─── NDJSON stream reader ─────────────────────────────────────────────────
-
     async readNdjsonStream(readableStream, signal, callback) {
         const reader = readableStream.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
 
-        // Cancel the reader immediately when the signal fires
         const onAbort = () => reader.cancel().catch(() => {});
         signal?.addEventListener("abort", onAbort, {once: true});
 

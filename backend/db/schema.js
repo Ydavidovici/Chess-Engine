@@ -14,7 +14,6 @@ export const games = sqliteTable("games", {
     termination: text("termination"),
     startedAt: text("started_at").default(sql`CURRENT_TIMESTAMP`),
     finishedAt: text("finished_at"),
-    // Lichess-specific columns (null for local games)
     source: text("source").default("local"),
     lichessGameId: text("lichess_game_id").unique(),
     variant: text("variant"),

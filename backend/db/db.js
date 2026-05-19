@@ -4,7 +4,6 @@ import * as schema from "./schema.js";
 
 const sqlite = new Database("myengine.db");
 
-// Ensure the base tables exist
 sqlite.run(`
     CREATE TABLE IF NOT EXISTS players (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,7 +35,6 @@ sqlite.run(`
 
 sqlite.run(`CREATE INDEX IF NOT EXISTS game_idx ON game_moves(game_id)`);
 
-// Idempotent migrations — each ALTER is wrapped so re-runs are safe
 const migrations = [
     "ALTER TABLE games ADD COLUMN source TEXT DEFAULT 'local'",
     "ALTER TABLE games ADD COLUMN lichess_game_id TEXT",
@@ -53,11 +51,9 @@ for (const stmt of migrations) {
     try {
         sqlite.run(stmt);
     } catch (_) {
-        // Column already exists — ignore
     }
 }
 
-// Unique index on lichess_game_id (idempotent)
 try {
     sqlite.run("CREATE UNIQUE INDEX IF NOT EXISTS lichess_game_id_idx ON games(lichess_game_id)");
 } catch (_) {}

@@ -172,9 +172,9 @@ app.get("/api/lichess/status", (req, res) => {
 
 app.post("/api/lichess/challenge/open", async (req, res) => {
     if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-    const {limit = 180, increment = 0} = req.body;
+    const {limit = 180, increment = 0, rated = true} = req.body;
     try {
-        const result = await lichessBotInstance.createOpenChallenge(limit, increment);
+        const result = await lichessBotInstance.createOpenChallenge(limit, increment, rated);
         res.json({status: "success", data: result});
     } catch (err) {
         res.status(500).json({error: err.message});
@@ -194,9 +194,9 @@ app.post("/api/lichess/challenge/ai", async (req, res) => {
 
 app.post("/api/lichess/challenge/weakest", async (req, res) => {
     if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-    const {limit = 180, increment = 0} = req.body;
+    const {limit = 180, increment = 0, rated = true} = req.body;
     try {
-        const result = await lichessBotInstance.huntWeakestBot(limit, increment);
+        const result = await lichessBotInstance.huntWeakestBot(limit, increment, rated);
         res.json(result);
     } catch (err) {
         res.status(500).json({error: err.message});
