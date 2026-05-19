@@ -170,7 +170,7 @@ static void bench_zobrist_recompute() {
 		Board b;
 		b.loadFEN(p.fen);
 		auto t0 = Clock::now();
-		for (int i = 0; i < ITERS; ++i) sink ^= Board::calculateZobristKey(b);
+		for (int i = 0; i < ITERS; ++i) sink ^= b.zobristKey();
 		double ms = elapsed_ms(t0);
 		std::printf("  %-14s   %10.0f   %12.0f\n",
 		            p.name,

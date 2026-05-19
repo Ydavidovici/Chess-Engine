@@ -110,16 +110,6 @@ app.post("/api/engine/cancel", async (req, res) => {
     }
 });
 
-app.post("/api/arena/trigger", async (req, res) => {
-    const {games = 10, depth = 6} = req.body;
-    console.log(`[Arena] Starting match: MyEngine vs Stockfish (${games} games)`);
-
-    res.json({
-        status: "ignored",
-        message: "Arena gauntlet endpoint is currently disabled pending refactoring.",
-    });
-});
-
 app.post("/api/lichess/start", async (req, res) => {
     if (lichessBotInstance) {
         return res.status(400).json({error: "Bot is already running."});
@@ -201,17 +191,6 @@ app.post("/api/lichess/challenge/weakest", async (req, res) => {
     } catch (err) {
         res.status(500).json({error: err.message});
     }
-});
-
-app.post("/api/start_game", (req, res) => {
-    const {player1_id, player2_id} = req.body;
-    console.log(`[Local Game] Request to start game: ${player1_id} vs ${player2_id}`);
-
-    res.json({
-        status: "started",
-        gameId: "local_game_" + Date.now(),
-        message: "Local game logic not yet fully implemented, but request received.",
-    });
 });
 
 const PORT = process.env.PORT || 8000;

@@ -1,51 +1,10 @@
 #include "evaluator.h"
 #include <algorithm>
-#include <random>
 
 static constexpr int MATE_SCORE = 100000;
 
 Evaluator::Evaluator() {
     initializePieceSquareTables();
-
-    std::mt19937_64 rng(123456789);
-    std::uniform_int_distribution<uint64_t> distribution;
-
-    zobristKeys.assign(12, std::vector<uint64_t>(64));
-
-    for (auto& pieceType : zobristKeys) {
-        for (auto& squareKey : pieceType) {
-            squareKey = distribution(rng);
-        }
-    }
-    zobristSide = distribution(rng);
-}
-
-uint64_t Evaluator::generateZobristHash(const Board& board, bool sideToMove) const {
-    uint64_t hash = 0;
-
-    for (int square = 0; square < 64; ++square) {
-        uint64_t bit = 1ULL << square;
-
-        for (int piece = 0; piece < 6; ++piece) {
-            if (board.pieceBB(Color::WHITE, static_cast<Board::PieceIndex>(piece)) & bit) {
-                hash ^= zobristKeys[piece][square];
-                break;
-            }
-        }
-
-        for (int piece = 0; piece < 6; ++piece) {
-            if (board.pieceBB(Color::BLACK, static_cast<Board::PieceIndex>(piece)) & bit) {
-                hash ^= zobristKeys[piece + 6][square];
-                break;
-            }
-        }
-    }
-
-    if (sideToMove) {
-        hash ^= zobristSide;
-    }
-
-    return hash;
 }
 
 int Evaluator::evaluate(const Board& board, Color sideToMove) const {
