@@ -50,6 +50,7 @@ add_executable(test_time_manager tests/time_manager_test.cpp)
 
 foreach (test_exe IN ITEMS test_board_move test_eval test_search test_transposition_table test_book test_time_manager)
     target_link_libraries(${test_exe} PRIVATE core_engine)
+    target_link_options(${test_exe} PRIVATE -static -static-libgcc -static-libstdc++)
 endforeach ()
 
 add_test(NAME board_move_tests COMMAND test_board_move)
@@ -67,7 +68,6 @@ set_tests_properties(transposition_table_test PROPERTIES LABELS "tests")
 add_test(NAME book_test COMMAND test_book)
 set_tests_properties(book_test PROPERTIES LABELS "tests")
 add_test(NAME time_manager_test COMMAND test_time_manager)
-target_link_options(test_time_manager PRIVATE -static -static-libgcc -static-libstdc++)
 set_tests_properties(time_manager_test PROPERTIES LABELS "tests")
 
 add_executable(perf_board_move tests/Performance/board_move_performance.cpp)

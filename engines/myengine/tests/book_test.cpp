@@ -4,10 +4,8 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <vector>
-
 #include "board.h"
 #include "book.h"
 #include "main.h"
@@ -41,8 +39,6 @@ static Board boardFromFEN(const std::string& fen) {
     b.loadFEN(fen);
     return b;
 }
-
-// -- Polyglot Zobrist key reference values from the canonical spec --
 
 static void test_key_startpos() {
     std::cout << "--- test_key_startpos ---\n";
@@ -120,8 +116,6 @@ static void test_key_after_ep_capture() {
     std::cout << "PASS\n\n";
 }
 
-// -- Move decoding --
-
 static void test_decode_e2e4() {
     std::cout << "--- test_decode_e2e4 ---\n";
     Board b;  // start position
@@ -187,8 +181,6 @@ static void test_transposition_same_key() {
     std::cout << "PASS\n\n";
 }
 
-// -- End-to-end: build a tiny .bin in memory, load, probe --
-
 static void writeBE(std::ofstream& ofs, uint64_t v, int bytes) {
     for (int i = bytes - 1; i >= 0; --i) {
         ofs.put(static_cast<char>((v >> (8 * i)) & 0xff));
@@ -196,11 +188,13 @@ static void writeBE(std::ofstream& ofs, uint64_t v, int bytes) {
 }
 
 static std::string makeTempBook(const std::vector<std::tuple<uint64_t, uint16_t, uint16_t>>& entries) {
-    // Polyglot requires entries sorted by key; caller supplies sorted.
-    // FIXME: std::tmpnam is deprecated and triggers compiler warnings (another process can
-    // claim the name between generation and open). Replace with std::filesystem::temp_directory_path()
-    // plus a unique suffix, or platform-specific mkstemp / GetTempPath on Windows.
-    std::string path = std::string(std::tmpnam(nullptr)) + ".bin";
+    static int counter = 0;
+    const char* tmpdir = std::getenv("TEMP");
+    if (!tmpdir) tmpdir = std::getenv("TMP");
+    if (!tmpdir) tmpdir = std::getenv("TMPDIR");
+    if (!tmpdir) tmpdir = ".";
+    std::string path = std::string(tmpdir) + "/chess_book_test_" +
+                       std::to_string(++counter) + ".bin";
     std::ofstream ofs(path, std::ios::binary);
     for (auto& [key, move, weight] : entries) {
         writeBE(ofs, key, 8);
@@ -214,7 +208,6 @@ static std::string makeTempBook(const std::vector<std::tuple<uint64_t, uint16_t,
 
 static void test_load_and_probe() {
     std::cout << "--- test_load_and_probe ---\n";
-    // One entry for startpos -> e2e4
     uint16_t e2e4 = (1u << 9) | (4u << 6) | (3u << 3) | 4u;
     auto path = makeTempBook({{0x463b96181691fc9cULL, e2e4, 100}});
 
