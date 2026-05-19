@@ -8,6 +8,7 @@
         "dev": "bun --hot src/server.js",
         "test": "bun test",
         "tourney": "bun run src/scripts/runTourney.js",
+        "setup": "bun run src/scripts/setup_cutie.js",
         "db:generate": "drizzle-kit generate",
         "db:migrate": "drizzle-kit migrate",
         "db:push": "drizzle-kit push"

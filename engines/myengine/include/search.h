@@ -14,7 +14,7 @@ class Search {
 public:
     Search(const Evaluator& evaluator, TranspositionTable& tt);
 
-    Move findBestMove(Board& board, int maxDepth, int timeLeftMs = 0, int incrementMs = 0);
+    Move findBestMove(Board& board, int maxDepth, int timeLeftMs = 0, int incrementMs = 0, int movesToGo = 0);
 
     void setThreadCount(int count);
     int getThreadCount() const { return numThreads_; }
@@ -22,8 +22,8 @@ public:
     struct SearchStats {
         long long totalNodes = 0;
         long long qNodes = 0;
-        long long ttHits = 0;       // probe found entry AND depth sufficient for score cutoff
-        long long ttProbes = 0;     // probe found any entry (depth-independent; used for move ordering)
+        long long ttHits = 0;
+        long long ttProbes = 0;
         long long betaCutoffs = 0;
         long long firstMoveCutoffs = 0;
 
@@ -52,7 +52,6 @@ public:
     uint64_t getNodes() const { return aggregateStats_.totalNodes; }
 
 private:
-    // Per-thread worker state: each thread gets its own copy
     struct WorkerState {
         SearchStats stats;
         int history[2][64][64];

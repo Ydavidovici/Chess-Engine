@@ -12,6 +12,25 @@ fi
 VER=$1
 TAG="v${VER}"
 
+# Guard: dirty working tree
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "❌ Working tree is dirty. Commit or stash changes before tagging." >&2
+  exit 1
+fi
+
+# Guard: warn if not on main/master
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$current_branch" != "main" && "$current_branch" != "master" ]]; then
+  read -p "⚠️  You are on branch '${current_branch}', not main. Continue? [y/N] " confirm
+  [[ "${confirm,,}" == "y" ]] || exit 1
+fi
+
+# Guard: tag must not already exist
+if git rev-parse "$TAG" &>/dev/null; then
+  echo "❌ Tag ${TAG} already exists." >&2
+  exit 1
+fi
+
 read -p "Release notes for ${TAG} (optional, press Enter to skip): " NOTES
 
 git fetch origin
