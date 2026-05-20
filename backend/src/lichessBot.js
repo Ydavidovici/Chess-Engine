@@ -1,6 +1,7 @@
 import {eq} from "drizzle-orm";
 import {db} from "../db/db.js";
 import {players, games, gameMoves} from "../db/schema.js";
+import {nullNotifier} from "./notifier.js";
 
 export function normalizeMove(move) {
     if (move && move.length === 5) {
@@ -44,6 +45,7 @@ export class LichessBot {
         this.maxConcurrentGames = options.maxConcurrentGames ?? 4;
         this.huntPollIntervalMs = options.huntPollIntervalMs ?? 1000;
         this.reconnectDelayMs = options.reconnectDelayMs ?? 5000;
+        this.notifier = options.notifier ?? nullNotifier;
 
         this.authHeader = {Authorization: `Bearer ${this.token}`};
         this.formHeaders = {
@@ -146,6 +148,7 @@ export class LichessBot {
 
         if (this.activeGames.size >= this.maxConcurrentGames) {
             console.log(`[Challenge ${challenge.id}] Declining — at max concurrent games (${this.maxConcurrentGames})`);
+            this.notifier.info(`Declining challenge ${challenge.id}`, {reason: "at_cap", active: this.activeGames.size});
             await this.declineChallenge(challenge.id, "later");
             return;
         }
@@ -170,15 +173,29 @@ export class LichessBot {
         if (this.activeGames.has(gameId)) return;
         this.activeGames.add(gameId);
         console.log(`[${gameId}] Game started.`);
+        this.notifier.info(`Game started: ${gameId}`, {active: this.activeGames.size, max: this.maxConcurrentGames});
 
         const gameController = new AbortController();
         this.gameControllers.set(gameId, gameController);
 
-        const engine = this.engineFactory();
+        let engine;
+        try {
+            engine = this.engineFactory();
+        } catch (err) {
+            // EngineCapReached or any factory failure: don't try to play. Resign and bail.
+            // Existing in-flight games keep running — we just don't add another.
+            console.error(`[${gameId}] Engine factory rejected:`, err);
+            this.notifier.warn(`Refused to spawn engine for ${gameId}`, {message: err?.message});
+            try { await this.resignGame(gameId); } catch (_) {}
+            this.activeGames.delete(gameId);
+            this.gameControllers.delete(gameId);
+            return;
+        }
         this.gameEngines.set(gameId, engine);
 
         engine.on("fatal_error", async (err) => {
             console.error(`[${gameId}] !! ENGINE FATAL ERROR !! Resigning game.`, err);
+            this.notifier.error(`Engine fatal in game ${gameId}`, {message: err?.message});
             try { await this.resignGame(gameId); } catch (_) {}
             gameController.abort();
         });

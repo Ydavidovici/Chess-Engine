@@ -2,10 +2,20 @@ import {spawn} from "bun";
 import path from "node:path";
 import {fileURLToPath} from "node:url";
 import {EventEmitter} from "node:events";
+import {nullNotifier} from "./notifier.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ENGINE_PATH = path.join(__dirname, "..", "..", "engines", "myengine", "build", "myengine");
+
+export class EngineCapReached extends Error {
+    constructor(cap, current) {
+        super(`Engine spawn cap reached (${current}/${cap})`);
+        this.name = "EngineCapReached";
+        this.cap = cap;
+        this.current = current;
+    }
+}
 
 export class UciEngine extends EventEmitter {
     constructor(cmd = ENGINE_PATH, options = {}) {
@@ -21,6 +31,8 @@ export class UciEngine extends EventEmitter {
         this.commandTimeoutBufferMs = options.commandTimeoutBufferMs ?? 2000;
         this.spawnFn = options.spawnFn ?? spawn;
         this.isShuttingDown = false;
+        this.notifier = options.notifier ?? nullNotifier;
+        this.label = options.label ?? "engine";
     }
 
     async ensureReady() {
@@ -92,10 +104,15 @@ export class UciEngine extends EventEmitter {
         if (this.restarts < this.maxRestarts) {
             this.restarts++;
             console.warn(`[Engine] Attempting restart ${this.restarts}/${this.maxRestarts} in ${this.restartDelayMs}ms...`);
+            this.notifier.warn(`Engine ${this.label} crashed`, {restart: `${this.restarts}/${this.maxRestarts}`});
             await new Promise(r => setTimeout(r, this.restartDelayMs));
-            this.start().catch(e => console.error("Restart failed:", e));
+            this.start().catch(e => {
+                console.error("Restart failed:", e);
+                this.notifier.error(`Engine ${this.label} restart failed`, {message: e?.message});
+            });
         } else {
             console.error("[Engine] Max restarts exceeded.");
+            this.notifier.error(`Engine ${this.label} exceeded max restarts`, {max: this.maxRestarts});
             this.emit("fatal_error", new Error("Max restarts exceeded"));
         }
     }
@@ -256,24 +273,64 @@ export class EngineManager {
     constructor(options = {}) {
         this.engines = new Map();
         this.engineOptions = options.engineOptions ?? {};
+        this.maxEngines = options.maxEngines ?? Infinity;
+        this.notifier = options.notifier ?? nullNotifier;
     }
 
-    async registerEngine(id, path) {
+    count() {
+        return this.engines.size;
+    }
+
+    hasCapacity() {
+        return this.engines.size < this.maxEngines;
+    }
+
+    // Build an unstarted engine, reserving a slot. Caller starts it (and is
+    // responsible for calling releaseSlot() on start failure if they don't
+    // want the slot held).
+    reserveEngine(label, enginePath) {
+        if (!this.hasCapacity()) {
+            const err = new EngineCapReached(this.maxEngines, this.engines.size);
+            this.notifier.warn("Engine cap reached — rejecting spawn", {
+                cap: this.maxEngines,
+                current: this.engines.size,
+                requested: label,
+            });
+            throw err;
+        }
+
+        const engine = new UciEngine(enginePath, {
+            ...this.engineOptions,
+            notifier: this.notifier,
+            label,
+        });
+        return engine;
+    }
+
+    async registerEngine(id, enginePath) {
         if (this.engines.has(id)) {
             console.warn(`[Manager] Engine ${id} is already registered.`);
             return this.engines.get(id);
         }
 
-        const engine = new UciEngine(path, this.engineOptions);
+        const engine = this.reserveEngine(id, enginePath);
 
         engine.on("fatal_error", (err) => {
             console.error(`[Manager] Engine ${id} died permanently:`, err);
+            this.notifier.error(`Engine ${id} died permanently`, {message: err?.message});
             this.engines.delete(id);
         });
 
-        await engine.start();
+        try {
+            await engine.start();
+        } catch (err) {
+            this.notifier.error(`Engine ${id} failed to start`, {message: err?.message});
+            throw err;
+        }
+
         this.engines.set(id, engine);
         console.log(`[Manager] Successfully registered engine: ${id}`);
+        this.notifier.info(`Engine registered: ${id}`, {active: this.engines.size});
         return engine;
     }
 
@@ -286,7 +343,10 @@ export class EngineManager {
         const engine = this.engines.get(id);
         if (engine) {
             this.engines.delete(id);
-            await engine.stop().catch(e => console.error(`[Manager] Error stopping engine ${id}:`, e));
+            await engine.stop().catch(e => {
+                console.error(`[Manager] Error stopping engine ${id}:`, e);
+                this.notifier.warn(`Error stopping engine ${id}`, {message: e?.message});
+            });
         }
     }
 
@@ -294,7 +354,10 @@ export class EngineManager {
         console.log(`[Manager] Shutting down all ${this.engines.size} engines...`);
 
         const stopPromises = Array.from(this.engines.values()).map(engine =>
-            engine.stop().catch(e => console.error("[Manager] Error during mass shutdown:", e))
+            engine.stop().catch(e => {
+                console.error("[Manager] Error during mass shutdown:", e);
+                this.notifier.warn("Error during mass shutdown", {message: e?.message});
+            })
         );
 
         this.engines.clear();

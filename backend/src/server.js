@@ -1,10 +1,11 @@
 import express from "express";
 import cors from "cors";
 import path from "node:path";
-import {EngineManager, UciEngine} from "./engineManager.js";
+import {EngineManager, UciEngine, EngineCapReached} from "./engineManager.js";
 import {LichessBot} from "./lichessBot.js";
+import {Notifier, ConsoleTransport, nullNotifier} from "./notifier.js";
 
-export function createApp({manager, lichessEngineFactory, mainEnginePath, maxConcurrentGames = 4, getToken = () => process.env.lichess_api_token} = {}) {
+export function createApp({manager, lichessEngineFactory, mainEnginePath, maxConcurrentGames = 4, notifier = nullNotifier, getToken = () => process.env.lichess_api_token} = {}) {
     const app = express();
 
     app.use(cors({
@@ -15,8 +16,19 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
     let lichessBotInstance = null;
 
     app.get("/api/health", (req, res) => {
-        const mainEngine = manager.getEngine("Main");
-        res.json({status: "ok", engine: mainEngine.ready ? "ready" : "starting"});
+        try {
+            const mainEngine = manager.getEngine("Main");
+            res.json({
+                status: "ok",
+                engine: mainEngine.ready ? "ready" : "starting",
+                engineCount: manager.count(),
+                botRunning: !!lichessBotInstance,
+                activeGames: lichessBotInstance ? lichessBotInstance.activeGames.size : 0,
+                uptimeSec: Math.round(process.uptime()),
+            });
+        } catch (err) {
+            res.status(503).json({status: "degraded", error: err.message});
+        }
     });
 
     app.post("/api/engine/analysis", async (req, res) => {
@@ -90,13 +102,15 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
             return res.status(400).json({error: "Missing Lichess Token"});
         }
 
-        const instance = new LichessBot(token, lichessEngineFactory, {maxConcurrentGames});
+        const instance = new LichessBot(token, lichessEngineFactory, {maxConcurrentGames, notifier});
         try {
             await instance.start();
             lichessBotInstance = instance;
+            notifier.info("Lichess bot started", {maxConcurrentGames});
             res.json({status: "success", message: `Lichess Bot started (max ${maxConcurrentGames} concurrent games).`});
         } catch (err) {
             console.error("Failed to start Lichess Bot:", err);
+            notifier.error("Lichess bot failed to start", {message: err?.message});
             try { instance.stop(); } catch (_) {}
             res.status(500).json({error: err.message});
         }
@@ -187,22 +201,82 @@ if (import.meta.main) {
     }
     console.log(`♟️  Engine Path: ${MY_ENGINE_PATH}`);
 
-    const manager = new EngineManager();
+    // --- Notifier ---
+    const notifier = new Notifier({transports: [new ConsoleTransport()]});
+
+    // --- Manager (with hard cap independent of LICHESS_MAX_GAMES) ---
+    // Default: one slot for "Main" analysis engine + Lichess game slots. Buffer of 2 for safety.
+    const LICHESS_MAX_GAMES = parseInt(process.env.LICHESS_MAX_GAMES ?? "4", 10);
+    const ENGINE_HARD_CAP = parseInt(process.env.ENGINE_HARD_CAP ?? String(LICHESS_MAX_GAMES + 3), 10);
+
+    const manager = new EngineManager({maxEngines: ENGINE_HARD_CAP, notifier});
     await manager.registerEngine("Main", MY_ENGINE_PATH);
 
-    const LICHESS_MAX_GAMES = parseInt(process.env.LICHESS_MAX_GAMES ?? "4", 10);
-    const lichessEngineFactory = () => new UciEngine(MY_ENGINE_PATH);
+    // Lichess engine factory: route every spawn through the manager's cap.
+    // Game engines aren't long-lived registered engines (they're per-game), so we
+    // build them through reserveEngine and track them ourselves via gameEngines.
+    const lichessEngineFactory = () => {
+        // The reservation check is what enforces the cap. Existing engines are untouched.
+        const label = `game-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        if (!manager.hasCapacity()) {
+            throw new EngineCapReached(manager.maxEngines, manager.count());
+        }
+        return new UciEngine(MY_ENGINE_PATH, {notifier, label});
+    };
 
-    const {app} = createApp({manager, lichessEngineFactory, mainEnginePath: MY_ENGINE_PATH, maxConcurrentGames: LICHESS_MAX_GAMES});
+    const {app} = createApp({manager, lichessEngineFactory, mainEnginePath: MY_ENGINE_PATH, maxConcurrentGames: LICHESS_MAX_GAMES, notifier});
 
     const PORT = process.env.PORT || 8000;
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log(`Backend listening on http://localhost:${PORT}`);
+        notifier.info("Backend started", {port: PORT, engineCap: ENGINE_HARD_CAP, lichessMax: LICHESS_MAX_GAMES});
     });
 
-    process.on("SIGINT", async () => {
-        console.log("\n[Server] Shutting down cleanly...");
-        await manager.shutdownAll();
-        process.exit(0);
-    });
+    // --- Discord bot (opt-in) ---
+    let discordBot = null;
+    if (process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_CHANNEL_ID) {
+        try {
+            const {createDiscordBot} = await import("./discordBot.js");
+            discordBot = await createDiscordBot({
+                token: process.env.DISCORD_BOT_TOKEN,
+                channelId: process.env.DISCORD_CHANNEL_ID,
+                notifier,
+                healthUrl: process.env.HEALTH_URL ?? `http://localhost:${PORT}/api/health`,
+            });
+            console.log("[Server] Discord bot connected.");
+        } catch (err) {
+            console.error("[Server] Discord bot init failed:", err);
+            notifier.warn("Discord bot init failed", {message: err?.message});
+        }
+    } else {
+        console.log("[Server] Discord disabled (set DISCORD_BOT_TOKEN + DISCORD_CHANNEL_ID to enable).");
+    }
+
+    // --- Shutdown path used by signals and fatal errors ---
+    let shuttingDown = false;
+    const shutdown = async (reason, exitCode = 0) => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        console.log(`\n[Server] Shutting down (${reason})...`);
+        try { await notifier.flush(); } catch (_) {}
+        try { server.close(); } catch (_) {}
+        try { await manager.shutdownAll(); } catch (e) { console.error("[Server] shutdownAll error:", e); }
+        if (discordBot) {
+            try { await discordBot.stop(); } catch (e) { console.error("[Server] Discord stop error:", e); }
+        }
+        process.exit(exitCode);
+    };
+
+    process.on("SIGINT",  () => shutdown("SIGINT",  0));
+    process.on("SIGTERM", () => shutdown("SIGTERM", 0));
+
+    // --- Global error handlers: log + notify + exit (supervisor restarts) ---
+    const handleFatal = async (kind, err) => {
+        console.error(`[Server] !! ${kind} !!`, err);
+        try { await notifier.fatal(`${kind}: process exiting`, {message: err?.message, stack: err?.stack?.split("\n").slice(0, 5).join("\n")}); } catch (_) {}
+        await shutdown(kind, 1);
+    };
+
+    process.on("uncaughtException",  (err)    => handleFatal("uncaughtException",  err));
+    process.on("unhandledRejection", (reason) => handleFatal("unhandledRejection", reason instanceof Error ? reason : new Error(String(reason))));
 }
