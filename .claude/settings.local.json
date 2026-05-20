@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(bun test *)"
       "Bash(cmake --build build --config Release)",
       "Read(//c/Users/Yaakov Davidovici/scoop/shims/**)",
       "Read(//c/msys64/usr/bin/**)",

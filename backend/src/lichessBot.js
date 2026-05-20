@@ -1,331 +1,556 @@
-import { UciEngine } from "./engineManager.js";
+import {eq} from "drizzle-orm";
+import {db} from "../db/db.js";
+import {players, games, gameMoves} from "../db/schema.js";
+import {nullNotifier} from "./notifier.js";
+
+export function normalizeMove(move) {
+    if (move && move.length === 5) {
+        return move.slice(0, 4) + move[4].toLowerCase();
+    }
+    return move;
+}
+
+export function computeMoveTime(remainingMs, incMs, totalTimeMs) {
+    const inc = incMs ?? 0;
+
+    if (remainingMs == null) return 5000;
+
+    const total = totalTimeMs ?? remainingMs;
+
+    let cap;
+    if      (total >= 1_500_000) cap = 60_000;
+    else if (total >=   480_000) cap = 15_000;
+    else if (total >=   180_000) cap =  5_000;
+    else if (total >=    60_000) cap =  2_000;
+    else                         cap =  1_000;
+
+    const estimate = Math.floor(remainingMs / 30 + inc * 0.85);
+    const safety   = Math.floor(remainingMs * 0.8);
+
+    return Math.max(200, Math.min(estimate, cap, safety));
+}
+
+export function mapResult(status, winner) {
+    if (winner === "white") return "1-0";
+    if (winner === "black") return "0-1";
+    const draws = ["draw", "stalemate", "threefoldRepetition", "insufficient", "fiftyMoves", "outoftime", "timeout"];
+    if (draws.includes(status)) return "1/2-1/2";
+    return null;
+}
 
 export class LichessBot {
-    constructor(token, engine) {
+    constructor(token, engineFactory, options = {}) {
         this.token = token;
-        this.engine = engine;
-        this.headers = {
-            Authorization: `Bearer ${this.token}`,
-            "Content-Type": "application/json",
-        };
+        this.engineFactory = engineFactory;
+        this.maxConcurrentGames = options.maxConcurrentGames ?? 4;
+        this.huntPollIntervalMs = options.huntPollIntervalMs ?? 1000;
+        this.reconnectDelayMs = options.reconnectDelayMs ?? 5000;
+        this.notifier = options.notifier ?? nullNotifier;
+
+        this.authHeader = {Authorization: `Bearer ${this.token}`};
         this.formHeaders = {
             Authorization: `Bearer ${this.token}`,
-            "Content-Type": "application/x-www-form-urlencoded"
-        };
-        this.authHeader = {
-            Authorization: `Bearer ${this.token}`
+            "Content-Type": "application/x-www-form-urlencoded",
         };
 
         this.activeGames = new Set();
         this.botProfile = null;
 
-        this.engine.on("fatal_error", (err) => {
-            console.error("!! ENGINE FATAL ERROR !!", err);
-        });
+        this.eventController = null;
+        this.gameControllers = new Map();
+        this.gameEngines = new Map();
+
+        this.dbGameIds = new Map();
+        this.savedPlies = new Map();
     }
 
     async start() {
-        console.log("Starting Lichess Bot...");
+        console.log("[Bot] Starting...");
 
-        const profileReq = await fetch("https://lichess.org/api/account", { headers: this.authHeader });
-        if (!profileReq.ok) throw new Error("Failed to fetch bot profile");
-        const profile = await profileReq.json();
+        const profileRes = await fetch("https://lichess.org/api/account", {
+            headers: this.authHeader,
+        });
+        if (!profileRes.ok) throw new Error("Failed to fetch bot profile");
+        const profile = await profileRes.json();
         this.botProfile = profile.id;
-        console.log(`Logged in as: ${this.botProfile} (Bot Account)`);
-
-        await this.engine.start();
+        console.log(`[Bot] Logged in as: ${this.botProfile} (max ${this.maxConcurrentGames} concurrent games)`);
 
         this.streamEvents();
     }
 
-    async streamEvents() {
-        console.log("Listening for events...");
-        const response = await fetch("https://lichess.org/api/stream/event", {
-            headers: this.authHeader,
-        });
+    stop() {
+        console.log("[Bot] Stopping...");
 
-        if (!response.ok) {
-            console.error("Event stream failed:", response.statusText);
-            setTimeout(() => this.streamEvents(), 5000);
+        if (this.eventController) {
+            this.eventController.abort();
+            this.eventController = null;
+        }
+
+        for (const [gameId, controller] of this.gameControllers) {
+            controller.abort();
+            console.log(`[${gameId}] Stream aborted.`);
+        }
+        this.gameControllers.clear();
+
+        for (const [gameId, engine] of this.gameEngines) {
+            engine.stop().catch(err => console.error(`[${gameId}] Engine stop error:`, err));
+        }
+        this.gameEngines.clear();
+
+        this.activeGames.clear();
+        this.dbGameIds.clear();
+        this.savedPlies.clear();
+
+        console.log("[Bot] Stopped.");
+    }
+
+    async streamEvents() {
+        this.eventController = new AbortController();
+        console.log("[Bot] Listening for events...");
+
+        try {
+            const res = await fetch("https://lichess.org/api/stream/event", {
+                headers: this.authHeader,
+                signal: this.eventController.signal,
+            });
+
+            if (!res.ok) {
+                console.error("[Bot] Event stream failed:", res.statusText);
+                setTimeout(() => this.streamEvents(), this.reconnectDelayMs);
+                return;
+            }
+
+            await this.readNdjsonStream(res.body, this.eventController.signal, async (event) => {
+                if (event.type === "challenge") {
+                    await this.handleChallenge(event.challenge);
+                } else if (event.type === "gameStart") {
+                    this.playGame(event.game.id);
+                }
+            });
+        } catch (err) {
+            if (err.name === "AbortError") {
+                console.log("[Bot] Event stream cancelled.");
+                return;
+            }
+            console.error("[Bot] Event stream error:", err);
+            setTimeout(() => this.streamEvents(), this.reconnectDelayMs);
+        }
+    }
+
+    async handleChallenge(challenge) {
+        const variant = challenge.variant?.key;
+
+        if (variant !== "standard") {
+            console.log(`[Challenge ${challenge.id}] Declining — unsupported variant: ${variant}`);
+            await this.declineChallenge(challenge.id, "variant");
             return;
         }
 
-        await this.readNdjsonStream(response.body, async (event) => {
-            if (event.type === "challenge") {
-                await this.acceptChallenge(event.challenge.id);
-            } else if (event.type === "gameStart") {
-                this.playGame(event.game.id);
-            }
-        });
-    }
+        if (this.activeGames.size >= this.maxConcurrentGames) {
+            console.log(`[Challenge ${challenge.id}] Declining — at max concurrent games (${this.maxConcurrentGames})`);
+            this.notifier.info(`Declining challenge ${challenge.id}`, {reason: "at_cap", active: this.activeGames.size});
+            await this.declineChallenge(challenge.id, "later");
+            return;
+        }
 
-    async acceptChallenge(challengeId) {
-        console.log(`Accepting challenge: ${challengeId}`);
-        await fetch(`https://lichess.org/api/challenge/${challengeId}/accept`, {
+        console.log(`[Challenge ${challenge.id}] Accepting`);
+        await fetch(`https://lichess.org/api/challenge/${challenge.id}/accept`, {
             method: "POST",
             headers: this.authHeader,
         });
+    }
+
+    async declineChallenge(challengeId, reason = "generic") {
+        const body = new URLSearchParams({reason});
+        await fetch(`https://lichess.org/api/challenge/${challengeId}/decline`, {
+            method: "POST",
+            headers: this.formHeaders,
+            body,
+        }).catch(() => {});
     }
 
     async playGame(gameId) {
         if (this.activeGames.has(gameId)) return;
         this.activeGames.add(gameId);
         console.log(`[${gameId}] Game started.`);
+        this.notifier.info(`Game started: ${gameId}`, {active: this.activeGames.size, max: this.maxConcurrentGames});
 
-        const response = await fetch(`https://lichess.org/api/bot/game/stream/${gameId}`, {
-            headers: this.authHeader,
+        const gameController = new AbortController();
+        this.gameControllers.set(gameId, gameController);
+
+        let engine;
+        try {
+            engine = this.engineFactory();
+        } catch (err) {
+            // EngineCapReached or any factory failure: don't try to play. Resign and bail.
+            // Existing in-flight games keep running — we just don't add another.
+            console.error(`[${gameId}] Engine factory rejected:`, err);
+            this.notifier.warn(`Refused to spawn engine for ${gameId}`, {message: err?.message});
+            try { await this.resignGame(gameId); } catch (_) {}
+            this.activeGames.delete(gameId);
+            this.gameControllers.delete(gameId);
+            return;
+        }
+        this.gameEngines.set(gameId, engine);
+
+        engine.on("fatal_error", async (err) => {
+            console.error(`[${gameId}] !! ENGINE FATAL ERROR !! Resigning game.`, err);
+            this.notifier.error(`Engine fatal in game ${gameId}`, {message: err?.message});
+            try { await this.resignGame(gameId); } catch (_) {}
+            gameController.abort();
         });
 
         let myColor = null;
         let initialFen = "startpos";
+        let totalTimeMs = null;
 
-        await this.readNdjsonStream(response.body, async (obj) => {
-            let movesStr = "";
-            let timeInfo = {};
-            let isGameActive = true;
-
-            if (obj.type === "gameFull") {
-                const whiteId = obj.white.id ? obj.white.id.toLowerCase() : "ai";
-                const myId = this.botProfile.toLowerCase();
-                myColor = (whiteId === myId) ? 'w' : 'b';
-
-                initialFen = obj.initialFen;
-                movesStr = obj.state.moves;
-                timeInfo = { wtime: obj.state.wtime, btime: obj.state.btime, winc: obj.state.winc, binc: obj.state.binc };
-
-                if (obj.state.status && obj.state.status !== "started") isGameActive = false;
-            }
-            else if (obj.type === "gameState") {
-                movesStr = obj.moves;
-                timeInfo = { wtime: obj.wtime, btime: obj.btime, winc: obj.winc, binc: obj.binc };
-                if (obj.status && obj.status !== "started") isGameActive = false;
-            } else {
-                return;
+        try {
+            try {
+                await engine.start();
+            } catch (startErr) {
+                console.error(`[${gameId}] !! ENGINE START FAILED !! Resigning game.`, startErr);
+                try { await this.resignGame(gameId); } catch (_) {}
+                throw startErr;
             }
 
-            if (!isGameActive) {
-                console.log(`[${gameId}] Game Over.`);
-                return;
-            }
+            const res = await fetch(`https://lichess.org/api/bot/game/stream/${gameId}`, {
+                headers: this.authHeader,
+                signal: gameController.signal,
+            });
 
-            if (this.isMyTurn(initialFen, movesStr, myColor)) {
-                console.log(`[${gameId}] My turn (${myColor}).`);
+            await this.readNdjsonStream(res.body, gameController.signal, async (obj) => {
+                if (obj.type === "chatLine" || obj.type === "opponentGone") return;
 
-                const movesArray = movesStr.trim() === "" ? [] : movesStr.trim().split(" ");
-                await this.engine.position(initialFen, movesArray);
+                let movesStr = "";
+                let timeInfo = {};
+                let status = "started";
+                let winner = null;
 
-                const bestMove = await this.engine.go({
-                    whiteTime: timeInfo.wtime,
-                    blackTime: timeInfo.btime,
-                    whiteInc: timeInfo.winc,
-                    blackInc: timeInfo.binc
-                });
+                if (obj.type === "gameFull") {
+                    const whiteUsername = obj.white?.id || obj.white?.name || "ai";
+                    const blackUsername = obj.black?.id || obj.black?.name || "ai";
+                    const myId = this.botProfile.toLowerCase();
+                    myColor = whiteUsername.toLowerCase() === myId ? "w" : "b";
+                    initialFen = obj.initialFen || "startpos";
+                    movesStr = obj.state?.moves || "";
+                    timeInfo = extractTime(obj.state);
+                    status = obj.state?.status ?? "started";
+                    winner = obj.state?.winner ?? null;
 
-                console.log(`[${gameId}] Engine move: ${bestMove}`);
+                    totalTimeMs = obj.clock?.initial ?? null;
 
-                if (bestMove && bestMove !== "(none)" && bestMove !== "0000") {
-                    await this.sendMove(gameId, bestMove);
+                    await engine.uciNewGame();
+                    await this.createDbGame(gameId, {
+                        whiteUsername,
+                        blackUsername,
+                        variant: obj.variant?.key || "standard",
+                        rated: obj.rated ? 1 : 0,
+                        timeControl: obj.clock
+                            ? `${obj.clock.initial / 1000}+${obj.clock.increment / 1000}`
+                            : null,
+                        whiteRating: obj.white?.rating ?? null,
+                        blackRating: obj.black?.rating ?? null,
+                    });
+
+                    await this.saveNewMoves(gameId, movesStr);
+
+                } else if (obj.type === "gameState") {
+                    movesStr = obj.moves || "";
+                    timeInfo = extractTime(obj);
+                    status = obj.status ?? "started";
+                    winner = obj.winner ?? null;
+
+                    await this.saveNewMoves(gameId, movesStr);
+                } else {
+                    return;
                 }
-            }
-        });
 
-        this.activeGames.delete(gameId);
+                if (status !== "started") {
+                    console.log(`[${gameId}] Game over: ${status}, winner: ${winner ?? "draw"}`);
+                    await this.finalizeDbGame(gameId, status, winner);
+                    gameController.abort();
+                    return;
+                }
+
+                if (myColor && this.isMyTurn(initialFen, movesStr, myColor)) {
+                    await this.makeMove(engine, gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs);
+                }
+            });
+
+        } catch (err) {
+            if (err.name !== "AbortError") {
+                console.error(`[${gameId}] Game stream error:`, err);
+            }
+        } finally {
+            try { await engine.stop(); } catch (e) { console.error(`[${gameId}] Engine stop error:`, e); }
+            this.gameEngines.delete(gameId);
+            this.activeGames.delete(gameId);
+            this.gameControllers.delete(gameId);
+            console.log(`[${gameId}] Cleaned up.`);
+        }
+    }
+
+    async makeMove(engine, gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs) {
+        console.log(`[${gameId}] My turn (${myColor}).`);
+
+        const movesArray = movesStr.trim() === "" ? [] : movesStr.trim().split(" ");
+        await engine.position(initialFen, movesArray);
+
+        const myTime = myColor === "w" ? timeInfo.wtime : timeInfo.btime;
+        const myInc  = myColor === "w" ? timeInfo.winc  : timeInfo.binc;
+        const moveTimeMs = computeMoveTime(myTime, myInc, totalTimeMs);
+
+        const rawMove = await engine.go({moveTime: moveTimeMs});
+        const bestMove = normalizeMove(rawMove);
+        console.log(`[${gameId}] Engine: ${bestMove} (allocated ${moveTimeMs}ms)`);
+
+        if (!bestMove || bestMove === "(none)" || bestMove === "0000") {
+            console.warn(`[${gameId}] No valid move — resigning.`);
+            await this.resignGame(gameId);
+            return;
+        }
+
+        await this.sendMove(gameId, bestMove);
     }
 
     isMyTurn(initialFen, movesStr, myColor) {
-        let startColor = 'w';
-        if (initialFen !== "startpos") {
+        let startColor = "w";
+        if (initialFen && initialFen !== "startpos") {
             const parts = initialFen.split(" ");
             if (parts.length >= 2) startColor = parts[1];
         }
-
-        const moves = movesStr.trim();
-        const moveCount = moves === "" ? 0 : moves.split(" ").length;
-        const isStartColorTurn = (moveCount % 2 === 0);
-        const currentTurnColor = isStartColorTurn ? startColor : (startColor === 'w' ? 'b' : 'w');
-
-        return currentTurnColor === myColor;
+        const moveCount = movesStr.trim() === "" ? 0 : movesStr.trim().split(" ").length;
+        const currentColor = moveCount % 2 === 0 ? startColor : (startColor === "w" ? "b" : "w");
+        return currentColor === myColor;
     }
 
     async sendMove(gameId, move) {
-        const url = `https://lichess.org/api/bot/game/${gameId}/move/${move}`;
-
-        const res = await fetch(url, {
+        const res = await fetch(`https://lichess.org/api/bot/game/${gameId}/move/${move}`, {
             method: "POST",
-            headers: this.authHeader
+            headers: this.authHeader,
         });
-
         if (!res.ok) {
-            const err = await res.text();
-            console.warn(`[${gameId}] Move rejected (${move}): ${err}`);
+            console.warn(`[${gameId}] Move rejected (${move}): ${await res.text()}`);
         }
     }
 
-    async createChallenge(username, limit, increment) {
-        console.log(`Challenging ${username}...`);
-        const body = new URLSearchParams();
-        body.append("clock.limit", limit);
-        body.append("clock.increment", increment);
-        body.append("rated", "true");
-
-        const res = await fetch(`https://lichess.org/api/challenge/${username}`, {
+    async resignGame(gameId) {
+        await fetch(`https://lichess.org/api/bot/game/${gameId}/resign`, {
             method: "POST",
-            headers: this.formHeaders, // Form Headers
-            body: body
-        });
-        if (!res.ok) throw new Error(await res.text());
-        return await res.json();
+            headers: this.authHeader,
+        }).catch(() => {});
     }
 
-    async createOpenChallenge(limit, increment) {
-        console.log(`Creating Open Challenge...`);
-        const body = new URLSearchParams();
-        body.append("clock.limit", limit);
-        body.append("clock.increment", increment);
-        body.append("rated", "true");
+    async upsertPlayer(username) {
+        await db.insert(players).values({name: username}).onConflictDoNothing();
+        const [row] = await db.select({id: players.id})
+            .from(players)
+            .where(eq(players.name, username));
+        return row.id;
+    }
 
+    async createDbGame(lichessGameId, {whiteUsername, blackUsername, variant, rated, timeControl, whiteRating, blackRating}) {
+        const [whitePlayerId, blackPlayerId] = await Promise.all([
+            this.upsertPlayer(whiteUsername),
+            this.upsertPlayer(blackUsername),
+        ]);
+
+        const [row] = await db.insert(games).values({
+            whiteId: whitePlayerId,
+            blackId: blackPlayerId,
+            source: "lichess",
+            lichessGameId,
+            variant,
+            rated,
+            timeControl,
+            whiteRating,
+            blackRating,
+        }).returning({id: games.id});
+
+        this.dbGameIds.set(lichessGameId, row.id);
+        this.savedPlies.set(lichessGameId, 0);
+    }
+
+    async saveNewMoves(lichessGameId, movesStr) {
+        const dbGameId = this.dbGameIds.get(lichessGameId);
+        if (dbGameId == null) return;
+
+        const allMoves = movesStr.trim() === "" ? [] : movesStr.trim().split(" ");
+        const savedPly = this.savedPlies.get(lichessGameId) ?? 0;
+        const newMoves = allMoves.slice(savedPly);
+        if (newMoves.length === 0) return;
+
+        await db.insert(gameMoves).values(
+            newMoves.map((uci, i) => ({
+                gameId: dbGameId,
+                ply: savedPly + i + 1,
+                uci,
+            }))
+        );
+        this.savedPlies.set(lichessGameId, allMoves.length);
+    }
+
+    async finalizeDbGame(lichessGameId, status, winner) {
+        const dbGameId = this.dbGameIds.get(lichessGameId);
+        if (dbGameId == null) return;
+
+        await db.update(games)
+            .set({
+                result: mapResult(status, winner),
+                termination: status,
+                finishedAt: new Date().toISOString(),
+            })
+            .where(eq(games.id, dbGameId));
+
+        this.dbGameIds.delete(lichessGameId);
+        this.savedPlies.delete(lichessGameId);
+    }
+
+    async createChallenge(username, limit, increment, rated = true) {
+        console.log(`Challenging ${username} (${limit}+${increment}, ${rated ? "rated" : "casual"})...`);
+        const body = new URLSearchParams({
+            "clock.limit": limit,
+            "clock.increment": increment,
+            rated: rated ? "true" : "false",
+        });
+        const res = await fetch(`https://lichess.org/api/challenge/${username}`, {
+            method: "POST",
+            headers: this.formHeaders,
+            body,
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+    }
+
+    async createOpenChallenge(limit, increment, rated = true) {
+        console.log(`Creating open challenge (${limit}+${increment}, ${rated ? "rated" : "casual"})...`);
+        const body = new URLSearchParams({
+            "clock.limit": limit,
+            "clock.increment": increment,
+            rated: rated ? "true" : "false",
+        });
         const res = await fetch("https://lichess.org/api/challenge/open", {
             method: "POST",
             headers: this.formHeaders,
-            body: body
+            body,
         });
         if (!res.ok) throw new Error(await res.text());
-        return await res.json();
+        return res.json();
     }
 
     async createAiChallenge(level, limit, increment) {
-        console.log(`Challenging Stockfish Level ${level}...`);
-        const body = new URLSearchParams();
-        body.append("level", level);
-        body.append("clock.limit", limit);
-        body.append("clock.increment", increment);
-
+        console.log(`Challenging Stockfish level ${level}...`);
+        const body = new URLSearchParams({
+            level,
+            "clock.limit": limit,
+            "clock.increment": increment,
+        });
         const res = await fetch("https://lichess.org/api/challenge/ai", {
             method: "POST",
             headers: this.formHeaders,
-            body: body
+            body,
         });
         if (!res.ok) throw new Error(await res.text());
-        return await res.json();
+        return res.json();
     }
 
-    async readNdjsonStream(readableStream, callback) {
+    async cancelChallenge(challengeId) {
+        await fetch(`https://lichess.org/api/challenge/${challengeId}/cancel`, {
+            method: "POST",
+            headers: this.authHeader,
+        }).catch(() => {});
+    }
+
+    async huntWeakestBot(limit, increment, rated = true) {
+        console.log(`Hunting weakest bot (${limit}+${increment}, ${rated ? "rated" : "casual"})...`);
+
+        const res = await fetch("https://lichess.org/api/bot/online?nb=50", {
+            headers: {Accept: "application/x-ndjson"},
+        });
+        if (!res.ok) throw new Error("Failed to fetch online bots");
+
+        const bots = [];
+        await this.readNdjsonStream(res.body, null, (bot) => { bots.push(bot); });
+
+        const candidates = bots
+            .filter(b => b.id !== this.botProfile?.toLowerCase())
+            .filter(b => b.perfs?.blitz?.rating != null)
+            .sort((a, b) => a.perfs.blitz.rating - b.perfs.blitz.rating)
+            .slice(0, 10);
+
+        if (candidates.length === 0) throw new Error("No candidates found");
+
+        for (const target of candidates) {
+            console.log(`Challenging ${target.username} (${target.perfs.blitz.rating})...`);
+
+            let challengeId;
+            try {
+                const body = new URLSearchParams({
+                    "clock.limit": limit,
+                    "clock.increment": increment,
+                    rated: rated ? "true" : "false",
+                });
+                const cRes = await fetch(`https://lichess.org/api/challenge/${target.username}`, {
+                    method: "POST",
+                    headers: this.formHeaders,
+                    body,
+                });
+                if (!cRes.ok) { console.log(`Skipping ${target.username}`); continue; }
+                challengeId = (await cRes.json()).id;
+            } catch { continue; }
+
+            for (let i = 0; i < 5; i++) {
+                await new Promise(r => setTimeout(r, this.huntPollIntervalMs));
+                if (this.activeGames.has(challengeId)) {
+                    return {status: "success", message: `Playing vs ${target.username}`, gameId: challengeId};
+                }
+            }
+
+            await this.cancelChallenge(challengeId);
+        }
+
+        throw new Error("Hunt failed — all candidates ignored our challenges.");
+    }
+
+    async readNdjsonStream(readableStream, signal, callback) {
         const reader = readableStream.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            let lines = buffer.split("\n");
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (line.trim()) {
-                    try { await callback(JSON.parse(line)); } catch (e) { console.error(e); }
-                }
-            }
-        }
-    }
+        const onAbort = () => reader.cancel().catch(() => {});
+        signal?.addEventListener("abort", onAbort, {once: true});
 
-    /**
-     * Scans online bots and challenges the one with the lowest rating
-     */
-    /**
-     * NEW: Cancel a pending challenge
-     */
-    async cancelChallenge(challengeId) {
         try {
-            await fetch(`https://lichess.org/api/challenge/${challengeId}/cancel`, {
-                method: "POST",
-                headers: this.authHeader
-            });
-        } catch (e) {
-            // Ignore errors if it's already gone
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, {stream: true});
+                const lines = buffer.split("\n");
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        await callback(JSON.parse(line));
+                    } catch (e) {
+                        console.error("[NDJSON] Callback error:", e);
+                    }
+                }
+            }
+        } finally {
+            signal?.removeEventListener("abort", onAbort);
+            reader.releaseLock();
         }
     }
+}
 
-    /**
-     * "Find & Destroy" - Robust Hunting Loop
-     */
-    async huntWeakestBot(limit, increment) {
-        console.log("Starting Hunt for Weakest Bot...");
-
-        const res = await fetch("https://lichess.org/api/bot/online?nb=50", {
-            headers: { Accept: "application/x-ndjson" }
-        });
-        if (!res.ok) throw new Error("Failed to fetch bots");
-
-        const bots = [];
-        const decoder = new TextDecoder();
-        const reader = res.body.getReader();
-        let buffer = "";
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            let lines = buffer.split("\n");
-            buffer = lines.pop();
-            for (const line of lines) {
-                if (line.trim()) {
-                    try { bots.push(JSON.parse(line)); } catch (e) {}
-                }
-            }
-            if (bots.length >= 50) break;
-        }
-
-        const candidates = bots
-        .filter(b => b.perfs?.blitz?.rating)
-        .sort((a, b) => a.perfs.blitz.rating - b.perfs.blitz.rating)
-        .slice(0, 10);
-
-        if (candidates.length === 0) throw new Error("No candidates found");
-
-        console.log(`Found ${candidates.length} candidates. Starting hunt...`);
-
-        for (const target of candidates) {
-            console.log(`Attacking ${target.username} (${target.perfs.blitz.rating})...`);
-
-            let challengeData = null;
-            try {
-                const body = new URLSearchParams();
-                body.append("clock.limit", limit);
-                body.append("clock.increment", increment);
-                body.append("rated", "true");
-
-                const cRes = await fetch(`https://lichess.org/api/challenge/${target.username}`, {
-                    method: "POST",
-                    headers: this.formHeaders,
-                    body: body
-                });
-
-                if (cRes.ok) {
-                    challengeData = await cRes.json();
-                } else {
-                    console.log(`Failed to challenge ${target.username}, skipping.`);
-                    continue;
-                }
-            } catch (err) {
-                continue;
-            }
-
-            const challengeId = challengeData.id;
-            for (let i = 0; i < 5; i++) {
-                await new Promise(r => setTimeout(r, 1000));
-                if (this.activeGames.has(challengeId)) {
-                    console.log(`Target Acquired! Game ${challengeId} vs ${target.username} started.`);
-                    return {
-                        status: "success",
-                        message: `Hunt Successful! Playing vs ${target.username}`,
-                        gameId: challengeId
-                    };
-                }
-            }
-
-            console.log(`${target.username} ignored us. Cancelling and finding new target...`);
-            await this.cancelChallenge(challengeId);
-        }
-
-        throw new Error("Hunt failed. All 10 weakest bots ignored our challenges.");
-    }
+export function extractTime(state) {
+    if (!state) return {};
+    return {
+        wtime: state.wtime,
+        btime: state.btime,
+        winc: state.winc,
+        binc: state.binc,
+    };
 }
