@@ -62,6 +62,88 @@ export class LichessBot {
 
         this.dbGameIds = new Map();
         this.savedPlies = new Map();
+
+        // Autoplay: when enabled, the bot fills free slots via huntWeakestBot.
+        this.autoplay = null; // {limit, increment, rated, target, backoffMs, timer, huntInFlight}
+    }
+
+    startAutoplay({limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200} = {}) {
+        // target = how many active games we'd like to keep going at once.
+        // Capped by maxConcurrentGames as a safety.
+        const cappedTarget = Math.min(target, this.maxConcurrentGames);
+
+        this.autoplay = {
+            limit,
+            increment,
+            rated,
+            target: cappedTarget,
+            mode,       // "near" (default) or "weakest"
+            window,     // only used when mode === "near"
+            currentBackoffMs: 0,
+            timer: null,
+            huntInFlight: false,
+        };
+
+        this.notifier.info("Autoplay enabled", {limit, increment, rated, target: cappedTarget, mode, window});
+        console.log(`[Autoplay] Enabled (${limit}+${increment} ${rated ? "rated" : "casual"}, target=${cappedTarget}, mode=${mode}${mode === "near" ? `, window=±${window}` : ""})`);
+        this._tickAutoplay();
+    }
+
+    stopAutoplay() {
+        if (!this.autoplay) return;
+        if (this.autoplay.timer) clearTimeout(this.autoplay.timer);
+        this.autoplay = null;
+        this.notifier.info("Autoplay disabled");
+        console.log("[Autoplay] Disabled");
+    }
+
+    autoplayStatus() {
+        if (!this.autoplay) return {enabled: false};
+        const {limit, increment, rated, target, mode, window, currentBackoffMs, huntInFlight} = this.autoplay;
+        return {enabled: true, limit, increment, rated, target, mode, window, currentBackoffMs, huntInFlight, active: this.activeGames.size};
+    }
+
+    // Kick the autoplay loop. Idempotent. Called after every game ends and on a
+    // slow safety-net timer so we recover even if nothing else triggers us.
+    _tickAutoplay() {
+        if (!this.autoplay) return;
+        if (this.autoplay.timer) {
+            clearTimeout(this.autoplay.timer);
+            this.autoplay.timer = null;
+        }
+
+        // Already running enough games or already hunting? Just schedule a check.
+        if (this.activeGames.size >= this.autoplay.target || this.autoplay.huntInFlight) {
+            this.autoplay.timer = setTimeout(() => this._tickAutoplay(), 30_000);
+            return;
+        }
+
+        this.autoplay.huntInFlight = true;
+        const {limit, increment, rated, mode, window} = this.autoplay;
+
+        const huntPromise = mode === "weakest"
+            ? this.huntWeakestBot(limit, increment, rated)
+            : this.huntNearRating(limit, increment, rated, {window});
+
+        // Don't await — let it run in the background while we schedule the next tick.
+        huntPromise
+            .then(() => {
+                if (!this.autoplay) return;
+                this.autoplay.currentBackoffMs = 0;
+            })
+            .catch(err => {
+                if (!this.autoplay) return;
+                // Exponential backoff: 5s, 10s, 20s, ... capped at 5 min.
+                const next = this.autoplay.currentBackoffMs === 0 ? 5_000 : Math.min(this.autoplay.currentBackoffMs * 2, 300_000);
+                this.autoplay.currentBackoffMs = next;
+                console.log(`[Autoplay] Hunt failed (${err.message}); retrying in ${next / 1000}s`);
+            })
+            .finally(() => {
+                if (!this.autoplay) return;
+                this.autoplay.huntInFlight = false;
+                const wait = this.autoplay.currentBackoffMs || 1_000;
+                this.autoplay.timer = setTimeout(() => this._tickAutoplay(), wait);
+            });
     }
 
     async start() {
@@ -80,6 +162,7 @@ export class LichessBot {
 
     stop() {
         console.log("[Bot] Stopping...");
+        this.stopAutoplay();
 
         if (this.eventController) {
             this.eventController.abort();
@@ -138,6 +221,11 @@ export class LichessBot {
     }
 
     async handleChallenge(challenge) {
+        // Lichess emits challenge events for both directions. Outgoing ones are
+        // tracked elsewhere (huntNearRating / huntWeakestBot poll activeGames);
+        // we don't need to act on them here.
+        if (challenge.direction === "out") return;
+
         const variant = challenge.variant?.key;
 
         if (variant !== "standard") {
@@ -287,6 +375,7 @@ export class LichessBot {
             this.activeGames.delete(gameId);
             this.gameControllers.delete(gameId);
             console.log(`[${gameId}] Cleaned up.`);
+            this._tickAutoplay();
         }
     }
 
@@ -350,6 +439,21 @@ export class LichessBot {
     }
 
     async createDbGame(lichessGameId, {whiteUsername, blackUsername, variant, rated, timeControl, whiteRating, blackRating}) {
+        // Resume path: if a row for this lichessGameId exists (e.g. backend
+        // restarted mid-game), reuse it instead of trying to re-insert.
+        const existing = await db.select({id: games.id})
+            .from(games)
+            .where(eq(games.lichessGameId, lichessGameId))
+            .limit(1);
+        if (existing[0]) {
+            this.dbGameIds.set(lichessGameId, existing[0].id);
+            const moves = await db.select({id: gameMoves.id})
+                .from(gameMoves)
+                .where(eq(gameMoves.gameId, existing[0].id));
+            this.savedPlies.set(lichessGameId, moves.length);
+            return;
+        }
+
         const [whitePlayerId, blackPlayerId] = await Promise.all([
             this.upsertPlayer(whiteUsername),
             this.upsertPlayer(blackUsername),
@@ -459,6 +563,88 @@ export class LichessBot {
             method: "POST",
             headers: this.authHeader,
         }).catch(() => {});
+    }
+
+    // Pick a Lichess perf name (bullet/blitz/rapid/classical) from a time control.
+    // Uses Lichess's own classification: estimated = initialSec + 40 * incSec.
+    _perfFromTc(limitSec, incrementSec) {
+        const est = limitSec + 40 * incrementSec;
+        if (est < 180) return "bullet";
+        if (est < 480) return "blitz";
+        if (est < 1500) return "rapid";
+        return "classical";
+    }
+
+    async _fetchMyRating(perf) {
+        const res = await fetch("https://lichess.org/api/account", {headers: this.authHeader});
+        if (!res.ok) throw new Error("Failed to fetch own profile");
+        const profile = await res.json();
+        const rating = profile.perfs?.[perf]?.rating;
+        if (rating == null) throw new Error(`No ${perf} rating on profile yet`);
+        return {rating, prov: !!profile.perfs[perf].prov};
+    }
+
+    // Challenge bots within ±window of our own rating for the given TC. Tries
+    // up to `maxAttempts` candidates, ordered by closeness in rating; returns
+    // the first one that accepts within ~5s.
+    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 10} = {}) {
+        const perf = this._perfFromTc(limit, increment);
+        const {rating: myRating, prov} = await this._fetchMyRating(perf);
+        console.log(`[Hunt] My ${perf} rating: ${myRating}${prov ? " (provisional)" : ""}; window ±${window}`);
+
+        const res = await fetch("https://lichess.org/api/bot/online?nb=300", {
+            headers: {Accept: "application/x-ndjson"},
+        });
+        if (!res.ok) throw new Error("Failed to fetch online bots");
+
+        const bots = [];
+        await this.readNdjsonStream(res.body, null, (bot) => { bots.push(bot); });
+
+        const candidates = bots
+            .filter(b => b.id !== this.botProfile?.toLowerCase())
+            .filter(b => b.perfs?.[perf]?.rating != null)
+            .map(b => ({...b, _delta: Math.abs(b.perfs[perf].rating - myRating)}))
+            .filter(b => b._delta <= window)
+            .sort((a, b) => a._delta - b._delta)
+            .slice(0, maxAttempts);
+
+        if (candidates.length === 0) {
+            throw new Error(`No bots within ±${window} of ${perf}=${myRating} (saw ${bots.length} online)`);
+        }
+
+        console.log(`[Hunt] ${candidates.length} candidates within ±${window} of ${myRating}`);
+
+        for (const target of candidates) {
+            const targetRating = target.perfs[perf].rating;
+            console.log(`[Hunt] Challenging ${target.username} (${perf}=${targetRating}, Δ${target._delta})...`);
+
+            let challengeId;
+            try {
+                const body = new URLSearchParams({
+                    "clock.limit": limit,
+                    "clock.increment": increment,
+                    rated: rated ? "true" : "false",
+                });
+                const cRes = await fetch(`https://lichess.org/api/challenge/${target.username}`, {
+                    method: "POST",
+                    headers: this.formHeaders,
+                    body,
+                });
+                if (!cRes.ok) { continue; }
+                challengeId = (await cRes.json()).id;
+            } catch { continue; }
+
+            for (let i = 0; i < 5; i++) {
+                await new Promise(r => setTimeout(r, this.huntPollIntervalMs));
+                if (this.activeGames.has(challengeId)) {
+                    return {status: "success", message: `Playing vs ${target.username} (${targetRating})`, gameId: challengeId, myRating, targetRating};
+                }
+            }
+
+            await this.cancelChallenge(challengeId);
+        }
+
+        throw new Error(`Hunt failed — none of ${candidates.length} near-rating bots accepted`);
     }
 
     async huntWeakestBot(limit, increment, rated = true) {

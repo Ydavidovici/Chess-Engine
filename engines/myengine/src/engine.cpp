@@ -8,6 +8,7 @@ Engine::Engine()
 Engine::~Engine() = default;
 
 void Engine::reset() {
+    board.loadFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     history.clear();
 }
 

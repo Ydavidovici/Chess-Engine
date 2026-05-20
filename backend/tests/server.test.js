@@ -30,11 +30,27 @@ class MockLichessBot {
 
 class MockUciEngine {}
 
+class MockEngineCapReached extends Error {
+    constructor(cap, current) {
+        super(`Engine spawn cap reached (${current}/${cap})`);
+        this.name = "EngineCapReached";
+        this.cap = cap;
+        this.current = current;
+    }
+}
+
 class MockEngineManager {
     constructor() {
         this.engines = new Map();
         this.shutdownEngineCalls = [];
         this.registerEngineCalls = [];
+        this.maxEngines = Infinity;
+    }
+    count() {
+        return this.engines.size;
+    }
+    hasCapacity() {
+        return this.engines.size < this.maxEngines;
     }
     getEngine(id) {
         if (!this.engines.has(id)) throw new Error(`Engine ${id} not found.`);
@@ -62,6 +78,7 @@ class MockEngineManager {
 mock.module("../src/engineManager.js", () => ({
     EngineManager: MockEngineManager,
     UciEngine: MockUciEngine,
+    EngineCapReached: MockEngineCapReached,
 }));
 
 mock.module("../src/lichessBot.js", () => ({ LichessBot: MockLichessBot }));
@@ -118,7 +135,12 @@ describe("GET /api/health", () => {
         const res = await GET("/api/health");
         expect(res.status).toBe(200);
         const body = await res.json();
-        expect(body).toEqual({ status: "ok", engine: "ready" });
+        expect(body).toMatchObject({ status: "ok", engine: "ready" });
+        // Extra fields exposed for monitoring; assert their shape, not exact values.
+        expect(typeof body.engineCount).toBe("number");
+        expect(typeof body.botRunning).toBe("boolean");
+        expect(typeof body.activeGames).toBe("number");
+        expect(typeof body.uptimeSec).toBe("number");
     });
 
     it("reports engine as 'starting' when not ready", async () => {

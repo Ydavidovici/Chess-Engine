@@ -33,7 +33,7 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
 
     app.post("/api/engine/analysis", async (req, res) => {
         try {
-            const {fen, depth = 10} = req.body;
+            const {fen, depth = 10} = req.body ?? {};
             if (!fen) return res.status(400).json({error: "FEN required"});
 
             const mainEngine = manager.getEngine("Main");
@@ -49,7 +49,7 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
 
     app.post("/api/engine/go", async (req, res) => {
         try {
-            const {fen, moves, options} = req.body;
+            const {fen, moves, options} = req.body ?? {};
             const mainEngine = manager.getEngine("Main");
 
             await mainEngine.position(fen || "startpos", moves || []);
@@ -68,7 +68,7 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
 
     app.post("/api/engine/bench", async (req, res) => {
         try {
-            const {mode = "depth", depth = 9, timeLimit = 30000, evalTime = 2000} = req.body;
+            const {mode = "depth", depth = 9, timeLimit = 30000, evalTime = 2000} = req.body ?? {};
             console.log(`Starting benchmark [Mode: ${mode}, Depth: ${depth}, Time: ${timeLimit}ms]...`);
 
             const mainEngine = manager.getEngine("Main");
@@ -143,7 +143,7 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
 
     app.post("/api/lichess/challenge/open", async (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-        const {limit = 180, increment = 0, rated = true} = req.body;
+        const {limit = 180, increment = 0, rated = true} = req.body ?? {};
         try {
             const result = await lichessBotInstance.createOpenChallenge(limit, increment, rated);
             res.json({status: "success", data: result});
@@ -154,7 +154,7 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
 
     app.post("/api/lichess/challenge/ai", async (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-        const {level = 1, limit = 180, increment = 0} = req.body;
+        const {level = 1, limit = 180, increment = 0} = req.body ?? {};
         try {
             const result = await lichessBotInstance.createAiChallenge(level, limit, increment);
             res.json({status: "success", data: result});
@@ -165,13 +165,31 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
 
     app.post("/api/lichess/challenge/weakest", async (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-        const {limit = 180, increment = 0, rated = true} = req.body;
+        const {limit = 180, increment = 0, rated = true} = req.body ?? {};
         try {
             const result = await lichessBotInstance.huntWeakestBot(limit, increment, rated);
             res.json(result);
         } catch (err) {
             res.status(500).json({error: err.message});
         }
+    });
+
+    app.post("/api/lichess/autoplay/start", (req, res) => {
+        if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
+        const {limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200} = req.body ?? {};
+        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window});
+        res.json({status: "success", autoplay: lichessBotInstance.autoplayStatus()});
+    });
+
+    app.post("/api/lichess/autoplay/stop", (req, res) => {
+        if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
+        lichessBotInstance.stopAutoplay();
+        res.json({status: "success"});
+    });
+
+    app.get("/api/lichess/autoplay/status", (req, res) => {
+        if (!lichessBotInstance) return res.json({enabled: false, botRunning: false});
+        res.json(lichessBotInstance.autoplayStatus());
     });
 
     return {app, getBotInstance: () => lichessBotInstance};
