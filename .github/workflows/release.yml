@@ -8,14 +8,19 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: engines/myengine
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Add MinGW to PATH
+        shell: pwsh
         run: echo "C:\msys64\mingw64\bin" | Out-File -Append -FilePath $env:GITHUB_PATH -Encoding utf8
 
       - name: Configure
+        shell: pwsh
         run: |
           cmake -S . -B build `
             -G "MinGW Makefiles" `
@@ -23,6 +28,7 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"
 
       - name: Build
+        shell: pwsh
         run: cmake --build build --target myengine -j4
 
       - name: Stage artifact
@@ -31,9 +37,9 @@ jobs:
           $artifact = "myengine-${{ github.ref_name }}-windows-x64.exe"
           Copy-Item build\myengine.exe $artifact
           echo "ARTIFACT=$artifact" >> $env:GITHUB_ENV
+          echo "ARTIFACT_PATH=engines/myengine/$artifact" >> $env:GITHUB_ENV
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARTIFACT }}
-          generate_release_notes: true
+          files: ${{ env.ARTIFACT_PATH }}
