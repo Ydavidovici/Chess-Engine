@@ -8,14 +8,18 @@ const __dirname = path.dirname(__filename);
 const ENGINE_PATH = path.join(__dirname, "..", "..", "engines", "myengine", "build", "myengine");
 
 export class UciEngine extends EventEmitter {
-    constructor(cmd = ENGINE_PATH) {
+    constructor(cmd = ENGINE_PATH, options = {}) {
         super();
         this.cmd = cmd;
         this.process = null;
         this.ready = false;
         this.queue = [];
         this.restarts = 0;
-        this.maxRestarts = 5;
+        this.maxRestarts = options.maxRestarts ?? 5;
+        this.handshakeTimeoutMs = options.handshakeTimeoutMs ?? 2000;
+        this.restartDelayMs = options.restartDelayMs ?? 1000;
+        this.commandTimeoutBufferMs = options.commandTimeoutBufferMs ?? 2000;
+        this.spawnFn = options.spawnFn ?? spawn;
         this.isShuttingDown = false;
     }
 
@@ -29,7 +33,7 @@ export class UciEngine extends EventEmitter {
 
         try {
             console.log(`[Engine] Spawning: ${this.cmd}`);
-            this.process = spawn({
+            this.process = this.spawnFn({
                 cmd: [this.cmd],
                 stdin: "pipe",
                 stdout: "pipe",
@@ -43,8 +47,8 @@ export class UciEngine extends EventEmitter {
                 this._handleCrash();
             });
 
-            await this._sendCommand("uci", (line) => line === "uciok", null, 2000);
-            await this._sendCommand("isready", (line) => line === "readyok", null, 2000);
+            await this._sendCommand("uci", (line) => line === "uciok", null, this.handshakeTimeoutMs);
+            await this._sendCommand("isready", (line) => line === "readyok", null, this.handshakeTimeoutMs);
 
             this.ready = true;
             this.restarts = 0;
@@ -87,8 +91,8 @@ export class UciEngine extends EventEmitter {
 
         if (this.restarts < this.maxRestarts) {
             this.restarts++;
-            console.warn(`[Engine] Attempting restart ${this.restarts}/${this.maxRestarts} in 1s...`);
-            await new Promise(r => setTimeout(r, 1000));
+            console.warn(`[Engine] Attempting restart ${this.restarts}/${this.maxRestarts} in ${this.restartDelayMs}ms...`);
+            await new Promise(r => setTimeout(r, this.restartDelayMs));
             this.start().catch(e => console.error("Restart failed:", e));
         } else {
             console.error("[Engine] Max restarts exceeded.");
@@ -195,7 +199,7 @@ export class UciEngine extends EventEmitter {
         if (options.blackInc) parts.push(`binc ${options.blackInc}`);
         if (options.moveTime) parts.push(`movetime ${options.moveTime}`);
 
-        let safeTimeout = options.moveTime ? options.moveTime + 2000 : (options.whiteTime ? 60000 * 5 : 60000);
+        let safeTimeout = options.moveTime ? options.moveTime + this.commandTimeoutBufferMs : (options.whiteTime ? 60000 * 5 : 60000);
         let currentBestMove = "(none)";
 
         try {
@@ -249,8 +253,9 @@ export class UciEngine extends EventEmitter {
 }
 
 export class EngineManager {
-    constructor() {
+    constructor(options = {}) {
         this.engines = new Map();
+        this.engineOptions = options.engineOptions ?? {};
     }
 
     async registerEngine(id, path) {
@@ -259,7 +264,7 @@ export class EngineManager {
             return this.engines.get(id);
         }
 
-        const engine = new UciEngine(path);
+        const engine = new UciEngine(path, this.engineOptions);
 
         engine.on("fatal_error", (err) => {
             console.error(`[Manager] Engine ${id} died permanently:`, err);

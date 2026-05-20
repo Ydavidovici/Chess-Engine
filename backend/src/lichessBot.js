@@ -2,14 +2,14 @@ import {eq} from "drizzle-orm";
 import {db} from "../db/db.js";
 import {players, games, gameMoves} from "../db/schema.js";
 
-function normalizeMove(move) {
+export function normalizeMove(move) {
     if (move && move.length === 5) {
         return move.slice(0, 4) + move[4].toLowerCase();
     }
     return move;
 }
 
-function computeMoveTime(remainingMs, incMs, totalTimeMs) {
+export function computeMoveTime(remainingMs, incMs, totalTimeMs) {
     const inc = incMs ?? 0;
 
     if (remainingMs == null) return 5000;
@@ -29,18 +29,21 @@ function computeMoveTime(remainingMs, incMs, totalTimeMs) {
     return Math.max(200, Math.min(estimate, cap, safety));
 }
 
-function mapResult(status, winner) {
+export function mapResult(status, winner) {
     if (winner === "white") return "1-0";
     if (winner === "black") return "0-1";
-    const draws = ["draw", "stalemate", "threefoldRepetition", "insufficient", "fiftyMoves"];
-    if (draws.includes(status) || (winner == null && status !== "started")) return "1/2-1/2";
+    const draws = ["draw", "stalemate", "threefoldRepetition", "insufficient", "fiftyMoves", "outoftime", "timeout"];
+    if (draws.includes(status)) return "1/2-1/2";
     return null;
 }
 
 export class LichessBot {
-    constructor(token, engine) {
+    constructor(token, engineFactory, options = {}) {
         this.token = token;
-        this.engine = engine;
+        this.engineFactory = engineFactory;
+        this.maxConcurrentGames = options.maxConcurrentGames ?? 4;
+        this.huntPollIntervalMs = options.huntPollIntervalMs ?? 1000;
+        this.reconnectDelayMs = options.reconnectDelayMs ?? 5000;
 
         this.authHeader = {Authorization: `Bearer ${this.token}`};
         this.formHeaders = {
@@ -53,13 +56,10 @@ export class LichessBot {
 
         this.eventController = null;
         this.gameControllers = new Map();
+        this.gameEngines = new Map();
 
         this.dbGameIds = new Map();
         this.savedPlies = new Map();
-
-        this.engine.on("fatal_error", (err) => {
-            console.error("!! ENGINE FATAL ERROR !!", err);
-        });
     }
 
     async start() {
@@ -71,9 +71,8 @@ export class LichessBot {
         if (!profileRes.ok) throw new Error("Failed to fetch bot profile");
         const profile = await profileRes.json();
         this.botProfile = profile.id;
-        console.log(`[Bot] Logged in as: ${this.botProfile}`);
+        console.log(`[Bot] Logged in as: ${this.botProfile} (max ${this.maxConcurrentGames} concurrent games)`);
 
-        await this.engine.start();
         this.streamEvents();
     }
 
@@ -90,6 +89,12 @@ export class LichessBot {
             console.log(`[${gameId}] Stream aborted.`);
         }
         this.gameControllers.clear();
+
+        for (const [gameId, engine] of this.gameEngines) {
+            engine.stop().catch(err => console.error(`[${gameId}] Engine stop error:`, err));
+        }
+        this.gameEngines.clear();
+
         this.activeGames.clear();
         this.dbGameIds.clear();
         this.savedPlies.clear();
@@ -109,7 +114,7 @@ export class LichessBot {
 
             if (!res.ok) {
                 console.error("[Bot] Event stream failed:", res.statusText);
-                setTimeout(() => this.streamEvents(), 5000);
+                setTimeout(() => this.streamEvents(), this.reconnectDelayMs);
                 return;
             }
 
@@ -126,7 +131,7 @@ export class LichessBot {
                 return;
             }
             console.error("[Bot] Event stream error:", err);
-            setTimeout(() => this.streamEvents(), 5000);
+            setTimeout(() => this.streamEvents(), this.reconnectDelayMs);
         }
     }
 
@@ -139,8 +144,8 @@ export class LichessBot {
             return;
         }
 
-        if (this.activeGames.size >= 1) {
-            console.log(`[Challenge ${challenge.id}] Declining — already in a game`);
+        if (this.activeGames.size >= this.maxConcurrentGames) {
+            console.log(`[Challenge ${challenge.id}] Declining — at max concurrent games (${this.maxConcurrentGames})`);
             await this.declineChallenge(challenge.id, "later");
             return;
         }
@@ -169,11 +174,28 @@ export class LichessBot {
         const gameController = new AbortController();
         this.gameControllers.set(gameId, gameController);
 
+        const engine = this.engineFactory();
+        this.gameEngines.set(gameId, engine);
+
+        engine.on("fatal_error", async (err) => {
+            console.error(`[${gameId}] !! ENGINE FATAL ERROR !! Resigning game.`, err);
+            try { await this.resignGame(gameId); } catch (_) {}
+            gameController.abort();
+        });
+
         let myColor = null;
         let initialFen = "startpos";
         let totalTimeMs = null;
 
         try {
+            try {
+                await engine.start();
+            } catch (startErr) {
+                console.error(`[${gameId}] !! ENGINE START FAILED !! Resigning game.`, startErr);
+                try { await this.resignGame(gameId); } catch (_) {}
+                throw startErr;
+            }
+
             const res = await fetch(`https://lichess.org/api/bot/game/stream/${gameId}`, {
                 headers: this.authHeader,
                 signal: gameController.signal,
@@ -200,7 +222,7 @@ export class LichessBot {
 
                     totalTimeMs = obj.clock?.initial ?? null;
 
-                    await this.engine.uciNewGame();
+                    await engine.uciNewGame();
                     await this.createDbGame(gameId, {
                         whiteUsername,
                         blackUsername,
@@ -234,7 +256,7 @@ export class LichessBot {
                 }
 
                 if (myColor && this.isMyTurn(initialFen, movesStr, myColor)) {
-                    await this.makeMove(gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs);
+                    await this.makeMove(engine, gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs);
                 }
             });
 
@@ -243,23 +265,25 @@ export class LichessBot {
                 console.error(`[${gameId}] Game stream error:`, err);
             }
         } finally {
+            try { await engine.stop(); } catch (e) { console.error(`[${gameId}] Engine stop error:`, e); }
+            this.gameEngines.delete(gameId);
             this.activeGames.delete(gameId);
             this.gameControllers.delete(gameId);
             console.log(`[${gameId}] Cleaned up.`);
         }
     }
 
-    async makeMove(gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs) {
+    async makeMove(engine, gameId, initialFen, movesStr, myColor, timeInfo, totalTimeMs) {
         console.log(`[${gameId}] My turn (${myColor}).`);
 
         const movesArray = movesStr.trim() === "" ? [] : movesStr.trim().split(" ");
-        await this.engine.position(initialFen, movesArray);
+        await engine.position(initialFen, movesArray);
 
         const myTime = myColor === "w" ? timeInfo.wtime : timeInfo.btime;
         const myInc  = myColor === "w" ? timeInfo.winc  : timeInfo.binc;
         const moveTimeMs = computeMoveTime(myTime, myInc, totalTimeMs);
 
-        const rawMove = await this.engine.go({moveTime: moveTimeMs});
+        const rawMove = await engine.go({moveTime: moveTimeMs});
         const bestMove = normalizeMove(rawMove);
         console.log(`[${gameId}] Engine: ${bestMove} (allocated ${moveTimeMs}ms)`);
 
@@ -459,7 +483,7 @@ export class LichessBot {
             } catch { continue; }
 
             for (let i = 0; i < 5; i++) {
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, this.huntPollIntervalMs));
                 if (this.activeGames.has(challengeId)) {
                     return {status: "success", message: `Playing vs ${target.username}`, gameId: challengeId};
                 }
@@ -504,7 +528,7 @@ export class LichessBot {
     }
 }
 
-function extractTime(state) {
+export function extractTime(state) {
     if (!state) return {};
     return {
         wtime: state.wtime,

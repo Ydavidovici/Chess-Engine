@@ -35,7 +35,7 @@ mock.module("../db/schema.js", () => ({
 }));
 mock.module("drizzle-orm", () => ({ eq: () => ({}) }));
 
-const { LichessBot } = await import("../src/lichessBot.js");
+const { LichessBot, normalizeMove, computeMoveTime, mapResult, extractTime } = await import("../src/lichessBot.js");
 
 class MockEngine extends EventEmitter {
     constructor() {
@@ -100,9 +100,13 @@ let bot;
 let engine;
 let originalFetch;
 
+function makeBot(options = {}) {
+    return new LichessBot("fake_token", () => engine, options);
+}
+
 beforeEach(() => {
     engine = new MockEngine();
-    bot = new LichessBot("fake_token", engine);
+    bot = makeBot();
     originalFetch = global.fetch;
     dbInserts = [];
     dbUpdates = [];
@@ -306,16 +310,21 @@ describe("start()", () => {
         expect(bot.botProfile).toBe("my-engine-bot");
     });
 
-    it("calls engine.start()", async () => {
+    it("calls engine.start() per game (not on bot.start)", async () => {
+        const gameId = "engine_start_test";
+
         global.fetch = mock(async (url) => {
             if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
-            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([]) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([makeGameFull(gameId, "bot")]) };
+            if (url.includes("/move/")) return { ok: true };
             return { ok: false };
         });
 
         await bot.start();
+        expect(engine.start).not.toHaveBeenCalled();
 
-        expect(engine.start).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(engine.start).toHaveBeenCalledTimes(1));
     });
 
     it("throws if /api/account returns a non-OK response", async () => {
@@ -408,7 +417,9 @@ describe("handleChallenge()", () => {
         });
     });
 
-    it("declines a standard challenge when already in a game", async () => {
+    it("declines a standard challenge when at the concurrency cap", async () => {
+        bot = makeBot({ maxConcurrentGames: 1 });
+
         const event = {
             type: "challenge",
             challenge: { id: "ch_busy", variant: { key: "standard" } },
@@ -432,7 +443,9 @@ describe("handleChallenge()", () => {
         });
     });
 
-    it("does NOT accept the challenge when busy — no accept call made", async () => {
+    it("does NOT accept the challenge when at the cap — no accept call made", async () => {
+        bot = makeBot({ maxConcurrentGames: 1 });
+
         const event = {
             type: "challenge",
             challenge: { id: "ch_no_accept", variant: { key: "standard" } },
@@ -452,6 +465,30 @@ describe("handleChallenge()", () => {
 
         await new Promise(r => setTimeout(r, 200));
         expect(acceptCalled).toBe(false);
+    });
+
+    it("accepts a second challenge below the cap (default cap is 4)", async () => {
+        const event = {
+            type: "challenge",
+            challenge: { id: "ch_second", variant: { key: "standard" } },
+        };
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([event]) };
+            if (url.includes("/challenge/ch_second/accept")) return { ok: true };
+            return { ok: false };
+        });
+
+        bot.activeGames.add("ongoing_game");
+        await bot.start();
+
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining("/challenge/ch_second/accept"),
+                expect.objectContaining({ method: "POST" })
+            );
+        });
     });
 });
 
@@ -803,6 +840,69 @@ describe("Resignation", () => {
     it("resigns when engine returns null",  () => expectResign("res3", null));
 });
 
+describe("Concurrent games", () => {
+    it("spawns a separate engine per game and runs both in parallel", async () => {
+        const engines = [];
+        const factory = () => {
+            const e = new MockEngine();
+            engines.push(e);
+            return e;
+        };
+        const concurrentBot = new LichessBot("fake_token", factory, { maxConcurrentGames: 4 });
+
+        const gameIds = ["concA", "concB"];
+        let streamCtrls = {};
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) {
+                return {
+                    ok: true,
+                    body: createMockStream(gameIds.map(id => ({ type: "gameStart", game: { id } }))),
+                };
+            }
+            for (const id of gameIds) {
+                if (url.includes(`/bot/game/stream/${id}`)) {
+                    return {
+                        ok: true,
+                        body: new ReadableStream({
+                            start(c) {
+                                streamCtrls[id] = c;
+                                const enc = new TextEncoder();
+                                c.enqueue(enc.encode(JSON.stringify(makeGameFull(id, "bot")) + "\n"));
+                            },
+                        }),
+                    };
+                }
+            }
+            if (url.includes("/move/")) return { ok: true };
+            return { ok: false };
+        });
+
+        await concurrentBot.start();
+
+        await waitFor(() => {
+            expect(concurrentBot.activeGames.size).toBe(2);
+            expect(engines.length).toBe(2);
+        });
+
+        await waitFor(() => {
+            expect(engines[0].start).toHaveBeenCalledTimes(1);
+            expect(engines[1].start).toHaveBeenCalledTimes(1);
+            expect(engines[0].go).toHaveBeenCalled();
+            expect(engines[1].go).toHaveBeenCalled();
+        });
+
+        for (const c of Object.values(streamCtrls)) c.close();
+        await waitFor(() => expect(concurrentBot.activeGames.size).toBe(0));
+
+        expect(engines[0].stop).toHaveBeenCalled();
+        expect(engines[1].stop).toHaveBeenCalled();
+
+        concurrentBot.stop();
+    });
+});
+
 describe("DB integration", () => {
     async function runGame(gameId, events) {
         global.fetch = mock(async (url) => {
@@ -958,5 +1058,1158 @@ describe("DB integration", () => {
         await waitFor(() => {
             expect(dbUpdates.some(u => u.data?.result === "1/2-1/2")).toBe(true);
         });
+    });
+
+    it("writes 1/2-1/2 for threefoldRepetition", async () => {
+        const gameId = "db_tf";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "threefoldRepetition", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => expect(dbUpdates.some(u => u.data?.result === "1/2-1/2" && u.data?.termination === "threefoldRepetition")).toBe(true));
+    });
+
+    it("writes 1/2-1/2 for insufficient material", async () => {
+        const gameId = "db_ins";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "insufficient", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => expect(dbUpdates.some(u => u.data?.result === "1/2-1/2" && u.data?.termination === "insufficient")).toBe(true));
+    });
+
+    it("writes 1/2-1/2 for fiftyMoves rule", async () => {
+        const gameId = "db_fm";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "fiftyMoves", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => expect(dbUpdates.some(u => u.data?.result === "1/2-1/2" && u.data?.termination === "fiftyMoves")).toBe(true));
+    });
+
+    it("writes 1/2-1/2 for outoftime with null winner (insufficient-material flag fall)", async () => {
+        const gameId = "db_oot";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "outoftime", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => expect(dbUpdates.some(u => u.data?.result === "1/2-1/2" && u.data?.termination === "outoftime")).toBe(true));
+    });
+
+    it("writes 1/2-1/2 for timeout with null winner", async () => {
+        const gameId = "db_to";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "timeout", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => expect(dbUpdates.some(u => u.data?.result === "1/2-1/2" && u.data?.termination === "timeout")).toBe(true));
+    });
+
+    it("writes null result (with termination) for aborted games", async () => {
+        const gameId = "db_ab";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "aborted", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => {
+            const u = dbUpdates.find(x => x.data?.termination === "aborted");
+            expect(u).toBeDefined();
+            expect(u.data.result).toBeNull();
+            expect(u.data.finishedAt).toBeTruthy();
+        });
+    });
+
+    it("writes null result for noStart with null winner", async () => {
+        const gameId = "db_ns";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "noStart", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => {
+            const u = dbUpdates.find(x => x.data?.termination === "noStart");
+            expect(u).toBeDefined();
+            expect(u.data.result).toBeNull();
+        });
+    });
+
+    it("writes null result for unknownFinish", async () => {
+        const gameId = "db_uf";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = { type: "gameState", moves: "", wtime: 0, btime: 0, winc: 0, binc: 0, status: "unknownFinish", winner: null };
+        await runGame(gameId, [gf, gs]);
+        await waitFor(() => {
+            const u = dbUpdates.find(x => x.data?.termination === "unknownFinish");
+            expect(u).toBeDefined();
+            expect(u.data.result).toBeNull();
+        });
+    });
+
+    it("createDbGame: rated=true maps to 1", async () => {
+        const gf = { ...makeGameFull("db_rated", "bot"), rated: true };
+        await runGame("db_rated", [gf]);
+        await waitFor(() => {
+            const gi = dbInserts.find(i => i.table === "GAMES");
+            expect(gi).toBeDefined();
+            expect(gi.data.rated).toBe(1);
+        });
+    });
+
+    it("createDbGame: null clock maps timeControl to null", async () => {
+        const gf = makeGameFull("db_noclock", "bot", { clock: null });
+        await runGame("db_noclock", [gf]);
+        await waitFor(() => {
+            const gi = dbInserts.find(i => i.table === "GAMES");
+            expect(gi).toBeDefined();
+            expect(gi.data.timeControl).toBeNull();
+        });
+    });
+
+    it("saveNewMoves is a no-op when called for an unknown gameId", async () => {
+        await bot.saveNewMoves("never_registered", "e2e4 e7e5");
+        const moveInserts = dbInserts.filter(i => i.table === "GAME_MOVES");
+        expect(moveInserts).toHaveLength(0);
+    });
+
+    it("finalizeDbGame is a no-op when called for an unknown gameId", async () => {
+        await bot.finalizeDbGame("never_registered", "mate", "white");
+        expect(dbUpdates).toHaveLength(0);
+    });
+});
+
+describe("Pure helpers — normalizeMove", () => {
+    it("returns null unchanged", () => {
+        expect(normalizeMove(null)).toBeNull();
+    });
+    it("returns undefined unchanged", () => {
+        expect(normalizeMove(undefined)).toBeUndefined();
+    });
+    it("returns empty string unchanged", () => {
+        expect(normalizeMove("")).toBe("");
+    });
+    it("returns 4-char moves unchanged", () => {
+        expect(normalizeMove("e2e4")).toBe("e2e4");
+        expect(normalizeMove("g1f3")).toBe("g1f3");
+    });
+    it("lowercases uppercase promotion piece (Q→q, R→r, B→b, N→n)", () => {
+        expect(normalizeMove("e7e8Q")).toBe("e7e8q");
+        expect(normalizeMove("a7a8R")).toBe("a7a8r");
+        expect(normalizeMove("h7h8B")).toBe("h7h8b");
+        expect(normalizeMove("d7d8N")).toBe("d7d8n");
+    });
+    it("is idempotent on already-lowercase promotion moves", () => {
+        expect(normalizeMove("e7e8q")).toBe("e7e8q");
+        expect(normalizeMove("a7a8n")).toBe("a7a8n");
+    });
+    it("does not modify 3-char or 6-char strings", () => {
+        expect(normalizeMove("e2e")).toBe("e2e");
+        expect(normalizeMove("e2e4e5")).toBe("e2e4e5");
+    });
+});
+
+describe("Pure helpers — computeMoveTime tier boundaries", () => {
+    it("just-below 60_000 total → 1_000ms cap", () => {
+        expect(computeMoveTime(59_999, 0, 59_999)).toBeLessThanOrEqual(1_000);
+    });
+    it("exactly 60_000 total → 2_000ms cap", () => {
+        const t = computeMoveTime(60_000, 0, 60_000);
+        expect(t).toBeLessThanOrEqual(2_000);
+        expect(t).toBeGreaterThan(1_000);
+    });
+    it("just-below 180_000 total → 2_000ms cap", () => {
+        expect(computeMoveTime(179_999, 0, 179_999)).toBeLessThanOrEqual(2_000);
+    });
+    it("exactly 180_000 total → 5_000ms cap", () => {
+        const t = computeMoveTime(180_000, 0, 180_000);
+        expect(t).toBeLessThanOrEqual(5_000);
+        expect(t).toBeGreaterThan(2_000);
+    });
+    it("just-below 480_000 → 5_000ms cap", () => {
+        expect(computeMoveTime(479_999, 0, 479_999)).toBeLessThanOrEqual(5_000);
+    });
+    it("exactly 480_000 → 15_000ms cap", () => {
+        const t = computeMoveTime(480_000, 0, 480_000);
+        expect(t).toBeLessThanOrEqual(15_000);
+        expect(t).toBeGreaterThan(5_000);
+    });
+    it("just-below 1_500_000 → 15_000ms cap", () => {
+        expect(computeMoveTime(1_499_999, 0, 1_499_999)).toBeLessThanOrEqual(15_000);
+    });
+    it("exactly 1_500_000 → 60_000ms cap", () => {
+        const t = computeMoveTime(1_500_000, 0, 1_500_000);
+        expect(t).toBeLessThanOrEqual(60_000);
+        expect(t).toBeGreaterThan(15_000);
+    });
+    it("totalTimeMs decouples cap from remainingMs (small remaining, large total → larger cap)", () => {
+        const t = computeMoveTime(3_000, 0, 600_000);
+        const safetyOnly = Math.floor(3_000 * 0.8);
+        expect(t).toBeLessThanOrEqual(safetyOnly);
+        expect(t).toBeGreaterThanOrEqual(200);
+    });
+    it("remainingMs === 0 still returns the 200ms floor", () => {
+        expect(computeMoveTime(0, 0, 180_000)).toBe(200);
+    });
+    it("incMs null is treated as 0 (no NaN)", () => {
+        const t = computeMoveTime(60_000, null, 180_000);
+        expect(Number.isFinite(t)).toBe(true);
+        expect(t).toBeGreaterThanOrEqual(200);
+    });
+    it("incMs undefined is treated as 0", () => {
+        const t = computeMoveTime(60_000, undefined, 180_000);
+        expect(Number.isFinite(t)).toBe(true);
+    });
+    it("estimate dominates when small (low remaining, low cap)", () => {
+        const t = computeMoveTime(30_000, 0, 30_000);
+        const estimate = Math.floor(30_000 / 30 + 0);
+        expect(t).toBe(Math.max(200, Math.min(estimate, 1_000, Math.floor(30_000 * 0.8))));
+    });
+});
+
+describe("Pure helpers — mapResult", () => {
+    it("winner === 'white' always wins (1-0), regardless of status", () => {
+        expect(mapResult("mate", "white")).toBe("1-0");
+        expect(mapResult("resign", "white")).toBe("1-0");
+        expect(mapResult("draw", "white")).toBe("1-0");
+    });
+    it("winner === 'black' always loses for white (0-1)", () => {
+        expect(mapResult("mate", "black")).toBe("0-1");
+        expect(mapResult("outoftime", "black")).toBe("0-1");
+    });
+    it.each([
+        ["draw"], ["stalemate"], ["threefoldRepetition"], ["insufficient"], ["fiftyMoves"],
+        ["outoftime"], ["timeout"],
+    ])("status=%s with null winner → 1/2-1/2", (status) => {
+        expect(mapResult(status, null)).toBe("1/2-1/2");
+    });
+    it.each([
+        ["aborted"], ["noStart"], ["unknownFinish"], ["created"], ["started"],
+    ])("status=%s with null winner → null (no result)", (status) => {
+        expect(mapResult(status, null)).toBeNull();
+    });
+    it("undefined winner is treated like null", () => {
+        expect(mapResult("aborted", undefined)).toBeNull();
+        expect(mapResult("draw", undefined)).toBe("1/2-1/2");
+    });
+});
+
+describe("Pure helpers — extractTime", () => {
+    it("returns {} for null state", () => {
+        expect(extractTime(null)).toEqual({});
+    });
+    it("returns {} for undefined state", () => {
+        expect(extractTime(undefined)).toEqual({});
+    });
+    it("extracts all four time fields", () => {
+        expect(extractTime({ wtime: 1, btime: 2, winc: 3, binc: 4, foo: 5 })).toEqual({
+            wtime: 1, btime: 2, winc: 3, binc: 4,
+        });
+    });
+    it("includes undefined for missing fields", () => {
+        const r = extractTime({ wtime: 100 });
+        expect(r.wtime).toBe(100);
+        expect(r.btime).toBeUndefined();
+        expect(r.winc).toBeUndefined();
+        expect(r.binc).toBeUndefined();
+    });
+});
+
+describe("handleChallenge — edge cases", () => {
+    async function runChallenge(challenge) {
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "challenge", challenge }]) };
+            if (url.includes("/challenge/")) return { ok: true };
+            return { ok: false };
+        });
+        await bot.start();
+    }
+
+    it("declines when variant is entirely missing", async () => {
+        await runChallenge({ id: "ch_no_variant" });
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining("/challenge/ch_no_variant/decline"),
+                expect.any(Object),
+            );
+        });
+    });
+
+    it("declines when variant.key is missing", async () => {
+        await runChallenge({ id: "ch_no_key", variant: {} });
+        await waitFor(() => {
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining("/challenge/ch_no_key/decline"),
+                expect.any(Object),
+            );
+        });
+    });
+
+    it("decline body includes reason=variant for non-standard variant", async () => {
+        let declineBody;
+        global.fetch = mock(async (url, opts) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "challenge", challenge: { id: "ch_v", variant: { key: "antichess" } } }]) };
+            if (url.includes("/challenge/ch_v/decline")) { declineBody = opts?.body?.toString(); return { ok: true }; }
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => expect(declineBody).toBeTruthy());
+        expect(declineBody).toContain("reason=variant");
+    });
+
+    it("decline body includes reason=later when at the cap", async () => {
+        bot = makeBot({ maxConcurrentGames: 1 });
+        bot.activeGames.add("ongoing");
+
+        let declineBody;
+        global.fetch = mock(async (url, opts) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "challenge", challenge: { id: "ch_l", variant: { key: "standard" } } }]) };
+            if (url.includes("/challenge/ch_l/decline")) { declineBody = opts?.body?.toString(); return { ok: true }; }
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => expect(declineBody).toBeTruthy());
+        expect(declineBody).toContain("reason=later");
+    });
+});
+
+describe("declineChallenge", () => {
+    it("uses 'generic' as default reason", async () => {
+        let body;
+        global.fetch = mock(async (url, opts) => {
+            if (url.includes("/challenge/x/decline")) { body = opts?.body?.toString(); return { ok: true }; }
+            return { ok: false };
+        });
+        await bot.declineChallenge("x");
+        expect(body).toContain("reason=generic");
+    });
+
+    it("silently swallows network errors", async () => {
+        global.fetch = mock(async () => { throw new Error("network down"); });
+        await expect(bot.declineChallenge("x", "later")).resolves.toBeUndefined();
+    });
+});
+
+describe("playGame — additional edge cases", () => {
+    it("ignores chatLine events without making moves", async () => {
+        const gameId = "chat_test";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const chat = { type: "chatLine", username: "x", text: "hi", room: "player" };
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf, chat, chat]) };
+            return { ok: false };
+        });
+        await bot.start();
+        await new Promise(r => setTimeout(r, 100));
+        expect(engine.go).not.toHaveBeenCalled();
+    });
+
+    it("ignores opponentGone events", async () => {
+        const gameId = "opp_gone";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const opp = { type: "opponentGone", gone: true, claimWinInSeconds: 60 };
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf, opp]) };
+            return { ok: false };
+        });
+        await bot.start();
+        await new Promise(r => setTimeout(r, 100));
+        expect(engine.go).not.toHaveBeenCalled();
+    });
+
+    it("ignores unknown event types in the game stream", async () => {
+        const gameId = "unknown_t";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const weird = { type: "futureLichessEvent", foo: "bar" };
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf, weird]) };
+            return { ok: false };
+        });
+        await bot.start();
+        await new Promise(r => setTimeout(r, 100));
+        expect(engine.go).not.toHaveBeenCalled();
+    });
+
+    it("passes a custom initialFen to engine.position", async () => {
+        const gameId = "custom_fen";
+        const fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot", fen, moves: "" });
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf]) };
+            if (url.includes("/move/")) return { ok: true };
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => expect(engine.position).toHaveBeenCalled());
+        expect(engine.position).toHaveBeenCalledWith(fen, []);
+    });
+
+    it("falls back to 'ai' when white object is missing", async () => {
+        const gameId = "missing_white";
+        const gf = makeGameFull(gameId, "bot");
+        delete gf.white;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf]) };
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => {
+            const names = dbInserts.filter(i => i.table === "PLAYERS").map(i => i.data.name);
+            expect(names).toContain("ai");
+        });
+    });
+
+    it("falls back to 'ai' when black object is missing", async () => {
+        const gameId = "missing_black";
+        const gf = makeGameFull(gameId, "bot");
+        delete gf.black;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf]) };
+            if (url.includes("/move/")) return { ok: true };
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => {
+            const names = dbInserts.filter(i => i.table === "PLAYERS").map(i => i.data.name);
+            expect(names).toContain("ai");
+        });
+    });
+
+    it("uses obj.white.name when obj.white.id is missing", async () => {
+        const gameId = "name_only";
+        const gf = makeGameFull(gameId, "bot");
+        gf.white = { name: "BotAccount" };
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf]) };
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => {
+            const names = dbInserts.filter(i => i.table === "PLAYERS").map(i => i.data.name);
+            expect(names).toContain("BotAccount");
+        });
+    });
+
+    it("when engine.start() throws, the bot resigns on Lichess and cleans up", async () => {
+        const failing = new MockEngine();
+        failing.start = mock(async () => { throw new Error("spawn failed"); });
+        const failBot = new LichessBot("fake_token", () => failing);
+
+        let resignCalled = false;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: "fail_game" } }]) };
+            if (url.includes("/bot/game/fail_game/resign")) { resignCalled = true; return { ok: true }; }
+            if (url.includes("/bot/game/stream/")) return { ok: true, body: createMockStream([]) };
+            return { ok: false };
+        });
+
+        await failBot.start();
+        await waitFor(() => expect(resignCalled).toBe(true));
+        await waitFor(() => expect(failBot.activeGames.size).toBe(0));
+        failBot.stop();
+    });
+
+    it("when engine emits fatal_error mid-game, the bot resigns on Lichess and cleans up", async () => {
+        const gameId = "fatal_test";
+        let streamCtrl;
+        let resignCalled = false;
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) {
+                return {
+                    ok: true,
+                    body: new ReadableStream({
+                        start(c) {
+                            streamCtrl = c;
+                            const enc = new TextEncoder();
+                            c.enqueue(enc.encode(JSON.stringify(makeGameFull(gameId, "bot", { white: "opp", black: "bot" })) + "\n"));
+                        },
+                    }),
+                };
+            }
+            if (url.includes(`/bot/game/${gameId}/resign`)) { resignCalled = true; return { ok: true }; }
+            return { ok: false };
+        });
+
+        await bot.start();
+        await waitFor(() => expect(bot.activeGames.has(gameId)).toBe(true));
+
+        engine.emit("fatal_error", new Error("engine died"));
+
+        await waitFor(() => expect(resignCalled).toBe(true));
+        await waitFor(() => expect(bot.activeGames.has(gameId)).toBe(false));
+    });
+
+    it("isolates engine state across concurrent games (each engine gets its own moves)", async () => {
+        const engines = [];
+        const seenByEngine = new Map();
+        const factory = () => {
+            const e = new MockEngine();
+            engines.push(e);
+            seenByEngine.set(e, []);
+            e.position = mock(async (fen, moves) => { seenByEngine.get(e).push(moves.join(",")); });
+            return e;
+        };
+        const isoBot = new LichessBot("fake_token", factory, { maxConcurrentGames: 4 });
+
+        const gameIds = ["isoA", "isoB"];
+        const movesByGame = { isoA: "e2e4 e7e5", isoB: "d2d4 d7d5" };
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) {
+                return { ok: true, body: createMockStream(gameIds.map(id => ({ type: "gameStart", game: { id } }))) };
+            }
+            for (const id of gameIds) {
+                if (url.includes(`/bot/game/stream/${id}`)) {
+                    return { ok: true, body: createMockStream([makeGameFull(id, "bot", { moves: movesByGame[id] })]) };
+                }
+            }
+            if (url.includes("/move/")) return { ok: true };
+            return { ok: false };
+        });
+
+        await isoBot.start();
+        await waitFor(() => expect(engines.length).toBe(2));
+        await waitFor(() => {
+            for (const e of engines) expect(seenByEngine.get(e).length).toBeGreaterThan(0);
+        });
+
+        const allMoveSets = engines.map(e => seenByEngine.get(e).join("|")).sort();
+        expect(allMoveSets).toEqual(["d2d4,d7d5", "e2e4,e7e5"]);
+
+        isoBot.stop();
+    });
+});
+
+describe("isMyTurn — custom FEN", () => {
+    it("FEN black-to-move with 0 plies: bot=black returns true", () => {
+        const fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+        expect(bot.isMyTurn(fen, "", "b")).toBe(true);
+        expect(bot.isMyTurn(fen, "", "w")).toBe(false);
+    });
+    it("FEN black-to-move with 1 ply: bot=white returns true", () => {
+        const fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+        expect(bot.isMyTurn(fen, "e7e5", "w")).toBe(true);
+        expect(bot.isMyTurn(fen, "e7e5", "b")).toBe(false);
+    });
+    it("malformed FEN with no color part defaults to white-to-move", () => {
+        expect(bot.isMyTurn("badfen", "", "w")).toBe(true);
+        expect(bot.isMyTurn("badfen", "", "b")).toBe(false);
+    });
+    it("whitespace-only movesStr counts as zero moves", () => {
+        expect(bot.isMyTurn("startpos", "   ", "w")).toBe(true);
+    });
+});
+
+describe("sendMove rejected", () => {
+    it("logs a warning and does not throw when Lichess rejects the move", async () => {
+        global.fetch = mock(async () => ({ ok: false, text: async () => "illegal move" }));
+        await expect(bot.sendMove("g1", "e2e5")).resolves.toBeUndefined();
+    });
+});
+
+describe("resignGame silent catch", () => {
+    it("does not throw when fetch fails", async () => {
+        global.fetch = mock(async () => { throw new Error("network"); });
+        await expect(bot.resignGame("g1")).resolves.toBeUndefined();
+    });
+});
+
+describe("Challenge creators — error paths", () => {
+    it("createChallenge throws when Lichess returns non-OK", async () => {
+        global.fetch = mock(async () => ({ ok: false, text: async () => "user not found" }));
+        await expect(bot.createChallenge("ghost", 60, 0)).rejects.toThrow("user not found");
+    });
+    it("createOpenChallenge throws when Lichess returns non-OK", async () => {
+        global.fetch = mock(async () => ({ ok: false, text: async () => "rate limited" }));
+        await expect(bot.createOpenChallenge(60, 0)).rejects.toThrow("rate limited");
+    });
+    it("createAiChallenge throws when Lichess returns non-OK", async () => {
+        global.fetch = mock(async () => ({ ok: false, text: async () => "bad level" }));
+        await expect(bot.createAiChallenge(99, 60, 0)).rejects.toThrow("bad level");
+    });
+});
+
+describe("cancelChallenge", () => {
+    it("POSTs to the cancel endpoint", async () => {
+        let cancelled = false;
+        global.fetch = mock(async (url, opts) => {
+            if (url.includes("/api/challenge/abc/cancel")) { cancelled = true; return { ok: true }; }
+            return { ok: false };
+        });
+        await bot.cancelChallenge("abc");
+        expect(cancelled).toBe(true);
+    });
+    it("silently swallows fetch errors", async () => {
+        global.fetch = mock(async () => { throw new Error("net"); });
+        await expect(bot.cancelChallenge("abc")).resolves.toBeUndefined();
+    });
+});
+
+describe("huntWeakestBot", () => {
+    function makeHuntBot() {
+        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1 });
+        b.botProfile = "self";
+        return b;
+    }
+
+    it("throws when /bot/online fetch fails", async () => {
+        global.fetch = mock(async () => ({ ok: false, statusText: "503" }));
+        const b = makeHuntBot();
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Failed to fetch online bots");
+    });
+
+    it("throws when no bots have a blitz rating", async () => {
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([{ id: "x", username: "X", perfs: {} }]) };
+            }
+            return { ok: false };
+        });
+        const b = makeHuntBot();
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("No candidates");
+    });
+
+    it("excludes self from candidates", async () => {
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([
+                    { id: "self", username: "Self", perfs: { blitz: { rating: 800 } } },
+                    { id: "other", username: "Other", perfs: { blitz: { rating: 1500 } } },
+                ])};
+            }
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeHuntBot();
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
+        expect(tried).not.toContain("Self");
+        expect(tried).toContain("Other");
+    });
+
+    it("challenges weakest first (ascending blitz rating)", async () => {
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([
+                    { id: "s", username: "Strong", perfs: { blitz: { rating: 2000 } } },
+                    { id: "w", username: "Weak",   perfs: { blitz: { rating: 1000 } } },
+                    { id: "m", username: "Mid",    perfs: { blitz: { rating: 1500 } } },
+                ])};
+            }
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeHuntBot();
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow();
+        expect(tried).toEqual(["Weak", "Mid", "Strong"]);
+    });
+
+    it("returns success when a game shows up in activeGames during polling", async () => {
+        let huntBotRef;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([{ id: "w", username: "Weak", perfs: { blitz: { rating: 1000 } } }]) };
+            }
+            if (url.includes("/api/challenge/Weak")) {
+                setTimeout(() => { huntBotRef.activeGames.add("cWeak"); }, 2);
+                return { ok: true, json: async () => ({ id: "cWeak" }) };
+            }
+            return { ok: false };
+        });
+        huntBotRef = makeHuntBot();
+        const result = await huntBotRef.huntWeakestBot(60, 0);
+        expect(result.status).toBe("success");
+        expect(result.gameId).toBe("cWeak");
+        expect(result.message).toContain("Weak");
+    });
+
+    it("skips a candidate when its challenge fetch returns non-OK", async () => {
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([
+                    { id: "a", username: "A", perfs: { blitz: { rating: 1000 } } },
+                    { id: "b", username: "B", perfs: { blitz: { rating: 1500 } } },
+                ])};
+            }
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m === null) {
+                if (url.includes("/cancel")) return { ok: true };
+                return { ok: false };
+            }
+            tried.push(m[1]);
+            if (m[1] === "A") return { ok: false };
+            return { ok: true, json: async () => ({ id: "c" + m[1] }) };
+        });
+        const b = makeHuntBot();
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow();
+        expect(tried).toEqual(["A", "B"]);
+    });
+
+    it("cancels challenge after 5 missed polls and tries next candidate", async () => {
+        let cancelled = false;
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([
+                    { id: "a", username: "A", perfs: { blitz: { rating: 1000 } } },
+                    { id: "b", username: "B", perfs: { blitz: { rating: 1500 } } },
+                ])};
+            }
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) { cancelled = true; return { ok: true }; }
+            return { ok: false };
+        });
+        const b = makeHuntBot();
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
+        expect(cancelled).toBe(true);
+        expect(tried).toEqual(["A", "B"]);
+    });
+
+    it("rated=false is included in the challenge body", async () => {
+        let bodyCaptured;
+        global.fetch = mock(async (url, opts) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([{ id: "w", username: "Weak", perfs: { blitz: { rating: 1000 } } }]) };
+            }
+            if (url.includes("/api/challenge/Weak")) { bodyCaptured = opts?.body?.toString(); return { ok: true, json: async () => ({ id: "x" }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeHuntBot();
+        await expect(b.huntWeakestBot(60, 0, false)).rejects.toThrow();
+        expect(bodyCaptured).toContain("rated=false");
+    });
+});
+
+describe("readNdjsonStream", () => {
+    function streamFromChunks(chunks) {
+        const enc = new TextEncoder();
+        return new ReadableStream({
+            start(c) {
+                for (const chunk of chunks) c.enqueue(enc.encode(chunk));
+                c.close();
+            },
+        });
+    }
+
+    it("buffers a JSON line split across two chunks", async () => {
+        const stream = streamFromChunks([`{"type":"chal`, `lenge","id":"x"}\n`]);
+        const got = [];
+        await bot.readNdjsonStream(stream, null, (o) => got.push(o));
+        expect(got).toEqual([{ type: "challenge", id: "x" }]);
+    });
+
+    it("logs but continues past an invalid JSON line", async () => {
+        const stream = streamFromChunks([`{"valid":1}\nnot-json\n{"valid":2}\n`]);
+        const got = [];
+        await bot.readNdjsonStream(stream, null, (o) => got.push(o));
+        expect(got).toEqual([{ valid: 1 }, { valid: 2 }]);
+    });
+
+    it("skips empty and whitespace-only lines", async () => {
+        const stream = streamFromChunks([`\n\n   \n{"x":1}\n\n{"y":2}\n`]);
+        const got = [];
+        await bot.readNdjsonStream(stream, null, (o) => got.push(o));
+        expect(got).toEqual([{ x: 1 }, { y: 2 }]);
+    });
+
+    it("processes multiple JSON objects from one chunk", async () => {
+        const stream = streamFromChunks([`{"a":1}\n{"b":2}\n{"c":3}\n`]);
+        const got = [];
+        await bot.readNdjsonStream(stream, null, (o) => got.push(o));
+        expect(got).toEqual([{ a: 1 }, { b: 2 }, { c: 3 }]);
+    });
+
+    it("returns when the abort signal fires (cancels the reader)", async () => {
+        const ctrl = new AbortController();
+        let enq;
+        const stream = new ReadableStream({
+            start(c) { enq = c; c.enqueue(new TextEncoder().encode(`{"a":1}\n`)); },
+        });
+        const got = [];
+        const p = bot.readNdjsonStream(stream, ctrl.signal, (o) => got.push(o));
+        await new Promise(r => setTimeout(r, 20));
+        ctrl.abort();
+        await p;
+        expect(got).toEqual([{ a: 1 }]);
+    });
+});
+
+describe("stop() — engine teardown and restart", () => {
+    it("calls engine.stop() on every gameEngine when bot.stop() is called", () => {
+        const e1 = new MockEngine();
+        const e2 = new MockEngine();
+        bot.gameEngines.set("g1", e1);
+        bot.gameEngines.set("g2", e2);
+
+        bot.stop();
+
+        expect(e1.stop).toHaveBeenCalled();
+        expect(e2.stop).toHaveBeenCalled();
+        expect(bot.gameEngines.size).toBe(0);
+    });
+
+    it("can be restarted cleanly after stop()", async () => {
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([]) };
+            return { ok: false };
+        });
+        await bot.start();
+        expect(bot.eventController).not.toBeNull();
+        bot.stop();
+        expect(bot.eventController).toBeNull();
+        await bot.start();
+        expect(bot.eventController).not.toBeNull();
+    });
+});
+
+describe("streamEvents() reconnect", () => {
+    it("retries the event stream after a non-OK response", async () => {
+        const reconnectBot = new LichessBot("fake_token", () => engine, { reconnectDelayMs: 5 });
+        let eventAttempts = 0;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) {
+                eventAttempts++;
+                if (eventAttempts === 1) return { ok: false, statusText: "Service Unavailable" };
+                return { ok: true, body: createMockStream([]) };
+            }
+            return { ok: false };
+        });
+        await reconnectBot.start();
+        await waitFor(() => expect(eventAttempts).toBeGreaterThanOrEqual(2), 1000);
+        reconnectBot.stop();
+    });
+
+    it("retries the event stream after an unexpected throw (network error)", async () => {
+        const reconnectBot = new LichessBot("fake_token", () => engine, { reconnectDelayMs: 5 });
+        let eventAttempts = 0;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) {
+                eventAttempts++;
+                if (eventAttempts === 1) throw new Error("connection refused");
+                return { ok: true, body: createMockStream([]) };
+            }
+            return { ok: false };
+        });
+        await reconnectBot.start();
+        await waitFor(() => expect(eventAttempts).toBeGreaterThanOrEqual(2), 1000);
+        reconnectBot.stop();
+    });
+
+    it("does not reconnect after an AbortError (intentional stop)", async () => {
+        const reconnectBot = new LichessBot("fake_token", () => engine, { reconnectDelayMs: 5 });
+        let eventAttempts = 0;
+        global.fetch = mock(async (url, opts) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) {
+                eventAttempts++;
+                // Return a stream that listens for abort
+                return {
+                    ok: true,
+                    body: new ReadableStream({
+                        start(c) {
+                            opts?.signal?.addEventListener("abort", () => {
+                                const err = new Error("aborted");
+                                err.name = "AbortError";
+                                c.error(err);
+                            });
+                        },
+                    }),
+                };
+            }
+            return { ok: false };
+        });
+        await reconnectBot.start();
+        await new Promise(r => setTimeout(r, 20));
+        reconnectBot.stop();
+        const before = eventAttempts;
+        await new Promise(r => setTimeout(r, 50));
+        expect(eventAttempts).toBe(before);
+    });
+});
+
+describe("Concurrent games — fault isolation", () => {
+    it("one game's engine emitting fatal_error does NOT affect other games", async () => {
+        const engines = [];
+        const factory = () => {
+            const e = new MockEngine();
+            engines.push(e);
+            return e;
+        };
+        const bot2 = new LichessBot("fake_token", factory, { maxConcurrentGames: 4 });
+
+        const streamCtrls = {};
+        const resignedGames = new Set();
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) {
+                return { ok: true, body: createMockStream([
+                    { type: "gameStart", game: { id: "gA" } },
+                    { type: "gameStart", game: { id: "gB" } },
+                ])};
+            }
+            for (const id of ["gA", "gB"]) {
+                if (url.includes(`/bot/game/stream/${id}`)) {
+                    return { ok: true, body: new ReadableStream({
+                        start(c) {
+                            streamCtrls[id] = c;
+                            const enc = new TextEncoder();
+                            c.enqueue(enc.encode(JSON.stringify(makeGameFull(id, "bot", { white: "opp", black: "bot" })) + "\n"));
+                        },
+                    })};
+                }
+                if (url.includes(`/bot/game/${id}/resign`)) { resignedGames.add(id); return { ok: true }; }
+            }
+            return { ok: false };
+        });
+
+        await bot2.start();
+        await waitFor(() => expect(bot2.activeGames.size).toBe(2));
+        await waitFor(() => expect(engines.length).toBe(2));
+
+        engines[0].emit("fatal_error", new Error("A died"));
+
+        await waitFor(() => expect(bot2.activeGames.has("gA")).toBe(false));
+        expect(bot2.activeGames.has("gB")).toBe(true);
+        expect(resignedGames.has("gA")).toBe(true);
+        expect(resignedGames.has("gB")).toBe(false);
+
+        bot2.stop();
+    });
+});
+
+describe("playGame — engine.stop() failure", () => {
+    it("still cleans up activeGames / gameEngines if engine.stop() rejects in finally", async () => {
+        const flakyEngine = new MockEngine();
+        flakyEngine.stop = mock(async () => { throw new Error("stop crashed"); });
+        const flakyBot = new LichessBot("fake_token", () => flakyEngine);
+
+        const gameId = "stop_fail";
+        const endingState = {
+            type: "gameState",
+            moves: "e2e4",
+            wtime: 60000, btime: 60000, winc: 0, binc: 0,
+            status: "mate",
+            winner: "white",
+        };
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([
+                makeGameFull(gameId, "bot", { white: "opp", black: "bot" }),
+                endingState,
+            ])};
+            return { ok: false };
+        });
+
+        await flakyBot.start();
+        await waitFor(() => expect(flakyBot.activeGames.has(gameId)).toBe(false));
+        expect(flakyBot.gameEngines.has(gameId)).toBe(false);
+        expect(flakyBot.gameControllers.has(gameId)).toBe(false);
+        flakyBot.stop();
+    });
+});
+
+describe("playGame — missing variant defaults to 'standard'", () => {
+    it("createDbGame receives variant='standard' when obj.variant is entirely missing", async () => {
+        const gameId = "no_variant";
+        const gf = makeGameFull(gameId, "bot");
+        delete gf.variant;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf]) };
+            if (url.includes("/move/")) return { ok: true };
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => {
+            const gi = dbInserts.find(i => i.table === "GAMES");
+            expect(gi).toBeDefined();
+            expect(gi.data.variant).toBe("standard");
+        });
+    });
+
+    it("createDbGame receives variant='standard' when obj.variant.key is missing", async () => {
+        const gameId = "empty_variant";
+        const gf = makeGameFull(gameId, "bot");
+        gf.variant = {};
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf]) };
+            if (url.includes("/move/")) return { ok: true };
+            return { ok: false };
+        });
+        await bot.start();
+        await waitFor(() => {
+            const gi = dbInserts.find(i => i.table === "GAMES");
+            expect(gi).toBeDefined();
+            expect(gi.data.variant).toBe("standard");
+        });
+    });
+});
+
+describe("huntWeakestBot — extra coverage", () => {
+    it("slices to top 10 candidates even when more eligible bots exist", async () => {
+        const bots = Array.from({ length: 15 }, (_, i) => ({
+            id: `b${i}`, username: `Bot${i}`,
+            perfs: { blitz: { rating: 1000 + i * 10 } },
+        }));
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1 });
+        b.botProfile = "self";
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
+        expect(tried).toHaveLength(10);
+        // 10 weakest = Bot0..Bot9
+        expect(tried).toEqual(["Bot0", "Bot1", "Bot2", "Bot3", "Bot4", "Bot5", "Bot6", "Bot7", "Bot8", "Bot9"]);
+    });
+
+    it("continues to next candidate when a challenge fetch THROWS (network)", async () => {
+        const bots = [
+            { id: "a", username: "A", perfs: { blitz: { rating: 1000 } } },
+            { id: "b", username: "B", perfs: { blitz: { rating: 1500 } } },
+        ];
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) {
+                tried.push(m[1]);
+                if (m[1] === "A") throw new Error("ECONNRESET");
+                return { ok: true, json: async () => ({ id: "cB" }) };
+            }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1 });
+        b.botProfile = "self";
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
+        expect(tried).toEqual(["A", "B"]);
+    });
+});
+
+describe("Pure helpers — extra", () => {
+    it("computeMoveTime returns 5000 for null remainingMs (direct)", () => {
+        expect(computeMoveTime(null, 0, null)).toBe(5000);
+        expect(computeMoveTime(null, 1000, 180_000)).toBe(5000);
+    });
+
+    it("computeMoveTime returns 5000 for undefined remainingMs (direct)", () => {
+        expect(computeMoveTime(undefined, 0, null)).toBe(5000);
+    });
+
+    it("computeMoveTime clamps a huge estimate to the cap", () => {
+        const t = computeMoveTime(1_000_000, 0, 180_000);
+        expect(t).toBeLessThanOrEqual(5_000);
+    });
+});
+
+describe("createChallenge — extra coverage", () => {
+    it("rated=false is included in the body", async () => {
+        let body;
+        global.fetch = mock(async (url, opts) => {
+            if (url.includes("/api/challenge/opp")) { body = opts?.body?.toString(); return { ok: true, json: async () => ({ id: "x" }) }; }
+            return { ok: false };
+        });
+        await bot.createChallenge("opp", 60, 0, false);
+        expect(body).toContain("rated=false");
+    });
+});
+
+describe("readNdjsonStream — callback errors", () => {
+    it("logs and continues when the callback itself throws", async () => {
+        const stream = new ReadableStream({
+            start(c) {
+                const enc = new TextEncoder();
+                c.enqueue(enc.encode(`{"x":1}\n{"x":2}\n{"x":3}\n`));
+                c.close();
+            },
+        });
+
+        let calls = 0;
+        await bot.readNdjsonStream(stream, null, (o) => {
+            calls++;
+            if (o.x === 2) throw new Error("callback boom");
+        });
+
+        expect(calls).toBe(3);
+    });
+});
+
+describe("saveNewMoves — progressive multi-event sequence", () => {
+    it("appends exactly the new moves across 3 sequential gameState events", async () => {
+        const gameId = "progressive";
+
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot", moves: "" });
+        const gs1 = { type: "gameState", moves: "e2e4",                wtime: 60000, btime: 60000, winc: 0, binc: 0, status: "started" };
+        const gs2 = { type: "gameState", moves: "e2e4 e7e5",           wtime: 60000, btime: 60000, winc: 0, binc: 0, status: "started" };
+        const gs3 = { type: "gameState", moves: "e2e4 e7e5 g1f3",      wtime: 60000, btime: 60000, winc: 0, binc: 0, status: "started" };
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf, gs1, gs2, gs3]) };
+            if (url.includes("/move/")) return { ok: true };
+            return { ok: false };
+        });
+
+        await bot.start();
+        await waitFor(() => {
+            const flat = dbInserts.filter(i => i.table === "GAME_MOVES")
+                .flatMap(i => Array.isArray(i.data) ? i.data : [i.data]);
+            expect(flat.filter(m => m.uci === "g1f3")).toHaveLength(1);
+        });
+
+        const flat = dbInserts.filter(i => i.table === "GAME_MOVES")
+            .flatMap(i => Array.isArray(i.data) ? i.data : [i.data]);
+        // Each move appears exactly once with the right ply
+        expect(flat.filter(m => m.ply === 1 && m.uci === "e2e4")).toHaveLength(1);
+        expect(flat.filter(m => m.ply === 2 && m.uci === "e7e5")).toHaveLength(1);
+        expect(flat.filter(m => m.ply === 3 && m.uci === "g1f3")).toHaveLength(1);
+    });
+});
+
+describe("isMyTurn — deeper plies", () => {
+    it("at ply 10 (even) the start-color side is to move", () => {
+        const moves = "e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4 g8f6 e1g1 f8e7";
+        expect(bot.isMyTurn("startpos", moves, "w")).toBe(true);
+        expect(bot.isMyTurn("startpos", moves, "b")).toBe(false);
+    });
+    it("at ply 7 (odd) the opposite-color side is to move", () => {
+        const moves = "e2e4 e7e5 g1f3 b8c6 f1b5 a7a6 b5a4";
+        expect(bot.isMyTurn("startpos", moves, "b")).toBe(true);
+        expect(bot.isMyTurn("startpos", moves, "w")).toBe(false);
     });
 });
