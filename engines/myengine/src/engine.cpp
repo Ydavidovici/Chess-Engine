@@ -2,14 +2,13 @@
 
 Engine::Engine()
     : tt(64), searcher(evaluator, tt) {
-    board.initialize();
     history.clear();
 }
 
 Engine::~Engine() = default;
 
 void Engine::reset() {
-    board.initialize();
+    board.loadFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     history.clear();
 }
 
@@ -48,27 +47,24 @@ bool Engine::applyMove(const std::string& moveStr) {
     return false;
 }
 
-bool Engine::undoMove() {
-    if (history.empty()) return false;
-    board.unmakeMove();
-    history.pop_back();
-    return true;
-}
-
-std::vector<std::string> Engine::legalMoves() const {
-    auto mv = board.generateLegalMoves();
-    std::vector<std::string> out;
-    out.reserve(mv.size());
-    for (auto& m : mv) out.push_back(m.toString());
-    return out;
-}
-
 std::string Engine::playMove(const PlaySettings& settings) {
+    // Book probe: handles transposition naturally (hash-keyed), bounded by fullmove cutoff.
+    if (use_book && opening_book.isLoaded() && board.fullmoveNumber() <= book_max_fullmove) {
+        Move book_move = opening_book.probe(board);
+        if (book_move.isValid()) {
+            board.makeMove(book_move);
+            std::string uci = book_move.toString();
+            history.push_back(uci);
+            return uci;
+        }
+    }
+
     Move best = searcher.findBestMove(
         board,
         settings.depth,
         settings.time_left_ms,
-        settings.increment_ms
+        settings.increment_ms,
+        settings.moves_to_go
     );
 
     board.makeMove(best);
@@ -85,8 +81,3 @@ bool Engine::isGameOver() const {
         || board.isInsufficientMaterial();
 }
 
-GameData Engine::getGameData() const {
-    GameData gd;
-    gd.moves = history;
-    return gd;
-}

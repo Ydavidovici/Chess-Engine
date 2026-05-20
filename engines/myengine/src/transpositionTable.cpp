@@ -14,18 +14,17 @@ void TranspositionTable::resize(size_t sizeInMB) {
 }
 
 void TranspositionTable::clear() {
-    std::memset(table_.data(), 0, table_.size() * sizeof(TTEntry));
+    std::memset(table_.data(), 0xFF, table_.size() * sizeof(TTEntry));
 }
 
 void TranspositionTable::store(uint64_t key, int value, int depth, Move bestMove, int flag) {
     size_t index = key % numEntries_;
     TTEntry& entry = table_[index];
 
-    bool isEmpty = (entry.key == 0);
-    bool isSamePos = (entry.key == key);
+    bool isEmpty = (entry.key == UINT64_MAX);
     bool isDeeper = (depth >= entry.depth);
 
-    if (isEmpty || isSamePos || isDeeper) {
+    if (isEmpty || isDeeper) {
         entry.key = key;
         entry.value = value;
         entry.depth = depth;

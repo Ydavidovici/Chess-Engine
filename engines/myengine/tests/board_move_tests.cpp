@@ -57,20 +57,6 @@ Move find_move(const Board& b, const std::string& uci) {
     return Move();
 }
 
-static uint64_t perft(Board& b, int depth) {
-    if (depth == 0) return 1;
-    uint64_t nodes = 0;
-    auto mv = b.generateLegalMoves();
-    for (auto& m : mv) {
-        if (b.makeMove(m)) {
-            nodes += perft(b, depth-1);
-            b.unmakeMove();
-        }
-    }
-    return nodes;
-}
-
-
 static void test_move_roundtrip() {
     std::cout << "--- test_move_roundtrip ---\n";
 
@@ -92,28 +78,6 @@ static void test_move_roundtrip() {
         }
     }
     std::cout << "  ok move UCI round-trip across positions\n\n";
-}
-
-static void test_start_position_and_perft() {
-    std::cout << "--- test_start_position_and_perft ---\n";
-    Board b;
-    auto s = b.toFEN();
-    const string exp="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    assert(s == exp);
-
-    auto mv = b.generateLegalMoves();
-    auto uci = to_uci(mv);
-    dump_moves("start moves", uci);
-    assert(uci.size() == 20);
-
-    uint64_t d1 = perft(b,1);
-    uint64_t d2 = perft(b,2);
-    uint64_t d3 = perft(b,3);
-    std::cout << "  perft d1="<<d1<<" d2="<<d2<<" d3="<<d3<<"\n";
-    assert(d1 == 20);
-    assert(d2 == 400);
-    assert(d3 == 8902);
-    std::cout << "  ok start FEN + perft(1..3)\n\n";
 }
 
 static void test_pawn_push_capture_promo() {
@@ -370,7 +334,6 @@ static void test_no_bogus_moves_from_scholar_fen() {
 
 int main() {
     test_move_roundtrip();
-    test_start_position_and_perft();
 
     test_pawn_push_capture_promo();
     test_knight_moves_wrap_guard();

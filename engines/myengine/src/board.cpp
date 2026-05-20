@@ -7,18 +7,15 @@
 #include <iostream>
 #include <random>
 
-
 uint64_t Board::piece_keys[12][64];
 uint64_t Board::en_passant_keys[64];
 uint64_t Board::castling_keys[16];
 uint64_t Board::side_key;
 std::once_flag Board::zobrist_once_flag_;
 
+// FIXME: intialize with values?
 Board::Board() {
-    initialize();
-}
-
-void Board::initZobrist() {
+    // init zobrist
     std::call_once(zobrist_once_flag_, []() {
         std::mt19937_64 rng(123456789);
         std::uniform_int_distribution<uint64_t> dist;
@@ -39,43 +36,8 @@ void Board::initZobrist() {
 
         side_key = dist(rng);
     });
-}
 
-uint64_t Board::calculateZobristKey() const {
-    uint64_t key = 0;
-
-    for (int p = 0; p < PieceTypeCount; ++p) {
-        uint64_t bb = white_bitboards[p];
-        while (bb) {
-            int sq = __builtin_ctzll(bb);
-            bb &= bb - 1;
-            key ^= piece_keys[p][sq];
-        }
-
-        bb = black_bitboards[p];
-        while (bb) {
-            int sq = __builtin_ctzll(bb);
-            bb &= bb - 1;
-            key ^= piece_keys[p + 6][sq];
-        }
-    }
-
-    if (en_passant_square_index != -1) {
-        key ^= en_passant_keys[en_passant_square_index];
-    }
-
-    key ^= castling_keys[castling_rights];
-
-    if (side_to_move == Color::BLACK) {
-        key ^= side_key;
-    }
-
-    return key;
-}
-
-void Board::initialize() {
-    initZobrist();
-
+    // init board itself
     white_bitboards.fill(0);
     black_bitboards.fill(0);
 
@@ -101,14 +63,45 @@ void Board::initialize() {
 
     move_history.clear();
 
-    current_zobrist_key = calculateZobristKey();
+    current_zobrist_key = calculateZobristKey(*this);
 
-    std::cout << "[DEBUG] Initial Zobrist Key: " << current_zobrist_key << std::endl;
+    // std::cout << "[DEBUG] Initial Zobrist Key: " << current_zobrist_key << std::endl;
+}
+
+uint64_t Board::calculateZobristKey(const Board& board) {
+    uint64_t key = 0;
+
+    const std::array<uint64_t, PieceTypeCount>* bitboards[2] = {
+        &board.white_bitboards,
+        &board.black_bitboards
+    };
+
+    for (int color = 0; color < 2; ++color) {
+        const int offset = color * 6;
+        for (int p = 0; p < PieceTypeCount; ++p) {
+            uint64_t bb = (*bitboards[color])[p];
+            while (bb) {
+                int sq = __builtin_ctzll(bb);
+                bb &= bb - 1;
+                key ^= piece_keys[p + offset][sq];
+            }
+        }
+    }
+
+    if (board.en_passant_square_index != -1) {
+        key ^= en_passant_keys[board.en_passant_square_index];
+    }
+
+    key ^= castling_keys[board.castling_rights];
+
+    if (board.side_to_move == Color::BLACK) {
+        key ^= side_key;
+    }
+
+    return key;
 }
 
 void Board::loadFEN(const std::string& fenString) {
-    initZobrist();
-
     white_bitboards.fill(0);
     black_bitboards.fill(0);
 
@@ -185,7 +178,7 @@ void Board::loadFEN(const std::string& fenString) {
 
     move_history.clear();
 
-    current_zobrist_key = calculateZobristKey();
+    current_zobrist_key = calculateZobristKey(*this);
 }
 
 std::string Board::toFEN() const {
@@ -915,6 +908,7 @@ bool Board::isStalemate(Color color) const {
 }
 
 bool Board::isFiftyMoveDraw() const {
+    // TODO: implement
     return false;
 }
 
@@ -938,6 +932,7 @@ bool Board::isThreefoldRepetition() const {
 }
 
 bool Board::isInsufficientMaterial() const {
+    // TODO: implement
     return false;
 }
 

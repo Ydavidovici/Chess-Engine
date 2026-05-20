@@ -18,6 +18,6 @@ git fetch --tags
 git checkout "tags/${TAG}"
 
 echo "Building source at ${TAG}..."
-./build.sh
+"$(dirname "${BASH_SOURCE[0]}")/build.sh"
 
 echo "✅ Build complete for ${TAG}"

@@ -3,16 +3,21 @@ CREATE TABLE `game_moves` (
 	`game_id` integer NOT NULL,
 	`ply` integer NOT NULL,
 	`uci` text NOT NULL,
-	`fen_after` text
+	`fen_after` text,
+	FOREIGN KEY (`game_id`) REFERENCES `games`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
+CREATE INDEX `game_idx` ON `game_moves` (`game_id`);--> statement-breakpoint
 CREATE TABLE `games` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`white_id` integer NOT NULL,
 	`black_id` integer NOT NULL,
 	`result` text,
-	`started_at` text,
-	`finished_at` text
+	`termination` text,
+	`started_at` text DEFAULT CURRENT_TIMESTAMP,
+	`finished_at` text,
+	FOREIGN KEY (`white_id`) REFERENCES `players`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`black_id`) REFERENCES `players`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE TABLE `players` (

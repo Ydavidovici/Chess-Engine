@@ -6,15 +6,29 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Adjusted paths: __dirname is backend/src/scripts/
-// Go up 3 levels to reach the project root
 const TOOLS_DIR = path.join(__dirname, "../../../tools");
 const ENGINES_DIR = path.join(__dirname, "../../../engines");
 const BOOK_PATH = path.join(TOOLS_DIR, "UHO_4060_v1.epd");
 
-async function downloadAndExtract(url, destFolder, toolName) {
-    console.log(`[${toolName}] Downloading from ${url}...`);
+async function exists(path) {
+    try {
+        await fs.access(path);
+        return true;
+    } catch {
+        return false;
+    }
+}
 
+async function downloadAndExtract(url, destFolder, toolName) {
+    if (await exists(destFolder)) {
+        const files = await fs.readdir(destFolder);
+        if (files.length > 0) {
+            console.log(`[${toolName}] ✅ Folder exists and is not empty. Skipping download.`);
+            return;
+        }
+    }
+
+    console.log(`[${toolName}] Downloading from ${url}...`);
     const zipPath = path.join(destFolder, `${toolName.replace(/\s+/g, "_")}.zip`);
     await fs.mkdir(destFolder, { recursive: true });
 
@@ -42,14 +56,19 @@ async function downloadAndExtract(url, destFolder, toolName) {
 }
 
 async function downloadGithubEngine(repo, destFolder, toolName) {
-    console.log(`[${toolName}] Fetching latest release info from GitHub (${repo})...`);
+    if (await exists(destFolder)) {
+        const files = await fs.readdir(destFolder);
+        if (files.length > 0) {
+            console.log(`[${toolName}] ✅ Folder exists. Skipping GitHub fetch.`);
+            return;
+        }
+    }
 
+    console.log(`[${toolName}] Fetching latest release info from GitHub (${repo})...`);
     const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
     if (!res.ok) throw new Error(`GitHub API failed for ${repo}: ${res.statusText}`);
 
     const data = await res.json();
-    if (!data.assets) throw new Error(`No assets found for ${repo}`);
-
     const asset = data.assets.find(a =>
         a.name.toLowerCase().includes("win") &&
         a.name.toLowerCase().endsWith(".zip") &&
@@ -62,33 +81,31 @@ async function downloadGithubEngine(repo, destFolder, toolName) {
 }
 
 async function runSetup() {
-    console.log("=== Setting up Massive Chess Engine Tournament Environment ===\n");
+    console.log("=== Setting up Chess Engine Tournament Environment ===\n");
     await fs.mkdir(TOOLS_DIR, { recursive: true });
     await fs.mkdir(ENGINES_DIR, { recursive: true });
 
-    // 1. Download Massive Opening Book (UHO 246,000 positions)
-    // 1. Download Massive Opening Book (UHO 246,000 positions)
-    console.log("[Book] Downloading massive UHO opening book...");
-    const bookUrl = "https://github.com/official-stockfish/books/raw/master/UHO_4060_v1.epd.zip";
+    if (await exists(BOOK_PATH)) {
+        console.log("[Book] ✅ UHO book already exists. Skipping.\n");
+    } else {
+        console.log("[Book] Downloading UHO opening book...");
+        const bookUrl = "https://github.com/official-stockfish/books/raw/master/UHO_4060_v1.epd.zip";
+        await downloadAndExtract(bookUrl, TOOLS_DIR, "UHO_Book");
+        console.log(`[Book] ✅ Saved to: ${BOOK_PATH}\n`);
+    }
 
-    // We can just reuse our zip helper instead of trying to fetch raw text!
-    await downloadAndExtract(bookUrl, TOOLS_DIR, "UHO_Book");
-
-    console.log(`[Book] ✅ Saved 246k positions to: ${BOOK_PATH}\n`);
-
-    console.log("[Cutechess] Finding latest release...");
     await downloadGithubEngine("cutechess/cutechess", path.join(TOOLS_DIR, "cutechess"), "Cutechess-CLI");
-    console.log("");
 
-    // 3. Download the Baseline Engines
-    const tscpUrl = "http://www.tckerrigan.com/Chess/TSCP/tscp181.zip";
-    await downloadAndExtract(tscpUrl, path.join(ENGINES_DIR, "tscp"), "TSCP");
-
-    // We download Stockfish once, but we will spawn it multiple times with different node restrictions
+    const MADCHESS_URL = "https://github.com/jbtucheck/MadChess/releases/download/v3.2/MadChess-3.2.zip";
+    await downloadAndExtract(MADCHESS_URL, path.join(ENGINES_DIR, "madchess"), "MadChess");
     await downloadGithubEngine("official-stockfish/Stockfish", path.join(ENGINES_DIR, "stockfish"), "Stockfish");
 
+    await downloadGithubEngine("mclarkson/Stash", path.join(ENGINES_DIR, "stash"), "Stash");
+
+    await downloadGithubEngine("jessev/Wasp", path.join(ENGINES_DIR, "wasp"), "Wasp");
+
     console.log("\n🚀 Setup Complete!");
-    console.log("Your engines and massive opening book are ready.");
+    console.log("Your engines and opening book are ready.");
 }
 
 runSetup().catch(console.error);

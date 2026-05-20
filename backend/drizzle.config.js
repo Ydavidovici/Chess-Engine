@@ -1,10 +1,10 @@
-import { defineConfig } from "drizzle-kit";
+import {defineConfig} from "drizzle-kit";
 
 export default defineConfig({
-  schema: "./db/schema.js",
-  out: "./db/migrations",
-  dialect: "sqlite",
-  dbCredentials: {
-    url: "./db/myengine.db",
-  },
+    schema: "./db/schema.js",
+    out: "./db/migrations",
+    dialect: "sqlite",
+    dbCredentials: {
+        url: "myengine.db",
+    },
 });
