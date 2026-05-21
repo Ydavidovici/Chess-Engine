@@ -210,11 +210,19 @@ export class UciEngine extends EventEmitter {
 
         const parts = ["go"];
         if (options.depth) parts.push(`depth ${options.depth}`);
-        if (options.whiteTime) parts.push(`wtime ${options.whiteTime}`);
-        if (options.blackTime) parts.push(`btime ${options.blackTime}`);
-        if (options.whiteInc) parts.push(`winc ${options.whiteInc}`);
-        if (options.blackInc) parts.push(`binc ${options.blackInc}`);
-        if (options.moveTime) parts.push(`movetime ${options.moveTime}`);
+
+        // UCI: movetime and clock params (wtime/btime/winc/binc) are mutually
+        // exclusive search modes. Sending both is undefined behavior — some
+        // engines ignore movetime and use their own (shorter) clock budget.
+        // When moveTime is provided it is the authoritative search limit.
+        if (options.moveTime) {
+            parts.push(`movetime ${options.moveTime}`);
+        } else {
+            if (options.whiteTime) parts.push(`wtime ${options.whiteTime}`);
+            if (options.blackTime) parts.push(`btime ${options.blackTime}`);
+            if (options.whiteInc  != null) parts.push(`winc ${options.whiteInc}`);
+            if (options.blackInc  != null) parts.push(`binc ${options.blackInc}`);
+        }
 
         let safeTimeout = options.moveTime ? options.moveTime + this.commandTimeoutBufferMs : (options.whiteTime ? 60000 * 5 : 60000);
         let currentBestMove = "(none)";
