@@ -128,7 +128,7 @@ export class LichessBot {
             huntInFlight: false,
         };
 
-        this.notifier.info("Autoplay enabled", {limit, increment, rated, target: cappedTarget, mode, window});
+        this.notifier.info("[Autoplay] Autoplay enabled", {limit, increment, rated, target: cappedTarget, mode, window});
         console.log(`[Autoplay] Enabled (${limit}+${increment} ${rated ? "rated" : "casual"}, target=${cappedTarget}, mode=${mode}${mode === "near" ? `, window=±${window}` : ""})`);
         this._tickAutoplay();
     }
@@ -137,7 +137,7 @@ export class LichessBot {
         if (!this.autoplay) return;
         if (this.autoplay.timer) clearTimeout(this.autoplay.timer);
         this.autoplay = null;
-        this.notifier.info("Autoplay disabled");
+        this.notifier.info("[Autoplay] Autoplay disabled");
         console.log("[Autoplay] Disabled");
     }
 
@@ -166,7 +166,7 @@ export class LichessBot {
         if (this._isRateLimited()) {
             const remainingSec = this._rateLimitRemainingSec();
             const waitMs = remainingSec * 1000 + 500;
-            console.log(`[Autoplay] Rate-limited; skipping tick, retry in ${remainingSec}s`);
+            this.notifier.warn("[Autoplay] Rate-limited; skipping tick", {remainingSec, waitMs});
             this.autoplay.timer = setTimeout(() => this._tickAutoplay(), waitMs);
             return;
         }
@@ -193,7 +193,7 @@ export class LichessBot {
                     // case Lichess sends a short Retry-After while we're
                     // already backing off for other reasons).
                     next = Math.max(err.retryAfterSec * 1000 + 500, this.autoplay.currentBackoffMs || 0);
-                    this.notifier.warn("Lichess rate limit", {retryAfterSec: err.retryAfterSec});
+                    this.notifier.warn("[Hunt] Lichess rate limit", {retryAfterSec: err.retryAfterSec});
                 } else {
                     // Exponential backoff: 5s, 10s, 20s, ... capped at 5 min.
                     next = this.autoplay.currentBackoffMs === 0 ? 5_000 : Math.min(this.autoplay.currentBackoffMs * 2, 300_000);
@@ -390,7 +390,7 @@ export class LichessBot {
 
         if (this.activeGames.size >= this.maxConcurrentGames) {
             console.log(`[Challenge ${challenge.id}] Declining — at max concurrent games (${this.maxConcurrentGames})`);
-            this.notifier.info(`Declining challenge ${challenge.id}`, {reason: "at_cap", active: this.activeGames.size});
+            this.notifier.info(`[Challenge] Declining challenge ${challenge.id}`, {reason: "at_cap", active: this.activeGames.size});
             await this.declineChallenge(challenge.id, "later");
             return;
         }
@@ -415,7 +415,7 @@ export class LichessBot {
         if (this.activeGames.has(gameId)) return;
         this.activeGames.add(gameId);
         console.log(`[${gameId}] Game started.`);
-        this.notifier.info(`Game started: ${gameId}`, {active: this.activeGames.size, max: this.maxConcurrentGames});
+        this.notifier.info(`[Game] Game started: ${gameId}`, {active: this.activeGames.size, max: this.maxConcurrentGames});
 
         await this._ensureProfile().catch(() => {});
 
@@ -429,7 +429,7 @@ export class LichessBot {
             // EngineCapReached or any factory failure: don't try to play. Resign and bail.
             // Existing in-flight games keep running — we just don't add another.
             console.error(`[${gameId}] Engine factory rejected:`, err);
-            this.notifier.warn(`Refused to spawn engine for ${gameId}`, {message: err?.message});
+            this.notifier.warn(`[Game] Refused to spawn engine for ${gameId}`, {message: err?.message});
             try { await this.resignGame(gameId); } catch (_) {}
             this.activeGames.delete(gameId);
             this.gameControllers.delete(gameId);
@@ -439,7 +439,7 @@ export class LichessBot {
 
         engine.on("fatal_error", async (err) => {
             console.error(`[${gameId}] !! ENGINE FATAL ERROR !! Resigning game.`, err);
-            this.notifier.error(`Engine fatal in game ${gameId}`, {message: err?.message});
+            this.notifier.error(`[Game] Engine fatal in game ${gameId}`, {message: err?.message});
             try { await this.resignGame(gameId); } catch (_) {}
             gameController.abort();
         });
@@ -536,7 +536,7 @@ export class LichessBot {
                         consecutiveMoveFailures++;
                         if (consecutiveMoveFailures >= MAX_CONSECUTIVE_MOVE_FAILURES) {
                             console.error(`[${gameId}] Engine stuck (${consecutiveMoveFailures} consecutive move failures) — resigning.`);
-                            this.notifier.warn(`Engine stuck in ${gameId}, resigning`, {failures: consecutiveMoveFailures});
+                            this.notifier.warn(`[Game] Engine stuck in ${gameId}, resigning`, {failures: consecutiveMoveFailures});
                             try { await this.resignGame(gameId); } catch (_) {}
                             gameController.abort();
                             return;
@@ -817,6 +817,7 @@ export class LichessBot {
         // A successful challenge POST proves our rate-limit credit is restored.
         if (this.rateLimitConsecutiveHits > 0) {
             console.log(`[Hunt] Rate-limit recovered after ${this.rateLimitConsecutiveHits} consecutive hit(s).`);
+            this.notifier.info("[Autoplay] Autoplay restarted after rate limit", {hits: this.rateLimitConsecutiveHits});
             this.rateLimitConsecutiveHits = 0;
             this._saveRateLimitState().catch(() => {});
         }
