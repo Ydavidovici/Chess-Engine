@@ -67,10 +67,10 @@ export class LichessBot {
         this.declineCooldownMs = options.declineCooldownMs ?? 15 * 60 * 1000;
         this.recentlyDeclined = new Map();
 
-        // Stagger between concurrent challenge POSTs. We fan out all candidates
-        // in parallel (so the first accepting bot wins quickly) but offset each
-        // by this many ms so we don't truly burst on Lichess's rate limit.
-        this.challengeSpacingMs = options.challengeSpacingMs ?? 250;
+        // Minimum gap between consecutive challenge POSTs within one hunt.
+        // 250ms caused bursts of 4 req/s when bots declined instantly; 2s keeps
+        // us well inside Lichess's per-minute challenge rate limit.
+        this.challengeSpacingMs = options.challengeSpacingMs ?? 2000;
         // How long to wait, after all candidates are posted, for any of them
         // to accept before giving up on the whole pool.
         this.huntAcceptTimeoutMs = options.huntAcceptTimeoutMs ?? 8000;
@@ -217,7 +217,13 @@ export class LichessBot {
                 const data = await file.json();
                 if (data.rateLimitedUntil && data.rateLimitedUntil > Date.now()) {
                     this.rateLimitedUntil = data.rateLimitedUntil;
-                    this.rateLimitConsecutiveHits = data.rateLimitConsecutiveHits || 0;
+                    // Do NOT restore consecutive-hit counter across restarts.
+                    // The counter drives exponential backoff, but after a restart
+                    // Lichess's rate-limit window has likely reset. Carrying the
+                    // counter over means every restart-while-rate-limited pushes
+                    // the multiplier higher (we saw hit #15 → 16-min backoffs).
+                    // The saved rateLimitedUntil already encodes how long to wait;
+                    // once that expires we start fresh at 1×.
                     const remainingSec = Math.ceil((this.rateLimitedUntil - Date.now()) / 1000);
                     console.log(`[Bot] Restored rate limit state from disk: rate-limited for ${remainingSec}s`);
                 }
@@ -230,10 +236,8 @@ export class LichessBot {
     async _saveRateLimitState() {
         if (process.env.NODE_ENV === "test") return;
         try {
-            const data = {
-                rateLimitedUntil: this.rateLimitedUntil,
-                rateLimitConsecutiveHits: this.rateLimitConsecutiveHits,
-            };
+            // Only persist the expiry timestamp — not the consecutive-hit counter.
+            const data = {rateLimitedUntil: this.rateLimitedUntil};
             await Bun.write("lichess-rate-limit.json", JSON.stringify(data));
         } catch (err) {
             console.error("[Bot] Failed to save rate limit state:", err);
@@ -966,7 +970,7 @@ export class LichessBot {
     // Challenge bots within ±window of our own rating for the given TC. Tries
     // up to `maxAttempts` candidates, ordered by closeness in rating; returns
     // the first one that accepts within ~5s.
-    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 8, poolSize = 80, maxWindow = 2000} = {}) {
+    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 4, poolSize = 80, maxWindow = 2000} = {}) {
         if (this._isRateLimited()) {
             throw new LichessRateLimited(this._rateLimitRemainingSec());
         }
@@ -1073,7 +1077,7 @@ export class LichessBot {
         const candidates = eligible
             .filter(b => !this._inDeclineCooldown(b.username))
             .sort((a, b) => a.perfs.blitz.rating - b.perfs.blitz.rating)
-            .slice(0, 10);
+            .slice(0, 5);
 
         if (filteredOut > 0) {
             console.log(`[Hunt] Skipped ${filteredOut} bot(s) in decline cool-down`);
