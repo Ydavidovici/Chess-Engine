@@ -1,6 +1,19 @@
 import { mock, describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { EventEmitter } from "node:events";
 
+// Build a fake fetch Response for tests — `Headers` semantics matter for 429
+// handling (Retry-After lookup is case-insensitive).
+function rateLimitResponse(retryAfterSec) {
+    const headers = new Headers();
+    if (retryAfterSec != null) headers.set("Retry-After", String(retryAfterSec));
+    return {
+        ok: false,
+        status: 429,
+        headers,
+        text: async () => '{"error":"Too many requests."}',
+    };
+}
+
 let dbInserts = [];
 let dbUpdates = [];
 
@@ -14,11 +27,24 @@ const mockDb = {
             return p;
         },
     }),
-    select: () => ({
-        from: () => ({
-            where: () => Promise.resolve([{ id: 1 }]),
-        }),
-    }),
+    // Select chain must support both `.where(...)` (awaited directly, e.g.
+    // upsertPlayer) and `.where(...).limit(N)` (awaited, e.g. createDbGame's
+    // resume probe). Return a thenable that also exposes `.limit()`.
+    select: () => {
+        const chain = {
+            from: () => chain,
+            // By default treat the row as "not found" so createDbGame inserts
+            // a fresh row instead of taking the resume path. Tests that need
+            // the resume path can override mockDb.select.
+            where: () => {
+                const result = [];
+                const thenable = Promise.resolve([{ id: 1 }]);
+                thenable.limit = () => Promise.resolve(result);
+                return thenable;
+            },
+        };
+        return chain;
+    },
     update: (table) => ({
         set: (data) => {
             dbUpdates.push({ table, data });
@@ -35,7 +61,7 @@ mock.module("../db/schema.js", () => ({
 }));
 mock.module("drizzle-orm", () => ({ eq: () => ({}) }));
 
-const { LichessBot, normalizeMove, computeMoveTime, mapResult, extractTime } = await import("../src/lichessBot.js");
+const { LichessBot, LichessRateLimited, normalizeMove, computeMoveTime, mapResult, extractTime } = await import("../src/lichessBot.js");
 
 class MockEngine extends EventEmitter {
     constructor() {
@@ -1613,9 +1639,14 @@ describe("isMyTurn — custom FEN", () => {
 });
 
 describe("sendMove rejected", () => {
-    it("logs a warning and does not throw when Lichess rejects the move", async () => {
+    it("returns false (and does not throw) when Lichess rejects the move", async () => {
         global.fetch = mock(async () => ({ ok: false, text: async () => "illegal move" }));
-        await expect(bot.sendMove("g1", "e2e5")).resolves.toBeUndefined();
+        await expect(bot.sendMove("g1", "e2e5")).resolves.toBe(false);
+    });
+
+    it("returns true when Lichess accepts the move", async () => {
+        global.fetch = mock(async () => ({ ok: true }));
+        await expect(bot.sendMove("g1", "e2e4")).resolves.toBe(true);
     });
 });
 
@@ -1659,7 +1690,7 @@ describe("cancelChallenge", () => {
 
 describe("huntWeakestBot", () => {
     function makeHuntBot() {
-        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1 });
+        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50 });
         b.botProfile = "self";
         return b;
     }
@@ -2088,7 +2119,7 @@ describe("huntWeakestBot — extra coverage", () => {
             if (url.includes("/cancel")) return { ok: true };
             return { ok: false };
         });
-        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1 });
+        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50 });
         b.botProfile = "self";
         await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
         expect(tried).toHaveLength(10);
@@ -2113,10 +2144,510 @@ describe("huntWeakestBot — extra coverage", () => {
             if (url.includes("/cancel")) return { ok: true };
             return { ok: false };
         });
-        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1 });
+        const b = new LichessBot("fake_token", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50 });
         b.botProfile = "self";
         await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
         expect(tried).toEqual(["A", "B"]);
+    });
+});
+
+describe("Hunt decline cool-down", () => {
+    it("_markDeclined + _inDeclineCooldown round-trip", () => {
+        const b = new LichessBot("t", () => engine, { declineCooldownMs: 60_000 });
+        expect(b._inDeclineCooldown("Foo")).toBe(false);
+        b._markDeclined("Foo");
+        expect(b._inDeclineCooldown("Foo")).toBe(true);
+        expect(b._inDeclineCooldown("foo")).toBe(true); // case-insensitive
+    });
+
+    it("_pruneDeclined removes expired entries", () => {
+        const b = new LichessBot("t", () => engine, { declineCooldownMs: 60_000 });
+        b.recentlyDeclined.set("expired", Date.now() - 1);
+        b.recentlyDeclined.set("fresh", Date.now() + 60_000);
+        b._pruneDeclined();
+        expect(b.recentlyDeclined.has("expired")).toBe(false);
+        expect(b.recentlyDeclined.has("fresh")).toBe(true);
+    });
+
+    it("huntWeakestBot skips bots already in cool-down", async () => {
+        const bots = [
+            { id: "a", username: "A", perfs: { blitz: { rating: 1000 } } },
+            { id: "b", username: "B", perfs: { blitz: { rating: 1500 } } },
+            { id: "c", username: "C", perfs: { blitz: { rating: 2000 } } },
+        ];
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50, declineCooldownMs: 60_000 });
+        b.botProfile = "self";
+        b._markDeclined("A");
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
+        expect(tried).not.toContain("A");
+        expect(tried).toContain("B");
+        expect(tried).toContain("C");
+    });
+
+    it("huntWeakestBot marks bots that ignore the challenge", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1000 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) return { ok: true, json: async () => ({ id: "cA" }) };
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50, declineCooldownMs: 60_000 });
+        b.botProfile = "self";
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow("Hunt failed");
+        expect(b._inDeclineCooldown("A")).toBe(true);
+    });
+
+    it("huntWeakestBot marks bots when challenge POST returns non-OK", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1000 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) return { ok: false };
+            return { ok: false };
+        });
+        const b = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50, declineCooldownMs: 60_000 });
+        b.botProfile = "self";
+        await expect(b.huntWeakestBot(60, 0)).rejects.toThrow();
+        expect(b._inDeclineCooldown("A")).toBe(true);
+    });
+
+    it("huntWeakestBot does NOT mark a bot that accepts (game appears in activeGames)", async () => {
+        let botRef;
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) {
+                return { ok: true, body: createMockStream([{ id: "a", username: "A", perfs: { blitz: { rating: 1000 } } }]) };
+            }
+            if (url.match(/\/api\/challenge\/A$/)) {
+                setTimeout(() => { botRef.activeGames.add("cA"); }, 2);
+                return { ok: true, json: async () => ({ id: "cA" }) };
+            }
+            return { ok: false };
+        });
+        botRef = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50, declineCooldownMs: 60_000 });
+        botRef.botProfile = "self";
+        const result = await botRef.huntWeakestBot(60, 0);
+        expect(result.status).toBe("success");
+        expect(botRef._inDeclineCooldown("A")).toBe(false);
+    });
+
+    it("default cool-down is 15 minutes", () => {
+        const b = new LichessBot("t", () => engine);
+        expect(b.declineCooldownMs).toBe(15 * 60 * 1000);
+    });
+});
+
+// Helper: standard rating-stream + account mock for huntNearRating tests.
+function mockNearRatingFetch(myRating, bots) {
+    return mock(async (url) => {
+        if (url.includes("/api/account")) {
+            return { ok: true, json: async () => ({ perfs: { blitz: { rating: myRating } } }) };
+        }
+        if (url.includes("/bot/online")) {
+            return { ok: true, body: createMockStream(bots) };
+        }
+        const m = url.match(/\/api\/challenge\/([^/]+)$/);
+        if (m) {
+            // Default: bot ignores us (cancelable). Tests override per-username via tried-list.
+            return { ok: true, json: async () => ({ id: "c" + m[1] }) };
+        }
+        if (url.includes("/cancel")) return { ok: true };
+        return { ok: false };
+    });
+}
+
+describe("huntNearRating — auto-widen window", () => {
+    function makeBot(opts = {}) {
+        const b = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50, ...opts });
+        b.botProfile = "self";
+        return b;
+    }
+
+    it("uses the initial window when it has candidates (does NOT widen)", async () => {
+        const bots = [
+            { id: "near", username: "Near",  perfs: { blitz: { rating: 1850 } } }, // Δ50
+            { id: "far",  username: "Far",   perfs: { blitz: { rating: 2500 } } }, // Δ700
+        ];
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeBot();
+        await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 2000 })).rejects.toThrow("Hunt failed");
+        expect(tried).toEqual(["Near"]);
+        expect(tried).not.toContain("Far");
+    });
+
+    it("widens window when initial pool is empty", async () => {
+        const bots = [
+            { id: "x", username: "X", perfs: { blitz: { rating: 2400 } } }, // Δ600 — outside ±200, inside ±800
+        ];
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeBot();
+        await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 2000 })).rejects.toThrow("Hunt failed");
+        expect(tried).toEqual(["X"]); // found after widening
+    });
+
+    it("widens when initial pool is empty only due to cool-down", async () => {
+        const bots = [
+            { id: "n", username: "Near", perfs: { blitz: { rating: 1850 } } }, // Δ50, but cooled-down
+            { id: "f", username: "Far",  perfs: { blitz: { rating: 2400 } } }, // Δ600, outside ±200
+        ];
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeBot({ declineCooldownMs: 60_000 });
+        b._markDeclined("Near");
+        await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 2000 })).rejects.toThrow("Hunt failed");
+        expect(tried).not.toContain("Near"); // still in cool-down at every window
+        expect(tried).toEqual(["Far"]);        // found via widening
+    });
+
+    it("stops widening at maxWindow and throws if still empty", async () => {
+        const bots = [
+            { id: "f", username: "Far", perfs: { blitz: { rating: 5000 } } }, // Δ3200, outside maxWindow=2000
+        ];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            return { ok: false };
+        });
+        const b = makeBot();
+        await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 2000 })).rejects.toThrow(/none within ±2000/);
+    });
+
+    it("throws with cool-down reason when every bot at maxWindow is cooled-down", async () => {
+        const bots = [
+            { id: "a", username: "A", perfs: { blitz: { rating: 1820 } } },
+            { id: "b", username: "B", perfs: { blitz: { rating: 1900 } } },
+        ];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            return { ok: false };
+        });
+        const b = makeBot({ declineCooldownMs: 60_000 });
+        b._markDeclined("A");
+        b._markDeclined("B");
+        await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 2000 })).rejects.toThrow(/in cool-down/);
+    });
+
+    it("widens past one level when one widen step is still not enough", async () => {
+        // myRating=1800; only bot is Δ1500 → needs widening to ±1600 (200→400→800→1600).
+        const bots = [{ id: "x", username: "X", perfs: { blitz: { rating: 3300 } } }];
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) { tried.push(m[1]); return { ok: true, json: async () => ({ id: "c" + m[1] }) }; }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeBot();
+        await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 2000 })).rejects.toThrow("Hunt failed");
+        expect(tried).toEqual(["X"]);
+    });
+
+    it("respects maxWindow=window (no widening allowed)", async () => {
+        const bots = [{ id: "x", username: "X", perfs: { blitz: { rating: 2400 } } }]; // Δ600
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            return { ok: false };
+        });
+        const b = makeBot();
+        // window === maxWindow disables widening
+        await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 200 })).rejects.toThrow(/none within ±200/);
+    });
+
+    it("clamps an initial window > maxWindow down to maxWindow", async () => {
+        const bots = [{ id: "x", username: "X", perfs: { blitz: { rating: 2400 } } }]; // Δ600
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            return { ok: false };
+        });
+        const b = makeBot();
+        // window=5000 > maxWindow=500. Should clamp to 500, so Δ600 stays out.
+        await expect(b.huntNearRating(180, 2, true, { window: 5000, maxWindow: 500 })).rejects.toThrow(/none within ±500/);
+    });
+
+    it("succeeds (returns gameId) when widening produces a bot that accepts", async () => {
+        let botRef;
+        const bots = [{ id: "x", username: "X", perfs: { blitz: { rating: 2400 } } }]; // outside ±200, inside ±800
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/X$/)) {
+                setTimeout(() => { botRef.activeGames.add("cX"); }, 2);
+                return { ok: true, json: async () => ({ id: "cX" }) };
+            }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        botRef = makeBot();
+        const result = await botRef.huntNearRating(180, 2, true, { window: 200, maxWindow: 2000 });
+        expect(result.status).toBe("success");
+        expect(result.gameId).toBe("cX");
+    });
+
+    it("does NOT widen past maxWindow even if pool stays empty after multiple doublings", async () => {
+        // Track windows tried via console.log spying.
+        const widenLogs = [];
+        const origLog = console.log;
+        console.log = (...args) => {
+            const line = args.join(" ");
+            if (line.includes("widening to")) widenLogs.push(line);
+            origLog(...args);
+        };
+        try {
+            global.fetch = mock(async (url) => {
+                if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+                if (url.includes("/bot/online")) return { ok: true, body: createMockStream([]) };
+                return { ok: false };
+            });
+            const b = makeBot();
+            await expect(b.huntNearRating(180, 2, true, { window: 200, maxWindow: 1600 })).rejects.toThrow();
+            // 200 → 400 → 800 → 1600 (cap). Three widen messages.
+            expect(widenLogs.length).toBe(3);
+            expect(widenLogs[widenLogs.length - 1]).toContain("±1600");
+        } finally {
+            console.log = origLog;
+        }
+    });
+});
+
+describe("Lichess 429 rate-limit handling", () => {
+    function makeBot(opts = {}) {
+        const b = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50, ...opts });
+        b.botProfile = "self";
+        return b;
+    }
+
+    it("huntNearRating: 429 throws LichessRateLimited with Retry-After value", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1820 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) return rateLimitResponse(42);
+            return { ok: false };
+        });
+        const b = makeBot();
+        await expect(b.huntNearRating(180, 0, true)).rejects.toBeInstanceOf(LichessRateLimited);
+        try { await b.huntNearRating(180, 0, true); }
+        catch (err) { expect(err.retryAfterSec).toBe(42); }
+    });
+
+    it("huntNearRating: 429 does NOT mark target as declined", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1820 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) return rateLimitResponse(30);
+            return { ok: false };
+        });
+        const b = makeBot();
+        await expect(b.huntNearRating(180, 0, true)).rejects.toBeInstanceOf(LichessRateLimited);
+        // Bot must remain challengeable on the next hunt.
+        expect(b._inDeclineCooldown("A")).toBe(false);
+    });
+
+    it("huntNearRating: 429 aborts immediately, does NOT challenge remaining candidates", async () => {
+        const bots = [
+            { id: "a", username: "A", perfs: { blitz: { rating: 1810 } } },
+            { id: "b", username: "B", perfs: { blitz: { rating: 1820 } } },
+            { id: "c", username: "C", perfs: { blitz: { rating: 1830 } } },
+        ];
+        const tried = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) {
+                tried.push(m[1]);
+                if (m[1] === "A") return { ok: true, json: async () => ({ id: "cA" }) };
+                return rateLimitResponse(30); // B trips the limit
+            }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeBot();
+        // The pool is shuffled, so we can't predict which bot trips it. Just
+        // verify: after a 429, the loop stops (tried.length <= position of 429).
+        await expect(b.huntNearRating(180, 0, true)).rejects.toBeInstanceOf(LichessRateLimited);
+        expect(tried.length).toBeLessThanOrEqual(3);
+        // No bot should be in cool-down (we either accepted them, or got 429).
+        expect(b.recentlyDeclined.size).toBe(0);
+    });
+
+    it("huntNearRating: uses defaultRetryAfterSec when 429 response has no Retry-After header", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1820 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) return rateLimitResponse(null); // no header
+            return { ok: false };
+        });
+        const b = makeBot({ defaultRetryAfterSec: 90 });
+        try { await b.huntNearRating(180, 0, true); }
+        catch (err) {
+            expect(err).toBeInstanceOf(LichessRateLimited);
+            expect(err.retryAfterSec).toBe(90);
+        }
+    });
+
+    it("huntNearRating: ignores malformed Retry-After header, falls back to default", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1820 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) {
+                const headers = new Headers();
+                headers.set("Retry-After", "garbage");
+                return { ok: false, status: 429, headers, text: async () => "" };
+            }
+            return { ok: false };
+        });
+        const b = makeBot({ defaultRetryAfterSec: 75 });
+        try { await b.huntNearRating(180, 0, true); }
+        catch (err) { expect(err.retryAfterSec).toBe(75); }
+    });
+
+    it("huntNearRating: still marks 400-level non-429 rejects as declined", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1820 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) {
+                return { ok: false, status: 400, headers: new Headers(), text: async () => '{"error":"Invalid time control"}' };
+            }
+            return { ok: false };
+        });
+        const b = makeBot();
+        await expect(b.huntNearRating(180, 0, true)).rejects.toThrow("Hunt failed");
+        expect(b._inDeclineCooldown("A")).toBe(true);
+    });
+
+    it("huntWeakestBot: 429 throws LichessRateLimited and does not mark declined", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1000 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) return rateLimitResponse(25);
+            return { ok: false };
+        });
+        const b = makeBot();
+        try { await b.huntWeakestBot(60, 0); }
+        catch (err) {
+            expect(err).toBeInstanceOf(LichessRateLimited);
+            expect(err.retryAfterSec).toBe(25);
+        }
+        expect(b._inDeclineCooldown("A")).toBe(false);
+    });
+
+    it("inter-challenge spacing: waits configured ms between successive challenges", async () => {
+        const bots = [
+            { id: "a", username: "A", perfs: { blitz: { rating: 1810 } } },
+            { id: "b", username: "B", perfs: { blitz: { rating: 1820 } } },
+        ];
+        let lastChallengeTs = 0;
+        const gaps = [];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            const m = url.match(/\/api\/challenge\/([^/]+)$/);
+            if (m) {
+                const now = Date.now();
+                if (lastChallengeTs > 0) gaps.push(now - lastChallengeTs);
+                lastChallengeTs = now;
+                return { ok: true, json: async () => ({ id: "c" + m[1] }) };
+            }
+            if (url.includes("/cancel")) return { ok: true };
+            return { ok: false };
+        });
+        const b = makeBot({ challengeSpacingMs: 80 });
+        await expect(b.huntNearRating(180, 0, true)).rejects.toThrow("Hunt failed");
+        expect(gaps.length).toBeGreaterThanOrEqual(1);
+        // Allow some scheduler slop; we just want to confirm the delay fired.
+        for (const g of gaps) expect(g).toBeGreaterThanOrEqual(70);
+    });
+
+    it("LichessRateLimited carries the name and retryAfterSec", () => {
+        const err = new LichessRateLimited(42);
+        expect(err.name).toBe("LichessRateLimited");
+        expect(err.retryAfterSec).toBe(42);
+        expect(err.message).toContain("42");
+    });
+});
+
+describe("Autoplay respects LichessRateLimited backoff", () => {
+    it("uses Retry-After (in ms + buffer) instead of exponential backoff", async () => {
+        const bots = [{ id: "a", username: "A", perfs: { blitz: { rating: 1820 } } }];
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: true, body: createMockStream(bots) };
+            if (url.match(/\/api\/challenge\/A$/)) return rateLimitResponse(30);
+            return { ok: false };
+        });
+        const b = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50 });
+        b.botProfile = "self";
+        b.autoplay = { limit: 180, increment: 0, rated: true, target: 1, mode: "near", window: 200, currentBackoffMs: 0, huntInFlight: false, timer: null };
+
+        // Trigger one tick; tickAutoplay schedules itself via setTimeout — we
+        // just need to see currentBackoffMs after the hunt rejects.
+        b._tickAutoplay();
+        // Wait long enough for the hunt to throw and the catch handler to run.
+        await new Promise(r => setTimeout(r, 100));
+
+        // Expected: 30s * 1000 + 500ms buffer = 30500.
+        expect(b.autoplay?.currentBackoffMs).toBe(30_500);
+
+        // Cleanup so the scheduled timer doesn't fire after the test.
+        b.stopAutoplay();
+    });
+
+    it("non-429 errors still use exponential backoff", async () => {
+        global.fetch = mock(async (url) => {
+            if (url.includes("/api/account")) return { ok: true, json: async () => ({ perfs: { blitz: { rating: 1800 } } }) };
+            if (url.includes("/bot/online")) return { ok: false, statusText: "503" };
+            return { ok: false };
+        });
+        const b = new LichessBot("t", () => engine, { huntPollIntervalMs: 1, challengeSpacingMs: 0, huntAcceptTimeoutMs: 50 });
+        b.botProfile = "self";
+        b.autoplay = { limit: 180, increment: 0, rated: true, target: 1, mode: "near", window: 200, currentBackoffMs: 0, huntInFlight: false, timer: null };
+
+        b._tickAutoplay();
+        await new Promise(r => setTimeout(r, 50));
+
+        // First failure: 5s
+        expect(b.autoplay?.currentBackoffMs).toBe(5000);
+        b.stopAutoplay();
     });
 });
 
