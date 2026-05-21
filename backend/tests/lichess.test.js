@@ -214,37 +214,37 @@ describe("Time management — adaptive across time controls", () => {
         return engine.go.mock.calls[0][0].moveTime;
     }
 
-    it("BULLET (60s+0): caps at 2s per move", async () => {
+    it("BULLET (60s+0): caps at 4s per move", async () => {
         const t = await captureMoveTime("bullet_test", { clockInitial: 60_000, clockIncrement: 0, wtime: 60_000, winc: 0 });
-        expect(t).toBeLessThanOrEqual(2000);
+        expect(t).toBeLessThanOrEqual(4000);
         expect(t).toBeGreaterThanOrEqual(200);
     });
 
-    it("BLITZ (3min+2s): allocates ~2.8s on the opening move", async () => {
+    it("BLITZ (3min+2s): allocates ~3.95s on the opening move", async () => {
         const t = await captureMoveTime("blitz_test", { clockInitial: 180_000, clockIncrement: 2000, wtime: 60_000, winc: 1000 });
-        expect(t).toBe(2850);
+        expect(t).toBe(3950);
     });
 
-    it("BLITZ (3min+2s): caps at 5s even with huge remaining time", async () => {
+    it("BLITZ (3min+2s): caps at 12s even with huge remaining time", async () => {
         const t = await captureMoveTime("blitz_cap", { clockInitial: 180_000, clockIncrement: 2000, wtime: 300_000, winc: 2000 });
-        expect(t).toBeLessThanOrEqual(5000);
+        expect(t).toBeLessThanOrEqual(12000);
     });
 
-    it("RAPID (10min+0): caps at 15s per move", async () => {
+    it("RAPID (10min+0): caps at 30s per move", async () => {
         const t = await captureMoveTime("rapid_test", { clockInitial: 600_000, clockIncrement: 0, wtime: 600_000, winc: 0 });
-        expect(t).toBeLessThanOrEqual(15000);
-        expect(t).toBeGreaterThan(5000);
+        expect(t).toBeLessThanOrEqual(30000);
+        expect(t).toBeGreaterThan(12000);
     });
 
-    it("CLASSICAL (30min+15s): allows up to 60s per move", async () => {
+    it("CLASSICAL (30min+15s): allows up to 120s per move", async () => {
         const t = await captureMoveTime("classical_test", { clockInitial: 1_800_000, clockIncrement: 15000, wtime: 1_800_000, winc: 15000 });
-        expect(t).toBeLessThanOrEqual(60000);
-        expect(t).toBeGreaterThan(15000);
+        expect(t).toBeLessThanOrEqual(120000);
+        expect(t).toBeGreaterThan(30000);
     });
 
-    it("CLASSICAL (60min+0): hits the absolute 60s ceiling", async () => {
+    it("CLASSICAL (60min+0): hits the absolute 120s ceiling", async () => {
         const t = await captureMoveTime("classical_big", { clockInitial: 3_600_000, clockIncrement: 0, wtime: 3_600_000, winc: 0 });
-        expect(t).toBe(60000);
+        expect(t).toBe(120000);
     });
 
     it("CORRESPONDENCE (no clock): uses a steady 5s budget", async () => {
@@ -277,9 +277,9 @@ describe("Time management — adaptive across time controls", () => {
         expect(t).toBeGreaterThanOrEqual(200);
     });
 
-    it("never spends more than 80% of remaining clock on one move (safety)", async () => {
+    it("never spends more than 85% of remaining clock on one move (safety)", async () => {
         const t = await captureMoveTime("safety_test", { clockInitial: 180_000, clockIncrement: 0, wtime: 600, winc: 0 });
-        expect(t).toBeLessThanOrEqual(Math.floor(600 * 0.8));
+        expect(t).toBeLessThanOrEqual(Math.floor(600 * 0.85));
     });
 });
 
@@ -1032,6 +1032,49 @@ describe("DB integration", () => {
         });
     });
 
+    it("emits a notifier event on game-over with status/winner/result", async () => {
+        const events = [];
+        const notifier = {
+            info:  (subject, details) => events.push({level: "info",  subject, details}),
+            warn:  (subject, details) => events.push({level: "warn",  subject, details}),
+            error: (subject, details) => events.push({level: "error", subject, details}),
+            fatal: (subject, details) => events.push({level: "fatal", subject, details}),
+        };
+        const localBot = new LichessBot("fake_token", () => engine, {notifier});
+
+        const gameId = "notify_over";
+        const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
+        const gs = {
+            type: "gameState",
+            moves: "e2e4 e7e5",
+            wtime: 59000, btime: 60000, winc: 0, binc: 0,
+            status: "mate",
+            winner: "white",
+        };
+
+        global.fetch = mock(async (url) => {
+            if (url.includes("/account")) return { ok: true, json: async () => ({ id: "bot" }) };
+            if (url.includes("/stream/event")) return { ok: true, body: createMockStream([{ type: "gameStart", game: { id: gameId } }]) };
+            if (url.includes(`/bot/game/stream/${gameId}`)) return { ok: true, body: createMockStream([gf, gs]) };
+            if (url.includes("/move/")) return { ok: true };
+            if (url.includes("/resign")) return { ok: true };
+            return { ok: false };
+        });
+
+        await localBot.start();
+
+        await waitFor(() => {
+            const gameOverEvent = events.find(e => typeof e.subject === "string" && e.subject.startsWith("[Game] Game over"));
+            expect(gameOverEvent).toBeDefined();
+            expect(gameOverEvent.subject).toContain(gameId);
+            expect(gameOverEvent.details).toMatchObject({
+                status: "mate",
+                winner: "white",
+                result: "1-0",
+            });
+        });
+    });
+
     it("writes 0-1 result when black wins", async () => {
         const gameId = "db6";
         const gf = makeGameFull(gameId, "bot", { white: "opp", black: "bot" });
@@ -1226,41 +1269,41 @@ describe("Pure helpers — normalizeMove", () => {
 });
 
 describe("Pure helpers — computeMoveTime tier boundaries", () => {
-    it("just-below 60_000 total → 1_000ms cap", () => {
-        expect(computeMoveTime(59_999, 0, 59_999)).toBeLessThanOrEqual(1_000);
+    it("just-below 60_000 total → 1_500ms cap", () => {
+        expect(computeMoveTime(59_999, 0, 59_999)).toBeLessThanOrEqual(1_500);
     });
-    it("exactly 60_000 total → 2_000ms cap", () => {
+    it("exactly 60_000 total → 4_000ms cap", () => {
         const t = computeMoveTime(60_000, 0, 60_000);
-        expect(t).toBeLessThanOrEqual(2_000);
-        expect(t).toBeGreaterThan(1_000);
+        expect(t).toBeLessThanOrEqual(4_000);
+        expect(t).toBeGreaterThan(1_500);
     });
-    it("just-below 180_000 total → 2_000ms cap", () => {
-        expect(computeMoveTime(179_999, 0, 179_999)).toBeLessThanOrEqual(2_000);
+    it("just-below 180_000 total → 4_000ms cap", () => {
+        expect(computeMoveTime(179_999, 0, 179_999)).toBeLessThanOrEqual(4_000);
     });
-    it("exactly 180_000 total → 5_000ms cap", () => {
+    it("exactly 180_000 total → 12_000ms cap", () => {
         const t = computeMoveTime(180_000, 0, 180_000);
-        expect(t).toBeLessThanOrEqual(5_000);
-        expect(t).toBeGreaterThan(2_000);
+        expect(t).toBeLessThanOrEqual(12_000);
+        expect(t).toBeGreaterThan(4_000);
     });
-    it("just-below 480_000 → 5_000ms cap", () => {
-        expect(computeMoveTime(479_999, 0, 479_999)).toBeLessThanOrEqual(5_000);
+    it("just-below 480_000 → 12_000ms cap", () => {
+        expect(computeMoveTime(479_999, 0, 479_999)).toBeLessThanOrEqual(12_000);
     });
-    it("exactly 480_000 → 15_000ms cap", () => {
+    it("exactly 480_000 → 30_000ms cap", () => {
         const t = computeMoveTime(480_000, 0, 480_000);
-        expect(t).toBeLessThanOrEqual(15_000);
-        expect(t).toBeGreaterThan(5_000);
+        expect(t).toBeLessThanOrEqual(30_000);
+        expect(t).toBeGreaterThan(12_000);
     });
-    it("just-below 1_500_000 → 15_000ms cap", () => {
-        expect(computeMoveTime(1_499_999, 0, 1_499_999)).toBeLessThanOrEqual(15_000);
+    it("just-below 1_500_000 → 30_000ms cap", () => {
+        expect(computeMoveTime(1_499_999, 0, 1_499_999)).toBeLessThanOrEqual(30_000);
     });
-    it("exactly 1_500_000 → 60_000ms cap", () => {
+    it("exactly 1_500_000 → 120_000ms cap", () => {
         const t = computeMoveTime(1_500_000, 0, 1_500_000);
-        expect(t).toBeLessThanOrEqual(60_000);
-        expect(t).toBeGreaterThan(15_000);
+        expect(t).toBeLessThanOrEqual(120_000);
+        expect(t).toBeGreaterThan(30_000);
     });
     it("totalTimeMs decouples cap from remainingMs (small remaining, large total → larger cap)", () => {
         const t = computeMoveTime(3_000, 0, 600_000);
-        const safetyOnly = Math.floor(3_000 * 0.8);
+        const safetyOnly = Math.floor(3_000 * 0.85);
         expect(t).toBeLessThanOrEqual(safetyOnly);
         expect(t).toBeGreaterThanOrEqual(200);
     });
@@ -1278,8 +1321,8 @@ describe("Pure helpers — computeMoveTime tier boundaries", () => {
     });
     it("estimate dominates when small (low remaining, low cap)", () => {
         const t = computeMoveTime(30_000, 0, 30_000);
-        const estimate = Math.floor(30_000 / 30 + 0);
-        expect(t).toBe(Math.max(200, Math.min(estimate, 1_000, Math.floor(30_000 * 0.8))));
+        const estimate = Math.floor(30_000 / 20 + 0);
+        expect(t).toBe(Math.max(200, Math.min(estimate, 1_500, Math.floor(30_000 * 0.85))));
     });
 });
 
@@ -2663,7 +2706,7 @@ describe("Pure helpers — extra", () => {
 
     it("computeMoveTime clamps a huge estimate to the cap", () => {
         const t = computeMoveTime(1_000_000, 0, 180_000);
-        expect(t).toBeLessThanOrEqual(5_000);
+        expect(t).toBeLessThanOrEqual(12_000);
     });
 });
 
