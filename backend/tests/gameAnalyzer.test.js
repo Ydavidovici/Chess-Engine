@@ -545,30 +545,34 @@ describe("GameAnalyzer.analyzeAll()", () => {
     it("throws when called while already running", async () => {
         const db = createTestDb();
 
-        // Mock engine that never resolves to keep it running
-        const hangingEngine = {
-            calls: [],
+        // Slow engine: each goWithEval takes 30ms so the test can observe
+        // isRunning=true before the first analyzeAll finishes.
+        const slowEngine = {
             async uciNewGame() {},
             async position() {},
-            async goWithEval() { await new Promise(() => {}); }, // hangs forever
+            async goWithEval() {
+                await tick(30);
+                return {scoreCp: 0, isMate: false, bestMove: "e2e4"};
+            },
             async stop() { this.isShuttingDown = true; },
             isShuttingDown: false,
         };
 
+        const fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
         const {game} = await seedGame(db);
         await db.insert(schema.gameMoves).values([
-            {gameId: game.id, ply: 1, uci: "e2e4", fenAfter: "fen1"},
+            {gameId: game.id, ply: 1, uci: "e2e4", fenAfter: fen},
         ]);
 
-        const analyzer = new GameAnalyzer("/fake/sf", {db, engine: hangingEngine, depth: 20});
-        // Start but don't await
-        const running = analyzer.analyzeAll();
+        const analyzer = new GameAnalyzer("/fake/sf", {db, engine: slowEngine, depth: 20});
+        const running = analyzer.analyzeAll(); // gets stuck inside first goWithEval
 
-        await tick(10);
+        await tick(5); // let it enter goWithEval before we try a second call
         await expect(analyzer.analyzeAll()).rejects.toThrow("already running");
 
-        await analyzer.stop();
-        await running.catch(() => {}); // drain
+        // First analyzeAll finishes after ~60ms (2 goWithEval calls × 30ms each)
+        await running;
+        expect(analyzer.isRunning).toBe(false);
     });
 
     it("skips games that already have move_evals", async () => {
@@ -588,19 +592,12 @@ describe("GameAnalyzer.analyzeAll()", () => {
             {gameId: g1.id, ply: 1, bestUci: "e2e4", bestCp: 20, playedCp: 18, cpLoss: 2, isMate: 0, classification: "good"},
         ]);
 
-        let gameIdsSeen = [];
         const mockEngine = {
-            calls: [],
-            async uciNewGame() { this.calls.push("uciNewGame"); },
-            async position(fen) { this.calls.push({type: "position", fen}); },
-            async goWithEval() {
-                const gameId = this._currentGameId;
-                gameIdsSeen.push(gameId);
-                return {scoreCp: 10, isMate: false, bestMove: "e2e4"};
-            },
+            async uciNewGame() {},
+            async position() {},
+            async goWithEval() { return {scoreCp: 10, isMate: false, bestMove: "e2e4"}; },
             async stop() {},
             isShuttingDown: false,
-            _currentGameId: null,
         };
 
         const analyzer = new GameAnalyzer("/fake/sf", {db, engine: mockEngine, depth: 20});
