@@ -25,15 +25,18 @@ export function computeMoveTime(remainingMs, incMs, totalTimeMs) {
 
     const total = totalTimeMs ?? remainingMs;
 
+    // Previously caps were tuned so conservatively that on a 3-minute game we'd
+    // end with 2:45 still on the clock — the engine was barely thinking. These
+    // budgets give the engine real headroom per move.
     let cap;
-    if      (total >= 1_500_000) cap = 60_000;
-    else if (total >=   480_000) cap = 15_000;
-    else if (total >=   180_000) cap =  5_000;
-    else if (total >=    60_000) cap =  2_000;
-    else                         cap =  1_000;
+    if      (total >= 1_500_000) cap = 120_000;
+    else if (total >=   480_000) cap =  30_000;
+    else if (total >=   180_000) cap =  12_000;
+    else if (total >=    60_000) cap =   4_000;
+    else                         cap =   1_500;
 
-    const estimate = Math.floor(remainingMs / 30 + inc * 0.85);
-    const safety   = Math.floor(remainingMs * 0.8);
+    const estimate = Math.floor(remainingMs / 20 + inc * 0.95);
+    const safety   = Math.floor(remainingMs * 0.85);
 
     return Math.max(200, Math.min(estimate, cap, safety));
 }
@@ -512,7 +515,14 @@ export class LichessBot {
                 }
 
                 if (status !== "started") {
+                    const result = mapResult(status, winner);
                     console.log(`[${gameId}] Game over: ${status}, winner: ${winner ?? "draw"}`);
+                    this.notifier.info(`[Game] Game over: ${gameId}`, {
+                        status,
+                        winner: winner ?? "draw",
+                        result,
+                        active: Math.max(0, this.activeGames.size - 1),
+                    });
                     await this.finalizeDbGame(gameId, status, winner);
                     gameController.abort();
                     return;
@@ -570,7 +580,13 @@ export class LichessBot {
 
         let rawMove;
         try {
-            rawMove = await engine.go({moveTime: moveTimeMs});
+            rawMove = await engine.go({
+                moveTime: moveTimeMs,
+                whiteTime: timeInfo.wtime,
+                blackTime: timeInfo.btime,
+                whiteInc:  timeInfo.winc,
+                blackInc:  timeInfo.binc,
+            });
         } catch (err) {
             console.warn(`[${gameId}] go command failed: ${err.message}`);
             return false;
