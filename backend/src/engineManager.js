@@ -103,16 +103,16 @@ export class UciEngine extends EventEmitter {
 
         if (this.restarts < this.maxRestarts) {
             this.restarts++;
-            console.warn(`[Engine] Attempting restart ${this.restarts}/${this.maxRestarts} in ${this.restartDelayMs}ms...`);
-            this.notifier.warn(`Engine ${this.label} crashed`, {restart: `${this.restarts}/${this.maxRestarts}`});
+            console.warn(`[Engine ${this.label}] Crashed (${this.restarts}/${this.maxRestarts})`);
+            this.notifier.warn(`[EngineManager] Engine ${this.label} crashed`, {restart: `${this.restarts}/${this.maxRestarts}`});
             await new Promise(r => setTimeout(r, this.restartDelayMs));
             this.start().catch(e => {
-                console.error("Restart failed:", e);
-                this.notifier.error(`Engine ${this.label} restart failed`, {message: e?.message});
+                console.error(`[Engine ${this.label}] Restart failed:`, e);
+                this.notifier.error(`[EngineManager] Engine ${this.label} restart failed`, {message: e?.message});
             });
         } else {
-            console.error("[Engine] Max restarts exceeded.");
-            this.notifier.error(`Engine ${this.label} exceeded max restarts`, {max: this.maxRestarts});
+            console.error(`[Engine ${this.label}] Max restarts exceeded`);
+            this.notifier.error(`[EngineManager] Engine ${this.label} exceeded max restarts`, {max: this.maxRestarts});
             this.emit("fatal_error", new Error("Max restarts exceeded"));
         }
     }
@@ -238,6 +238,57 @@ export class UciEngine extends EventEmitter {
         }
     }
 
+    async goWithEval(options = {}) {
+        await this.ensureReady();
+
+        const parts = ["go"];
+        if (options.depth)    parts.push(`depth ${options.depth}`);
+        if (options.moveTime) parts.push(`movetime ${options.moveTime}`);
+
+        // For depth-based analysis allow up to 5 minutes; movetime gets the normal buffer.
+        const safeTimeout = options.moveTime
+            ? options.moveTime + this.commandTimeoutBufferMs
+            : 300_000;
+
+        let scoreCp = null;
+        let isMate  = false;
+        let bestMove = null;
+
+        try {
+            const response = await this._sendCommand(
+                parts.join(" "),
+                (line) => line.startsWith("bestmove"),
+                (line) => {
+                    if (!line.startsWith("info")) return;
+                    if (line.includes("multipv") && !line.includes("multipv 1")) return;
+                    // Skip aspiration-window bounds — only use exact scores.
+                    if (line.includes("lowerbound") || line.includes("upperbound")) return;
+
+                    const cpMatch   = line.match(/\bscore cp (-?\d+)/);
+                    const mateMatch = line.match(/\bscore mate (-?\d+)/);
+                    const pvMatch   = line.match(/\bpv (\S+)/);
+
+                    if (cpMatch) {
+                        scoreCp = parseInt(cpMatch[1], 10);
+                        isMate  = false;
+                    } else if (mateMatch) {
+                        const n = parseInt(mateMatch[1], 10);
+                        // Encode mate distances as large cp values so CPL math still works.
+                        scoreCp = n > 0 ? 30_000 - n : -(30_000 + n);
+                        isMate  = true;
+                    }
+                    if (pvMatch) bestMove = pvMatch[1];
+                },
+                safeTimeout,
+            );
+            const move = response.split(" ")[1];
+            return {bestMove: move || bestMove, scoreCp, isMate};
+        } catch (e) {
+            console.error("[Engine] Error during 'goWithEval':", e);
+            return {bestMove: bestMove ?? "0000", scoreCp, isMate};
+        }
+    }
+
     async bench(options = {}) {
         await this.ensureReady();
 
@@ -290,8 +341,8 @@ export class EngineManager {
     // want the slot held).
     reserveEngine(label, enginePath) {
         if (!this.hasCapacity()) {
-            const err = new EngineCapReached(this.maxEngines, this.engines.size);
-            this.notifier.warn("Engine cap reached — rejecting spawn", {
+            this.notifier.warn("[EngineManager] Engine cap reached — rejecting spawn", {
+                active: this.count(),
                 cap: this.maxEngines,
                 current: this.engines.size,
                 requested: label,
@@ -317,20 +368,20 @@ export class EngineManager {
 
         engine.on("fatal_error", (err) => {
             console.error(`[Manager] Engine ${id} died permanently:`, err);
-            this.notifier.error(`Engine ${id} died permanently`, {message: err?.message});
+            this.notifier.error(`[EngineManager] Engine ${id} died permanently`, {message: err?.message});
             this.engines.delete(id);
         });
 
         try {
             await engine.start();
         } catch (err) {
-            this.notifier.error(`Engine ${id} failed to start`, {message: err?.message});
+            this.notifier.error(`[EngineManager] Engine ${id} failed to start`, {message: err?.message});
             throw err;
         }
 
         this.engines.set(id, engine);
-        console.log(`[Manager] Successfully registered engine: ${id}`);
-        this.notifier.info(`Engine registered: ${id}`, {active: this.engines.size});
+        console.log(`[Manager] Engine registered: ${id}`);
+        this.notifier.info(`[EngineManager] Engine registered: ${id}`, {active: this.engines.size});
         return engine;
     }
 
@@ -345,7 +396,7 @@ export class EngineManager {
             this.engines.delete(id);
             await engine.stop().catch(e => {
                 console.error(`[Manager] Error stopping engine ${id}:`, e);
-                this.notifier.warn(`Error stopping engine ${id}`, {message: e?.message});
+                this.notifier.warn(`[EngineManager] Error stopping engine ${id}`, {message: e?.message});
             });
         }
     }
@@ -356,7 +407,7 @@ export class EngineManager {
         const stopPromises = Array.from(this.engines.values()).map(engine =>
             engine.stop().catch(e => {
                 console.error("[Manager] Error during mass shutdown:", e);
-                this.notifier.warn("Error during mass shutdown", {message: e?.message});
+                this.notifier.warn("[EngineManager] Error during mass shutdown", {message: e?.message});
             })
         );
 

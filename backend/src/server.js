@@ -4,8 +4,10 @@ import path from "node:path";
 import {EngineManager, UciEngine, EngineCapReached} from "./engineManager.js";
 import {LichessBot} from "./lichessBot.js";
 import {Notifier, ConsoleTransport, nullNotifier} from "./notifier.js";
+import {ApiTransport} from "./apiTransport.js";
+import {GameAnalyzer} from "./gameAnalyzer.js";
 
-export function createApp({manager, lichessEngineFactory, mainEnginePath, maxConcurrentGames = 4, notifier = nullNotifier, getToken = () => process.env.lichess_api_token} = {}) {
+export function createApp({manager, lichessEngineFactory, mainEnginePath, maxConcurrentGames = 4, notifier = nullNotifier, getToken = () => process.env.lichess_api_token, analyzer = null} = {}) {
     const app = express();
 
     app.use(cors({
@@ -106,11 +108,11 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
         try {
             await instance.start();
             lichessBotInstance = instance;
-            notifier.info("Lichess bot started", {maxConcurrentGames});
+            notifier.info("[Server] Lichess bot started", {maxConcurrentGames});
             res.json({status: "success", message: `Lichess Bot started (max ${maxConcurrentGames} concurrent games).`});
         } catch (err) {
             console.error("Failed to start Lichess Bot:", err);
-            notifier.error("Lichess bot failed to start", {message: err?.message});
+            notifier.error("[Server] Lichess bot failed to start", {message: err?.message});
             try { instance.stop(); } catch (_) {}
             res.status(500).json({error: err.message});
         }
@@ -198,7 +200,42 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
         res.json(lichessBotInstance.autoplayStatus());
     });
 
-    return {app, getBotInstance: () => lichessBotInstance};
+    app.post("/api/analysis/run", (req, res) => {
+        if (!analyzer) return res.status(503).json({error: "Analysis not configured (no Stockfish path)"});
+        if (analyzer.isRunning) return res.status(409).json({status: "already_running", progress: analyzer.progress});
+
+        analyzer.analyzeAll().catch(err => {
+            console.error("[Analysis] analyzeAll failed:", err);
+            notifier.error("[Analysis] analyzeAll failed", {message: err?.message});
+        });
+
+        res.json({status: "started", progress: analyzer.progress});
+    });
+
+    app.post("/api/analysis/stop", async (req, res) => {
+        if (!analyzer) return res.status(503).json({error: "Analysis not configured"});
+        if (!analyzer.isRunning) return res.json({status: "not_running"});
+        await analyzer.stop();
+        res.json({status: "stopped"});
+    });
+
+    app.get("/api/analysis/status", (req, res) => {
+        if (!analyzer) return res.status(503).json({error: "Analysis not configured"});
+        res.json({running: analyzer.isRunning, progress: analyzer.progress});
+    });
+
+    app.get("/api/analysis/stats", async (req, res) => {
+        if (!analyzer) return res.status(503).json({error: "Analysis not configured"});
+        try {
+            const stats = await analyzer.getStats();
+            res.json(stats);
+        } catch (err) {
+            console.error("[Analysis] getStats failed:", err);
+            res.status(500).json({error: err.message});
+        }
+    });
+
+    return {app, getBotInstance: () => lichessBotInstance, getAnalyzer: () => analyzer};
 }
 
 if (import.meta.main) {
@@ -226,7 +263,7 @@ if (import.meta.main) {
     console.log(`♟️  Engine Path: ${MY_ENGINE_PATH}`);
 
     // --- Notifier ---
-    const notifier = new Notifier({transports: [new ConsoleTransport()]});
+    const notifier = new Notifier({transports: [new ConsoleTransport(), new ApiTransport()]});
 
     // --- Manager (with hard cap independent of LICHESS_MAX_GAMES) ---
     // Default: one slot for "Main" analysis engine + Lichess game slots. Buffer of 2 for safety.
@@ -248,12 +285,19 @@ if (import.meta.main) {
         return new UciEngine(MY_ENGINE_PATH, {notifier, label});
     };
 
-    const {app} = createApp({manager, lichessEngineFactory, mainEnginePath: MY_ENGINE_PATH, maxConcurrentGames: LICHESS_MAX_GAMES, notifier});
+    const STOCKFISH_PATH = path.resolve(import.meta.dir, "../../engines/stockfish/stockfish/stockfish-windows-x86-64-avx2.exe");
+    const stockfishExists = await Bun.file(STOCKFISH_PATH).exists();
+    const analyzer = stockfishExists
+        ? new GameAnalyzer(STOCKFISH_PATH, {depth: 20})
+        : null;
+    if (!stockfishExists) console.warn("[Server] Stockfish not found — analysis endpoints disabled.");
+
+    const {app} = createApp({manager, lichessEngineFactory, mainEnginePath: MY_ENGINE_PATH, maxConcurrentGames: LICHESS_MAX_GAMES, notifier, analyzer});
 
     const PORT = process.env.PORT || 8000;
     const server = app.listen(PORT, () => {
         console.log(`Backend listening on http://localhost:${PORT}`);
-        notifier.info("Backend started", {port: PORT, engineCap: ENGINE_HARD_CAP, lichessMax: LICHESS_MAX_GAMES});
+        notifier.info("[Server] Backend started", {port: PORT, engineCap: ENGINE_HARD_CAP, lichessMax: LICHESS_MAX_GAMES});
     });
 
     // --- Discord bot (opt-in) ---
@@ -266,11 +310,12 @@ if (import.meta.main) {
                 channelId: process.env.DISCORD_CHANNEL_ID,
                 notifier,
                 healthUrl: process.env.HEALTH_URL ?? `http://localhost:${PORT}/api/health`,
+                apiUrl: `http://localhost:${PORT}/api`,
             });
             console.log("[Server] Discord bot connected.");
         } catch (err) {
             console.error("[Server] Discord bot init failed:", err);
-            notifier.warn("Discord bot init failed", {message: err?.message});
+            notifier.warn("[Server] Discord bot init failed", {message: err?.message});
         }
     } else {
         console.log("[Server] Discord disabled (set DISCORD_BOT_TOKEN + DISCORD_CHANNEL_ID to enable).");
@@ -284,6 +329,7 @@ if (import.meta.main) {
         console.log(`\n[Server] Shutting down (${reason})...`);
         try { await notifier.flush(); } catch (_) {}
         try { server.close(); } catch (_) {}
+        try { if (analyzer) await analyzer.stop(); } catch (_) {}
         try { await manager.shutdownAll(); } catch (e) { console.error("[Server] shutdownAll error:", e); }
         if (discordBot) {
             try { await discordBot.stop(); } catch (e) { console.error("[Server] Discord stop error:", e); }
@@ -297,7 +343,7 @@ if (import.meta.main) {
     // --- Global error handlers: log + notify + exit (supervisor restarts) ---
     const handleFatal = async (kind, err) => {
         console.error(`[Server] !! ${kind} !!`, err);
-        try { await notifier.fatal(`${kind}: process exiting`, {message: err?.message, stack: err?.stack?.split("\n").slice(0, 5).join("\n")}); } catch (_) {}
+        try { await notifier.fatal(`[Server] ${kind}: process exiting`, {message: err?.message, stack: err?.stack?.split("\n").slice(0, 5).join("\n")}); } catch (_) {}
         await shutdown(kind, 1);
     };
 
