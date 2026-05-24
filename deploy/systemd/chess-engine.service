@@ -1,0 +1,47 @@
+# Production unit for the Chess Engine backend.
+# Install:
+#   sudo cp deploy/systemd/chess-engine.service /etc/systemd/system/
+#   sudo cp deploy/systemd/prod.env.example /etc/chess-engine/prod.env   # then edit it
+#   sudo systemctl daemon-reload && sudo systemctl enable --now chess-engine
+# Logs: journalctl -u chess-engine -f
+
+[Unit]
+Description=Chess Engine backend (production)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# Dedicated unprivileged account. Create it once:
+#   sudo useradd --system --home /opt/chess-engine --shell /usr/sbin/nologin chess
+User=chess
+Group=chess
+
+# Absolute path to the deployed checkout. Adjust to where you deploy.
+WorkingDirectory=/opt/chess-engine/backend
+
+# Config + secrets live here, not in the unit. ENGINE_PATH must point at the binary.
+EnvironmentFile=/etc/chess-engine/prod.env
+
+# Absolute path to bun (systemd does not search ~/.bun). Find yours with: which bun
+ExecStart=/usr/local/bin/bun run src/server.js
+
+# server.js exits 0 on SIGTERM and 1 on fatal errors, so restart only on failure.
+Restart=on-failure
+RestartSec=2
+
+# Let the graceful shutdown (notifier flush + engine "quit") finish before SIGKILL.
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+SyslogIdentifier=chess-engine
+
+# Sandboxing — safe defaults. /opt stays writable so backend/storage works.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
