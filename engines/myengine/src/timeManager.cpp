@@ -24,6 +24,19 @@ void TimeManager::start(uint64_t millis_left, uint64_t inc, int mtg) {
     stable_count_ = 0;
 }
 
+void TimeManager::startFixed(uint64_t movetime_ms) {
+    const int64_t budget =
+        (movetime_ms > static_cast<uint64_t>(SAFETY_MS))
+            ? static_cast<int64_t>(movetime_ms) - SAFETY_MS
+            : 0;
+
+    start_time_ = std::chrono::steady_clock::now();
+    soft_alloc_ = std::chrono::milliseconds(budget);
+    hard_alloc_ = std::chrono::milliseconds(budget);
+    soft_scale_ = 1.0;
+    stable_count_ = 0;
+}
+
 bool TimeManager::isSoftTimeUp() const {
     const auto scaled = std::chrono::milliseconds(
         static_cast<int64_t>(soft_alloc_.count() * soft_scale_));

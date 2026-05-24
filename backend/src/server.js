@@ -133,11 +133,17 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
     });
 
     app.get("/api/lichess/status", (req, res) => {
+        const rateLimitedFor = lichessBotInstance ? lichessBotInstance._rateLimitRemainingSec() : 0;
+        if (lichessBotInstance && !lichessBotInstance.botProfile) {
+            lichessBotInstance._ensureProfile().catch(() => {});
+        }
         res.json({
             running: !!lichessBotInstance,
             profile: lichessBotInstance ? lichessBotInstance.botProfile : null,
             activeGames: lichessBotInstance ? Array.from(lichessBotInstance.activeGames) : [],
             maxConcurrentGames: lichessBotInstance ? lichessBotInstance.maxConcurrentGames : maxConcurrentGames,
+            rateLimitedFor,
+            declinedCount: lichessBotInstance ? lichessBotInstance.recentlyDeclined.size : 0,
         });
     });
 

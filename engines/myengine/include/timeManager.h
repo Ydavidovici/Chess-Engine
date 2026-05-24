@@ -22,6 +22,13 @@ public:
     void start(uint64_t millis_left, uint64_t increment, int moves_to_go);
 
     /**
+     * Initialize for a fixed-budget search (UCI 'go movetime N').
+     * Soft and hard deadlines both equal movetime minus a small safety
+     * margin — there is no division by moves-to-go and no stability scaling.
+     */
+    void startFixed(uint64_t movetime_ms);
+
+    /**
      * Soft deadline: "don't begin another iteration past this point."
      * Scales with PV stability — see onIterationComplete().
      */

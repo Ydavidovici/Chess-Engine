@@ -10,6 +10,9 @@ class MockLichessBot {
         this.maxConcurrentGames = opts?.maxConcurrentGames ?? 4;
         this.activeGames = new Set();
         this.botProfile = null;
+        this.recentlyDeclined = new Map();
+        this._rateLimitRemainingSec = mock(() => 0);
+        this._ensureProfile = mock(async () => true);
         mockBotInstances.push(this);
 
         this.stop = mock(() => {});
@@ -358,6 +361,8 @@ describe("GET /api/lichess/status", () => {
             profile: null,
             activeGames: [],
             maxConcurrentGames: 4,
+            rateLimitedFor: 0,
+            declinedCount: 0,
         });
     });
 
@@ -371,6 +376,8 @@ describe("GET /api/lichess/status", () => {
         expect(body.profile).toBe("mockBot");
         expect(body.activeGames).toEqual(["game_xyz"]);
         expect(body.maxConcurrentGames).toBe(4);
+        expect(body.rateLimitedFor).toBe(0);
+        expect(body.declinedCount).toBe(0);
     });
 });
 

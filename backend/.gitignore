@@ -24,3 +24,4 @@ storage
 # Engine binary copied here by `bun run build:engine --prod`
 src/myengine
 src/myengine.exe
+lichess-rate-limit.json

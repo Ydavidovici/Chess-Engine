@@ -413,6 +413,59 @@ static void test_search_movestogo_restricts_time() {
     std::cout << "PASS\n\n";
 }
 
+// Regression: UCI 'go movetime N' must allocate ~N ms, not divide N by
+// DEFAULT_MTG. Previously movetime=5000 routed through start(5000,0,0)
+// and yielded soft~165ms / hard~825ms — causing the Lichess bot to use
+// almost none of its allocated time per move.
+static void test_startFixed_uses_full_budget() {
+    std::cout << "--- test_startFixed_uses_full_budget ---\n";
+    TimeManager tm;
+    tm.startFixed(500);
+    REQUIRE_MSG(!tm.isSoftTimeUp(), "movetime=500ms: soft must not be up immediately");
+    REQUIRE_MSG(!tm.isHardTimeUp(), "movetime=500ms: hard must not be up immediately");
+    sleep_ms(200);
+    REQUIRE_MSG(!tm.isSoftTimeUp(),
+                "movetime=500ms: soft must not fire at 200ms (regression: previously fired at ~16ms)");
+    sleep_ms(400);  // 600ms total
+    REQUIRE_MSG(tm.isSoftTimeUp(), "movetime=500ms: soft must fire by 600ms");
+    REQUIRE_MSG(tm.isHardTimeUp(), "movetime=500ms: hard must fire by 600ms");
+    std::cout << "PASS\n\n";
+}
+
+static void test_startFixed_tiny_budget_immediate() {
+    std::cout << "--- test_startFixed_tiny_budget_immediate ---\n";
+    TimeManager tm;
+    tm.startFixed(30);  // below SAFETY_MS=50
+    REQUIRE_MSG(tm.isSoftTimeUp(), "movetime<safety: soft up immediately");
+    REQUIRE_MSG(tm.isHardTimeUp(), "movetime<safety: hard up immediately");
+    std::cout << "PASS\n\n";
+}
+
+// Regression: 'go movetime N' through findBestMove must spend close to N ms,
+// not N/30. Previously a 500ms movetime would return in ~50-100ms.
+static void test_search_movetime_uses_full_budget() {
+    std::cout << "--- test_search_movetime_uses_full_budget ---\n";
+    Board board;
+    board.loadFEN(MIDDLEGAME);
+    TranspositionTable tt(16);
+    Evaluator ev;
+    Search search(ev, tt);
+    search.setThreadCount(1);
+
+    auto t0 = std::chrono::steady_clock::now();
+    Move m = search.findBestMove(board, /*maxDepth=*/20, /*timeLeftMs=*/0, /*incMs=*/0, /*mtg=*/0, /*movetimeMs=*/500);
+    double ms = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - t0).count() / 1000.0;
+
+    REQUIRE_MSG(m.isValid(), "must return a valid move");
+    REQUIRE_MSG(ms >= 300.0,
+                "movetime=500ms: must spend at least 300ms thinking "
+                "(regression for movetime-divided-by-mtg bug)");
+    REQUIRE_MSG(ms < 1500.0, "movetime=500ms: must not exceed 1500ms");
+    std::cout << "  elapsed=" << ms << "ms  move=" << m.toString() << "\n";
+    std::cout << "PASS\n\n";
+}
+
 // Regression: with mtg=0 (sudden death) and 30s remaining, the engine
 // must NOT spend the whole 30s on a single move.
 static void test_search_sudden_death_does_not_burn_clock() {
@@ -474,6 +527,11 @@ int main() {
     test_search_uses_increment();
     test_search_movestogo_restricts_time();
     test_search_sudden_death_does_not_burn_clock();
+
+    std::cout << "========== SECTION 9: Fixed Movetime ==========\n\n";
+    test_startFixed_uses_full_budget();
+    test_startFixed_tiny_budget_immediate();
+    test_search_movetime_uses_full_budget();
 
     std::cout << "\n========================================\n";
     std::cout << "ALL TIME MANAGER TESTS PASSED\n";
