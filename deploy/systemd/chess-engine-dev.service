@@ -22,6 +22,8 @@ WorkingDirectory=/home/youruser/Chess-Engine/backend
 EnvironmentFile=/etc/chess-engine/dev.env
 
 # --hot reloads the server when source changes.
+# systemd does not search PATH/~/.bun, so symlink bun into a system path once:
+#   sudo ln -sf "$(which bun)" /usr/local/bin/bun
 ExecStart=/usr/local/bin/bun --hot src/server.js
 
 Restart=on-failure
