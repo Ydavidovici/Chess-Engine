@@ -4,6 +4,7 @@ import path from "node:path";
 import {EngineManager, UciEngine, EngineCapReached} from "./engineManager.js";
 import {LichessBot} from "./lichessBot.js";
 import {Notifier, nullNotifier, wrapConsoleForNotifier} from "./notifier.js";
+import {ApiTransport} from "./apiTransport.js";
 
 export function createApp({manager, lichessEngineFactory, mainEnginePath, maxConcurrentGames = 4, notifier = nullNotifier, getToken = () => process.env.lichess_api_token} = {}) {
     const app = express();
@@ -239,7 +240,15 @@ if (import.meta.main) {
     // forwards every console.* call through the notifier (so Discord/etc. see
     // them) AND still prints to the terminal — adding ConsoleTransport would
     // double-print every notify call.
-    const notifier = new Notifier({transports: []});
+    const transports = [];
+    const apiTransport = new ApiTransport();
+    if (apiTransport.enabled) {
+        transports.push(apiTransport);
+        console.log(`[Server] ApiTransport enabled → ${apiTransport.url}`);
+    } else {
+        console.log("[Server] ApiTransport disabled (set API_NOTIFY_URL + API_NOTIFY_TOKEN to enable).");
+    }
+    const notifier = new Notifier({transports});
     const restoreConsole = wrapConsoleForNotifier(notifier);
 
     // --- Manager (with hard cap independent of LICHESS_MAX_GAMES) ---
