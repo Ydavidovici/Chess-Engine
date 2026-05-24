@@ -20,3 +20,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 *.db
 builds
 storage
+
+# Engine binary copied here by `bun run build:engine --prod`
+src/myengine
+src/myengine.exe
