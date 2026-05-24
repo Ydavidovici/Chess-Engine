@@ -96,3 +96,41 @@ export class ConsoleTransport {
 
 // Drop-in no-op notifier so callers don't have to null-check.
 export const nullNotifier = new Notifier({transports: []});
+
+export class JournalTransport {
+    constructor({stream = process.stdout} = {}) {
+        this.stream = stream;
+    }
+
+    send(event) {
+        // Syslog severities: 3=err, 4=warning, 6=info
+        let severity = 6;
+        if (event.level === "fatal" || event.level === "error") severity = 3;
+        else if (event.level === "warn") severity = 4;
+
+        let msg = `<${severity}>${event.subject}`;
+        if (event.details != null) {
+            try {
+                msg += " " + (typeof event.details === "object" ? JSON.stringify(event.details) : String(event.details));
+            } catch (e) {
+                msg += " [Error stringifying details]";
+            }
+        }
+        
+        this.stream.write(msg + "\n");
+    }
+}
+
+export function sdNotify(state) {
+    const socketPath = process.env.NOTIFY_SOCKET;
+    if (!socketPath) return;
+
+    import("node:dgram").then(dgram => {
+        const client = dgram.createSocket("unix_dgram");
+        const msg = Buffer.from(state);
+        client.send(msg, 0, msg.length, socketPath, (err) => {
+            if (err) console.error("[sdNotify] failed:", err);
+            client.close();
+        });
+    }).catch(err => console.error("[sdNotify] dgram import failed:", err));
+}
