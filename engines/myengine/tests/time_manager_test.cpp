@@ -107,7 +107,7 @@ static void test_large_budget_not_up_immediately() {
 static void test_large_budget_not_up_after_short_sleep() {
     std::cout << "--- test_large_budget_not_up_after_short_sleep ---\n";
     TimeManager tm;
-    tm.start(10000, 0, 0);  // mtg=0 -> default 30 -> soft ~331ms, hard ~1655ms
+    tm.start(10000, 0, 0);  // mtg=0 -> DEFAULT_MTG=45 -> soft ~220ms, hard ~1100ms
     sleep_ms(100);
     REQUIRE_MSG(!tm.isSoftTimeUp(), "10s/30 budget: soft not up at 100ms");
     REQUIRE_MSG(!tm.isHardTimeUp(), "10s/30 budget: hard not up at 100ms");
@@ -117,7 +117,7 @@ static void test_large_budget_not_up_after_short_sleep() {
 static void test_increment_raises_allocation() {
     std::cout << "--- test_increment_raises_allocation ---\n";
     TimeManager tm;
-    tm.start(5050, 1000, 0);  // default mtg=30 -> soft ~167+1000=1167ms
+    tm.start(5050, 1000, 0);  // DEFAULT_MTG=45 -> soft ~110 + 0.8*1000 = ~910ms
     sleep_ms(100);
     REQUIRE_MSG(!tm.isSoftTimeUp(), "soft~1167ms: not up at 100ms");
     std::cout << "PASS\n\n";
@@ -150,7 +150,7 @@ static void test_mtg_large_yields_small_slice() {
 static void test_explicit_mtg_increment_added() {
     std::cout << "--- test_explicit_mtg_increment_added ---\n";
     TimeManager tm;
-    tm.start(1050, 200, 10);  // soft = 100 + 200 = 300ms
+    tm.start(1050, 200, 10);  // soft = 95 + 0.8*200 = 255ms
     sleep_ms(100);
     REQUIRE_MSG(!tm.isSoftTimeUp(), "soft~300ms: not up at 100ms");
     sleep_ms(500);
@@ -161,7 +161,7 @@ static void test_explicit_mtg_increment_added() {
 static void test_sub_safety_remaining_uses_increment_only() {
     std::cout << "--- test_sub_safety_remaining_uses_increment_only ---\n";
     TimeManager tm;
-    tm.start(30, 300, 0);  // remaining clamps to 0; soft = 0/30+300 = 300ms
+    tm.start(30, 300, 0);  // adj clamps to 0; soft = 0 + 0.8*300 = 240ms
     sleep_ms(100);
     REQUIRE_MSG(!tm.isSoftTimeUp(), "inc-only 300ms: not up at 100ms");
     sleep_ms(500);
@@ -174,7 +174,7 @@ static void test_sub_safety_remaining_uses_increment_only() {
 static void test_no_mtg_uses_default_not_full_remaining() {
     std::cout << "--- test_no_mtg_uses_default_not_full_remaining ---\n";
     // 30s clock with mtg=0 should NOT burn the whole 30s.
-    // With DEFAULT_MTG=30: soft = (30000-50)/30 ~= 998ms.
+    // With DEFAULT_MTG=45: soft = (30000-100)/45 ~= 664ms.
     TimeManager tm;
     tm.start(30000, 0, 0);
     sleep_ms(200);
@@ -188,7 +188,7 @@ static void test_no_mtg_uses_default_not_full_remaining() {
 
 static void test_no_mtg_default_with_increment() {
     std::cout << "--- test_no_mtg_default_with_increment ---\n";
-    // 30s + 500ms inc, mtg=0 -> soft ~= 998 + 500 = ~1498ms
+    // 30s + 500ms inc, mtg=0 -> soft ~= 664 + 0.8*500 = ~1064ms
     TimeManager tm;
     tm.start(30000, 500, 0);
     sleep_ms(200);
@@ -200,7 +200,7 @@ static void test_no_mtg_default_with_increment() {
 
 static void test_mtg_zero_uses_default_mtg() {
     std::cout << "--- test_mtg_zero_uses_default_mtg ---\n";
-    // mtg=0 must behave like an explicit mtg=DEFAULT_MTG (=30).
+    // mtg=0 must behave like an explicit mtg=DEFAULT_MTG (=45).
     TimeManager tm0, tm30;
     tm0.start(30000, 0, 0);
     tm30.start(30000, 0, TimeManager::DEFAULT_MTG);
@@ -237,8 +237,8 @@ static void test_explicit_mtg_overrides_default() {
 
 static void test_hard_deadline_exceeds_soft_by_default() {
     std::cout << "--- test_hard_deadline_exceeds_soft_by_default ---\n";
-    // No stability info -> hard is HARD_MULT * soft, capped at max_alloc.
-    // start(30000, 0, 60): soft=500ms, hard=min(2500, 0.8*29950)=2500ms.
+    // No stability info -> hard is MAX_FACTOR(2) * soft, capped at max_spend.
+    // start(30000, 0, 60): soft~498ms, hard=min(996, 0.8*29900)=996ms.
     TimeManager tm;
     tm.start(30000, 0, 60);
     sleep_ms(700);  // past soft (500), before hard (2500)
@@ -249,8 +249,8 @@ static void test_hard_deadline_exceeds_soft_by_default() {
 
 static void test_hard_deadline_capped_by_remaining() {
     std::cout << "--- test_hard_deadline_capped_by_remaining ---\n";
-    // mtg=1 with 1050ms left: raw_soft=1000, max_alloc=0.8*1000=800ms.
-    // Both soft and hard cap at 800ms -> hard cannot exceed remaining.
+    // mtg=1 with 1050ms left: base=950, max_spend=0.8*950=760ms.
+    // Both soft and hard cap at 760ms -> hard cannot exceed remaining.
     TimeManager tm;
     tm.start(1050, 0, 1);
     sleep_ms(900);
@@ -262,7 +262,7 @@ static void test_hard_deadline_capped_by_remaining() {
 
 static void test_stability_shrinks_soft_deadline() {
     std::cout << "--- test_stability_shrinks_soft_deadline ---\n";
-    // mtg=10, 2050ms -> soft = 200ms. Shrunk = 100ms.
+    // mtg=10, 2050ms -> soft ~195ms. Shrunk (0.5x) ~97ms.
     TimeManager tm;
     tm.start(2050, 0, 10);
     tm.onIterationComplete(false);
@@ -278,7 +278,7 @@ static void test_stability_shrinks_soft_deadline() {
 
 static void test_change_extends_soft_deadline() {
     std::cout << "--- test_change_extends_soft_deadline ---\n";
-    // mtg=10, 2050ms -> soft = 200ms, extended = 300ms.
+    // mtg=10, 2050ms -> soft ~195ms, extended (1.5x) ~292ms.
     TimeManager tm;
     tm.start(2050, 0, 10);
     tm.onIterationComplete(true);   // changed -> scale = 1.5
@@ -294,11 +294,11 @@ static void test_change_extends_soft_deadline() {
 static void test_change_resets_stable_counter() {
     std::cout << "--- test_change_resets_stable_counter ---\n";
     TimeManager tm;
-    tm.start(2050, 0, 10);  // soft=200ms
+    tm.start(2050, 0, 10);  // soft ~195ms
     tm.onIterationComplete(false);
     tm.onIterationComplete(false);
-    tm.onIterationComplete(false);  // shrunk to 100ms
-    tm.onIterationComplete(true);   // extended to 300ms; counter reset
+    tm.onIterationComplete(false);  // shrunk to ~97ms
+    tm.onIterationComplete(true);   // extended to ~292ms; counter reset
     sleep_ms(220);
     REQUIRE_MSG(!tm.isSoftTimeUp(),
                 "extension after stability must NOT fire at 220ms");
@@ -307,8 +307,8 @@ static void test_change_resets_stable_counter() {
 
 static void test_stability_never_exceeds_hard() {
     std::cout << "--- test_stability_never_exceeds_hard ---\n";
-    // mtg=1 with 1050ms: soft caps at max_alloc=800ms, hard also =800ms.
-    // EXTEND_SCALE * soft would be 1200ms, but isSoftTimeUp clamps to hard.
+    // mtg=1 with 1050ms: soft caps at max_spend=760ms, hard also =760ms.
+    // EXTEND_SCALE * soft would be 1140ms, but isSoftTimeUp clamps to hard.
     TimeManager tm;
     tm.start(1050, 0, 1);
     tm.onIterationComplete(true);
@@ -473,9 +473,133 @@ static void test_search_sudden_death_does_not_burn_clock() {
     SearchResult r = run_timed(STARTPOS, 30000, 0, 0);
     REQUIRE_MSG(r.move.isValid(), "must return a valid move");
     REQUIRE_MSG(r.elapsedMs < 5000.0,
-                "30s sudden-death budget: with DEFAULT_MTG=30 the engine "
-                "should spend ~1s, not the full 30s. Elapsed must be < 5s.");
+                "30s sudden-death budget: with DEFAULT_MTG=45 the engine "
+                "should spend well under 1s, not the full 30s. Elapsed < 5s.");
     std::cout << "  elapsed=" << r.elapsedMs << "ms  move=" << r.move.toString() << "\n";
+    std::cout << "PASS\n\n";
+}
+
+// =========== SECTION 10: Self-scaling allocation across time controls ===========
+// One formula must yield sane, monotonically larger budgets from bullet to
+// classical and never commit more than MAX_FRACTION of the clock (plus the
+// increment) to a single move. Checked deterministically via softMs/hardMs.
+
+static int64_t maxSpend(int64_t clock, int64_t inc,
+                        int overhead = TimeManager::DEFAULT_OVERHEAD_MS) {
+    const int64_t adj = clock > overhead ? clock - overhead : 0;
+    return static_cast<int64_t>(adj * TimeManager::MAX_FRACTION) + inc;
+}
+
+static void test_alloc_scales_across_time_controls() {
+    std::cout << "--- test_alloc_scales_across_time_controls ---\n";
+    TimeManager bullet, blitz, rapid, classical;
+    bullet.start(60000, 0, 0);           // 1+0
+    blitz.start(180000, 2000, 0);        // 3+2
+    rapid.start(600000, 0, 0);           // 10+0
+    classical.start(1800000, 20000, 0);  // 30+20
+
+    REQUIRE_MSG(bullet.softMs() < blitz.softMs(), "bullet soft < blitz soft");
+    REQUIRE_MSG(blitz.softMs() < rapid.softMs(), "blitz soft < rapid soft");
+    REQUIRE_MSG(rapid.softMs() < classical.softMs(), "rapid soft < classical soft");
+
+    REQUIRE_MSG(bullet.hardMs() >= bullet.softMs(), "bullet hard >= soft");
+    REQUIRE_MSG(blitz.hardMs() >= blitz.softMs(), "blitz hard >= soft");
+    REQUIRE_MSG(rapid.hardMs() >= rapid.softMs(), "rapid hard >= soft");
+    REQUIRE_MSG(classical.hardMs() >= classical.softMs(), "classical hard >= soft");
+
+    REQUIRE_MSG(bullet.hardMs() <= maxSpend(60000, 0), "bullet within ceiling");
+    REQUIRE_MSG(blitz.hardMs() <= maxSpend(180000, 2000), "blitz within ceiling");
+    REQUIRE_MSG(rapid.hardMs() <= maxSpend(600000, 0), "rapid within ceiling");
+    REQUIRE_MSG(classical.hardMs() <= maxSpend(1800000, 20000), "classical within ceiling");
+
+    std::cout << "  bullet soft=" << bullet.softMs() << " hard=" << bullet.hardMs() << "\n";
+    std::cout << "  blitz  soft=" << blitz.softMs() << " hard=" << blitz.hardMs() << "\n";
+    std::cout << "  rapid  soft=" << rapid.softMs() << " hard=" << rapid.hardMs() << "\n";
+    std::cout << "  class  soft=" << classical.softMs() << " hard=" << classical.hardMs() << "\n";
+    std::cout << "PASS\n\n";
+}
+
+static void test_single_move_never_exceeds_fraction_of_clock() {
+    std::cout << "--- test_single_move_never_exceeds_fraction_of_clock ---\n";
+    // Severe scramble: tiny clock, no increment. Even the hard deadline must
+    // stay under MAX_FRACTION of the clock so we cannot flag.
+    TimeManager tm;
+    tm.start(1000, 0, 0);
+    REQUIRE_MSG(tm.hardMs() <= maxSpend(1000, 0), "hard <= 0.8*clock in scramble");
+    REQUIRE_MSG(tm.softMs() <= tm.hardMs(), "soft <= hard");
+    std::cout << "  soft=" << tm.softMs() << " hard=" << tm.hardMs() << "\n";
+    std::cout << "PASS\n\n";
+}
+
+// =========== SECTION 11: Dynamic scaling — score-drop panic & overhead ===========
+
+static void test_score_drop_triggers_panic_extension() {
+    std::cout << "--- test_score_drop_triggers_panic_extension ---\n";
+    TimeManager tm;
+    tm.start(60000, 0, 0);
+    tm.onIterationComplete(false, 40);   // baseline score
+    tm.onIterationComplete(false, 35);   // tiny change: no panic, stable
+    REQUIRE_MSG(tm.currentScale() != TimeManager::PANIC_SCALE,
+                "small score change must not trigger panic");
+    tm.onIterationComplete(false, -30);  // 65cp drop >= PANIC_DROP_CP
+    REQUIRE_MSG(tm.currentScale() == TimeManager::PANIC_SCALE,
+                "sharp score drop must extend (panic) even on a stable move");
+    std::cout << "PASS\n\n";
+}
+
+static void test_panic_clamped_by_hard_deadline() {
+    std::cout << "--- test_panic_clamped_by_hard_deadline ---\n";
+    // Panic raises the soft scale, but isSoftTimeUp must still clamp to hard.
+    TimeManager tm;
+    tm.start(1050, 0, 1);  // soft caps at max_spend; hard == max_spend
+    tm.onIterationComplete(false, 100);
+    tm.onIterationComplete(true, -100);  // changed + huge drop -> panic
+    sleep_ms(static_cast<int>(tm.hardMs()) + 60);
+    REQUIRE_MSG(tm.isSoftTimeUp(), "panic-scaled soft must never exceed hard");
+    std::cout << "PASS\n\n";
+}
+
+static void test_startFixed_ignores_stability_scaling() {
+    std::cout << "--- test_startFixed_ignores_stability_scaling ---\n";
+    // Fixed movetime is deterministic: onIterationComplete must be a no-op.
+    TimeManager tm;
+    tm.startFixed(1000);
+    const double before = tm.currentScale();
+    tm.onIterationComplete(true, -10000);  // would normally panic-extend
+    tm.onIterationComplete(false, 0);
+    tm.onIterationComplete(false, 0);
+    tm.onIterationComplete(false, 0);      // would normally shrink
+    REQUIRE_MSG(tm.currentScale() == before,
+                "startFixed must ignore PV-stability scaling");
+    std::cout << "PASS\n\n";
+}
+
+static void test_predictive_soft_stops_early_for_long_next_iter() {
+    std::cout << "--- test_predictive_soft_stops_early_for_long_next_iter ---\n";
+    TimeManager tm;
+    tm.start(2050, 0, 10);  // soft ~195ms, hard ~390ms
+    sleep_ms(100);
+    REQUIRE_MSG(!tm.isSoftTimeUp(), "plain soft not up at 100ms (soft~195)");
+    REQUIRE_MSG(tm.isSoftTimeUp(200),
+                "predicted 200ms next iter would overshoot soft -> stop now");
+    REQUIRE_MSG(!tm.isSoftTimeUp(10),
+                "predicted 10ms next iter still fits before soft");
+    std::cout << "PASS\n\n";
+}
+
+static void test_overhead_reduces_budget() {
+    std::cout << "--- test_overhead_reduces_budget ---\n";
+    TimeManager small, large;
+    small.setOverhead(0);
+    large.setOverhead(1000);
+    small.start(11000, 0, 10);  // base = 11000/10 = 1100
+    large.start(11000, 0, 10);  // base = (11000-1000)/10 = 1000
+    REQUIRE_MSG(large.softMs() < small.softMs(),
+                "larger overhead must shrink the budget");
+    REQUIRE_MSG(small.softMs() - large.softMs() >= 90,
+                "1000ms overhead over mtg=10 should cost ~100ms of budget");
+    std::cout << "  overhead0 soft=" << small.softMs()
+              << "  overhead1000 soft=" << large.softMs() << "\n";
     std::cout << "PASS\n\n";
 }
 
@@ -532,6 +656,17 @@ int main() {
     test_startFixed_uses_full_budget();
     test_startFixed_tiny_budget_immediate();
     test_search_movetime_uses_full_budget();
+
+    std::cout << "========== SECTION 10: Self-Scaling Allocation ==========\n\n";
+    test_alloc_scales_across_time_controls();
+    test_single_move_never_exceeds_fraction_of_clock();
+
+    std::cout << "========== SECTION 11: Score-Drop Panic & Overhead ==========\n\n";
+    test_score_drop_triggers_panic_extension();
+    test_panic_clamped_by_hard_deadline();
+    test_startFixed_ignores_stability_scaling();
+    test_predictive_soft_stops_early_for_long_next_iter();
+    test_overhead_reduces_budget();
 
     std::cout << "\n========================================\n";
     std::cout << "ALL TIME MANAGER TESTS PASSED\n";

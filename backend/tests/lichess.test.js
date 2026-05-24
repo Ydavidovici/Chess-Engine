@@ -189,8 +189,12 @@ describe("Promotion normalization", () => {
     });
 });
 
-describe("Time management — adaptive across time controls", () => {
-    async function captureMoveTime(gameId, { clockInitial, clockIncrement, wtime, winc }) {
+describe("Time management — forwards the clock to the engine", () => {
+    // Allocation now lives in the engine's TimeManager (it can react to
+    // in-search signals the backend can't see). The backend's job is just to
+    // forward the raw clock — and to fall back to a fixed movetime only when
+    // the stream carries no clock at all (correspondence).
+    async function captureGo(gameId, { clockInitial, clockIncrement, wtime, btime, winc, binc }) {
         engine.go = mock(async () => "e2e4");
 
         global.fetch = mock(async (url) => {
@@ -201,7 +205,7 @@ describe("Time management — adaptive across time controls", () => {
                     ok: true,
                     body: createMockStream([makeGameFull(gameId, "bot", {
                         clock: clockInitial === null ? null : { initial: clockInitial, increment: clockIncrement },
-                        wtime, winc,
+                        wtime, btime, winc, binc,
                     })]),
                 };
             }
@@ -211,43 +215,37 @@ describe("Time management — adaptive across time controls", () => {
 
         await bot.start();
         await waitFor(() => expect(engine.go).toHaveBeenCalled());
-        return engine.go.mock.calls[0][0].moveTime;
+        return engine.go.mock.calls[0][0];
     }
 
-    it("BULLET (60s+0): caps at 2s per move", async () => {
-        const t = await captureMoveTime("bullet_test", { clockInitial: 60_000, clockIncrement: 0, wtime: 60_000, winc: 0 });
-        expect(t).toBeLessThanOrEqual(2000);
-        expect(t).toBeGreaterThanOrEqual(200);
+    it("forwards both clocks and increments verbatim, with no movetime", async () => {
+        const opts = await captureGo("blitz_fwd", {
+            clockInitial: 180_000, clockIncrement: 2000,
+            wtime: 95_000, btime: 88_000, winc: 2000, binc: 2000,
+        });
+        expect(opts).toEqual({ whiteTime: 95_000, blackTime: 88_000, whiteInc: 2000, blackInc: 2000 });
+        expect(opts.moveTime).toBeUndefined();
     });
 
-    it("BLITZ (3min+2s): allocates ~2.8s on the opening move", async () => {
-        const t = await captureMoveTime("blitz_test", { clockInitial: 180_000, clockIncrement: 2000, wtime: 60_000, winc: 1000 });
-        expect(t).toBe(2850);
+    it("forwards the full remaining clock without capping it (engine decides)", async () => {
+        const opts = await captureGo("rapid_fwd", {
+            clockInitial: 600_000, clockIncrement: 0,
+            wtime: 600_000, btime: 600_000, winc: 0, binc: 0,
+        });
+        expect(opts.whiteTime).toBe(600_000);
+        expect(opts.moveTime).toBeUndefined();
     });
 
-    it("BLITZ (3min+2s): caps at 5s even with huge remaining time", async () => {
-        const t = await captureMoveTime("blitz_cap", { clockInitial: 180_000, clockIncrement: 2000, wtime: 300_000, winc: 2000 });
-        expect(t).toBeLessThanOrEqual(5000);
+    it("treats a zero increment as 0 rather than dropping it", async () => {
+        const opts = await captureGo("zero_inc", {
+            clockInitial: 60_000, clockIncrement: 0,
+            wtime: 30_000, btime: 31_000, winc: 0, binc: 0,
+        });
+        expect(opts.whiteInc).toBe(0);
+        expect(opts.blackInc).toBe(0);
     });
 
-    it("RAPID (10min+0): caps at 15s per move", async () => {
-        const t = await captureMoveTime("rapid_test", { clockInitial: 600_000, clockIncrement: 0, wtime: 600_000, winc: 0 });
-        expect(t).toBeLessThanOrEqual(15000);
-        expect(t).toBeGreaterThan(5000);
-    });
-
-    it("CLASSICAL (30min+15s): allows up to 60s per move", async () => {
-        const t = await captureMoveTime("classical_test", { clockInitial: 1_800_000, clockIncrement: 15000, wtime: 1_800_000, winc: 15000 });
-        expect(t).toBeLessThanOrEqual(60000);
-        expect(t).toBeGreaterThan(15000);
-    });
-
-    it("CLASSICAL (60min+0): hits the absolute 60s ceiling", async () => {
-        const t = await captureMoveTime("classical_big", { clockInitial: 3_600_000, clockIncrement: 0, wtime: 3_600_000, winc: 0 });
-        expect(t).toBe(60000);
-    });
-
-    it("CORRESPONDENCE (no clock): uses a steady 5s budget", async () => {
+    it("CORRESPONDENCE (no clock): falls back to a fixed 5s movetime", async () => {
         engine.go = mock(async () => "e2e4");
 
         const gf = {
@@ -269,17 +267,9 @@ describe("Time management — adaptive across time controls", () => {
         await bot.start();
         await waitFor(() => expect(engine.go).toHaveBeenCalled());
 
-        expect(engine.go.mock.calls[0][0].moveTime).toBe(5000);
-    });
-
-    it("enforces 200ms minimum even when remaining clock is near zero", async () => {
-        const t = await captureMoveTime("low_clock", { clockInitial: 180_000, clockIncrement: 0, wtime: 1, winc: 0 });
-        expect(t).toBeGreaterThanOrEqual(200);
-    });
-
-    it("never spends more than 80% of remaining clock on one move (safety)", async () => {
-        const t = await captureMoveTime("safety_test", { clockInitial: 180_000, clockIncrement: 0, wtime: 600, winc: 0 });
-        expect(t).toBeLessThanOrEqual(Math.floor(600 * 0.8));
+        const opts = engine.go.mock.calls[0][0];
+        expect(opts.moveTime).toBe(5000);
+        expect(opts.whiteTime).toBeUndefined();
     });
 });
 
