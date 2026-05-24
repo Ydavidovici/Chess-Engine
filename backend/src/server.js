@@ -245,7 +245,16 @@ if (import.meta.main) {
 
     let MY_ENGINE_PATH = null;
 
-    if (await Bun.file(PROD_PATH).exists()) {
+    // Explicit override for deployments (e.g. systemd units). Wins over auto-detection.
+    if (process.env.ENGINE_PATH) {
+        if (await Bun.file(process.env.ENGINE_PATH).exists()) {
+            console.log("✅ Using ENGINE_PATH from environment");
+            MY_ENGINE_PATH = process.env.ENGINE_PATH;
+        } else {
+            console.error(`❌ CRITICAL: ENGINE_PATH set but not found: ${process.env.ENGINE_PATH}`);
+            process.exit(1);
+        }
+    } else if (await Bun.file(PROD_PATH).exists()) {
         console.log("✅ Running in Production Mode (Local Binary)");
         MY_ENGINE_PATH = PROD_PATH;
     } else if (await Bun.file(DEV_PATH).exists()) {
