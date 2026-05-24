@@ -276,7 +276,15 @@ if (import.meta.main) {
     // forwards every console.* call through the notifier (so Discord/etc. see
     // them) AND still prints to the terminal — adding ConsoleTransport would
     // double-print every notify call.
-    const notifier = new Notifier({transports: [new ApiTransport()]});
+    const transports = [];
+    const apiTransport = new ApiTransport();
+    if (apiTransport.enabled) {
+        transports.push(apiTransport);
+        console.log(`[Server] ApiTransport enabled → ${apiTransport.url}`);
+    } else {
+        console.log("[Server] ApiTransport disabled (set API_NOTIFY_URL + API_NOTIFY_TOKEN to enable).");
+    }
+    const notifier = new Notifier({transports});
     const restoreConsole = wrapConsoleForNotifier(notifier);
 
     // --- Manager (with hard cap independent of LICHESS_MAX_GAMES) ---

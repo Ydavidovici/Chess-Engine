@@ -106,6 +106,7 @@ export const CONSOLE_WRAP_SKIP_PREFIXES = [
     "[HealthPinger]",
     "[Notifier]",
     "[Notify]",
+    "[sdNotify]",
 ];
 
 function formatConsoleArg(a) {
@@ -188,7 +189,7 @@ export class JournalTransport {
                 msg += " [Error stringifying details]";
             }
         }
-        
+
         this.stream.write(msg + "\n");
     }
 }
