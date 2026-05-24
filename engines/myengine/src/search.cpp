@@ -1,5 +1,6 @@
 #include "search.h"
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <limits>
 #include <cstring>
@@ -72,9 +73,16 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
         helpers.emplace_back(&Search::helperThreadMain, this, std::ref(workers[i]), Board(board), maxDepth, i);
     }
 
+    int64_t lastIterMs = 0;
+    constexpr double PREDICT_FACTOR = 2.0;  // assumed per-depth iteration-time growth
+
     for (int depth = 1; depth <= maxDepth; ++depth) {
         if (shouldStop()) break;
-        if (depth > 1 && tm_.isSoftTimeUp()) break;
+        // Don't start a depth we likely can't finish within the soft budget;
+        // estimate its cost from the last completed iteration.
+        if (depth > 1 && tm_.isSoftTimeUp(static_cast<int64_t>(lastIterMs * PREDICT_FACTOR))) break;
+
+        const auto iterStart = std::chrono::steady_clock::now();
 
         int alpha = -INF;
         int beta = INF;
@@ -110,10 +118,13 @@ Move Search::findBestMove(Board& board, int maxDepth, int timeLeftMs, int increm
             }
         }
 
+        lastIterMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - iterStart).count();
+
         if (!shouldStop() && foundLegalMove) {
             bestMove = currentBestMove;
             const bool changed = hasPrevBest && !(bestMove == prevBestMove);
-            tm_.onIterationComplete(changed);
+            tm_.onIterationComplete(changed, currentBestScore);
             prevBestMove = bestMove;
             hasPrevBest = true;
         }

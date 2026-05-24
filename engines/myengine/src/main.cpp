@@ -205,7 +205,7 @@ static void handle_eval(const std::string& line, Engine& engine) {
 
 static void handle_go(const std::string& line, Engine& engine) {
     PlaySettings settings{};
-    settings.depth = 8;
+    settings.depth = 0;  // 0 = unset; resolved after parsing
     settings.time_left_ms = 0;
     settings.increment_ms = 0;
     settings.moves_to_go = 0;
@@ -217,10 +217,11 @@ static void handle_go(const std::string& line, Engine& engine) {
     int wtime = 0, btime = 0, winc = 0, binc = 0, movestogo = 0;
     int movetime = 0;
     bool infinite = false;
+    bool depth_given = false;
 
     while (iss >> token) {
         if (token == "go") continue;
-        if (token == "depth") iss >> settings.depth;
+        if (token == "depth") { iss >> settings.depth; depth_given = true; }
         else if (token == "wtime") iss >> wtime;
         else if (token == "btime") iss >> btime;
         else if (token == "winc") iss >> winc;
@@ -250,6 +251,15 @@ static void handle_go(const std::string& line, Engine& engine) {
         settings.depth = 64;
         settings.time_left_ms = 0;
         settings.movetime_ms = 0;
+    }
+
+    // Resolve the depth cap. When a clock or movetime budget governs the
+    // search, let time be the limiter (deep cap) instead of stopping at a
+    // shallow fixed depth; a bare 'go' stays shallow.
+    if (!depth_given && !infinite) {
+        const bool time_based =
+            (movetime > 0) || (wtime > 0 || btime > 0 || winc > 0 || binc > 0 || movestogo > 0);
+        settings.depth = time_based ? 64 : 8;
     }
 
     // 4. Execute

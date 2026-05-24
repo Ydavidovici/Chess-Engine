@@ -210,13 +210,26 @@ export class UciEngine extends EventEmitter {
 
         const parts = ["go"];
         if (options.depth) parts.push(`depth ${options.depth}`);
-        if (options.whiteTime) parts.push(`wtime ${options.whiteTime}`);
-        if (options.blackTime) parts.push(`btime ${options.blackTime}`);
-        if (options.whiteInc) parts.push(`winc ${options.whiteInc}`);
-        if (options.blackInc) parts.push(`binc ${options.blackInc}`);
+        if (options.whiteTime != null) parts.push(`wtime ${options.whiteTime}`);
+        if (options.blackTime != null) parts.push(`btime ${options.blackTime}`);
+        if (options.whiteInc != null) parts.push(`winc ${options.whiteInc}`);
+        if (options.blackInc != null) parts.push(`binc ${options.blackInc}`);
+        if (options.movesToGo != null) parts.push(`movestogo ${options.movesToGo}`);
         if (options.moveTime) parts.push(`movetime ${options.moveTime}`);
 
-        let safeTimeout = options.moveTime ? options.moveTime + this.commandTimeoutBufferMs : (options.whiteTime ? 60000 * 5 : 60000);
+        // Watchdog must outlast the engine's worst-case think time. For a
+        // fixed movetime that's the budget; for a real clock the engine caps a
+        // single move at ~MAX_FRACTION of its remaining time, so allow the
+        // larger of the two clocks (we don't know our colour here) with margin.
+        const clockMax = Math.max(options.whiteTime || 0, options.blackTime || 0);
+        let safeTimeout;
+        if (options.moveTime) {
+            safeTimeout = options.moveTime + this.commandTimeoutBufferMs;
+        } else if (clockMax > 0) {
+            safeTimeout = Math.ceil(clockMax * 0.9) + this.commandTimeoutBufferMs;
+        } else {
+            safeTimeout = 60000;
+        }
         let currentBestMove = "(none)";
 
         try {

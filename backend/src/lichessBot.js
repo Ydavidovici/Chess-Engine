@@ -564,19 +564,40 @@ export class LichessBot {
             return false;
         }
 
-        const myTime = myColor === "w" ? timeInfo.wtime : timeInfo.btime;
-        const myInc  = myColor === "w" ? timeInfo.winc  : timeInfo.binc;
-        const moveTimeMs = computeMoveTime(myTime, myInc, totalTimeMs);
+        const myInc = myColor === "w" ? timeInfo.winc : timeInfo.binc;
+
+        // Forward the raw clock so the engine's TimeManager owns allocation —
+        // it can react to in-search signals (PV stability, score swings) the
+        // backend can't see. Fall back to a fixed movetime only when the
+        // stream carries no clock (e.g. correspondence games).
+        const haveClock = timeInfo.wtime != null && timeInfo.btime != null;
+
+        let goOpts;
+        let allocLabel;
+        if (haveClock) {
+            goOpts = {
+                whiteTime: timeInfo.wtime,
+                blackTime: timeInfo.btime,
+                whiteInc: timeInfo.winc ?? 0,
+                blackInc: timeInfo.binc ?? 0,
+            };
+            allocLabel = `clock w${timeInfo.wtime}/b${timeInfo.btime} +${myInc ?? 0}`;
+        } else {
+            const myTime = myColor === "w" ? timeInfo.wtime : timeInfo.btime;
+            const moveTimeMs = computeMoveTime(myTime, myInc, totalTimeMs);
+            goOpts = {moveTime: moveTimeMs};
+            allocLabel = `movetime ${moveTimeMs}ms`;
+        }
 
         let rawMove;
         try {
-            rawMove = await engine.go({moveTime: moveTimeMs});
+            rawMove = await engine.go(goOpts);
         } catch (err) {
             console.warn(`[${gameId}] go command failed: ${err.message}`);
             return false;
         }
         const bestMove = normalizeMove(rawMove);
-        console.log(`[${gameId}] Engine: ${bestMove} (allocated ${moveTimeMs}ms)`);
+        console.log(`[${gameId}] Engine: ${bestMove} (${allocLabel})`);
 
         if (!bestMove || bestMove === "(none)" || bestMove === "0000") {
             console.warn(`[${gameId}] No valid move — resigning.`);
