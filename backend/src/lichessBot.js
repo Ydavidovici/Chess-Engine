@@ -196,8 +196,8 @@ export class LichessBot {
                     next = Math.max(err.retryAfterSec * 1000 + 500, this.autoplay.currentBackoffMs || 0);
                     this.notifier.warn("[Hunt] Lichess rate limit", {retryAfterSec: err.retryAfterSec});
                 } else {
-                    // Exponential backoff: 5s, 10s, 20s, ... capped at 5 min.
-                    next = this.autoplay.currentBackoffMs === 0 ? 5_000 : Math.min(this.autoplay.currentBackoffMs * 2, 300_000);
+                    // Exponential backoff: 30s, 60s, 120s, ... capped at 5 min.
+                    next = this.autoplay.currentBackoffMs === 0 ? 30_000 : Math.min(this.autoplay.currentBackoffMs * 2, 300_000);
                 }
                 this.autoplay.currentBackoffMs = next;
                 console.log(`[Autoplay] Hunt failed (${err.message}); retrying in ${next / 1000}s`);
@@ -954,7 +954,7 @@ export class LichessBot {
     // Challenge bots within ±window of our own rating for the given TC. Tries
     // up to `maxAttempts` candidates, ordered by closeness in rating; returns
     // the first one that accepts within ~5s.
-    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 4, poolSize = 80, maxWindow = 2000} = {}) {
+    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 2, poolSize = 80, maxWindow = 2000} = {}) {
         if (this._isRateLimited()) {
             throw new LichessRateLimited(this._rateLimitRemainingSec());
         }
@@ -1049,7 +1049,7 @@ export class LichessBot {
         const candidates = eligible
             .filter(b => !this._inDeclineCooldown(b.username))
             .sort((a, b) => a.perfs.blitz.rating - b.perfs.blitz.rating)
-            .slice(0, 5);
+            .slice(0, 2);
 
         if (filteredOut > 0) {
             console.log(`[Hunt] Skipped ${filteredOut} bot(s) in decline cool-down`);
