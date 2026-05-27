@@ -1084,6 +1084,13 @@ export class LichessBot {
             throw new LichessRateLimited(this._rateLimitRemainingSec());
         }
 
+        const now = Date.now();
+        const elapsed = now - (this.lastApiTime || 0);
+        if (this.lastApiTime && elapsed < 1000) {
+            await new Promise(r => setTimeout(r, 1000 - elapsed));
+        }
+        this.lastApiTime = Date.now();
+
         // Add a 15-second timeout to prevent indefinite hangs if Cloudflare/Lichess drops packets
         const timeoutMs = options.timeoutMs ?? 15000;
         const controller = new AbortController();
