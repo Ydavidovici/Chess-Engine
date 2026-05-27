@@ -1,10 +1,16 @@
-import { mock, describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { mock, describe, it, expect, beforeEach, afterEach, setSystemTime } from "bun:test";
 import { LichessBot, LichessRateLimited } from "../src/lichessBot.js";
 import { nullNotifier } from "../src/notifier.js";
 
 describe("LichessBot - Caching and Throttling", () => {
     let originalFetch;
     let bot;
+    let currentTime;
+
+    const advanceTime = (ms) => {
+        currentTime += ms;
+        setSystemTime(new Date(currentTime));
+    };
     
     beforeEach(() => {
         originalFetch = global.fetch;
@@ -15,17 +21,13 @@ describe("LichessBot - Caching and Throttling", () => {
             huntAcceptTimeoutMs: 100,
         });
         
-        // Mock Date.now for time manipulation
-        const RealDateNow = Date.now;
-        let currentTime = 1000000;
-        global.Date.now = mock(() => currentTime);
-        global.Date.now.advance = (ms) => { currentTime += ms; };
-        global.Date.now.restore = () => { global.Date.now = RealDateNow; };
+        currentTime = 1000000;
+        setSystemTime(new Date(currentTime));
     });
 
     afterEach(() => {
         global.fetch = originalFetch;
-        if (global.Date.now.restore) global.Date.now.restore();
+        setSystemTime(); // Restore real time
     });
 
     it("should cache profile fetches for 60 seconds", async () => {
@@ -41,13 +43,13 @@ describe("LichessBot - Caching and Throttling", () => {
         expect(global.fetch).toHaveBeenCalledTimes(1); // Still 1
 
         // Advance 30 seconds, still cached
-        global.Date.now.advance(30000);
+        advanceTime(30000);
         const r3 = await bot._fetchMyRating("blitz");
         expect(r3.rating).toBe(1500);
         expect(global.fetch).toHaveBeenCalledTimes(1);
 
         // Advance another 31 seconds, cache expires
-        global.Date.now.advance(31000);
+        advanceTime(31000);
         global.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ perfs: { blitz: { rating: 1550 } } }), { status: 200 }));
         
         const r4 = await bot._fetchMyRating("blitz");
@@ -69,12 +71,12 @@ describe("LichessBot - Caching and Throttling", () => {
         expect(global.fetch).toHaveBeenCalledTimes(1);
 
         // Advance 15 seconds, still cached
-        global.Date.now.advance(15000);
+        advanceTime(15000);
         await bot._fetchOnlineBots(500);
         expect(global.fetch).toHaveBeenCalledTimes(1);
 
         // Advance 16 seconds, cache expires
-        global.Date.now.advance(16000);
+        advanceTime(16000);
         global.fetch.mockResolvedValueOnce(new Response("{\"id\":\"bot3\",\"username\":\"Bot3\"}\n", { status: 200 }));
         
         const b3 = await bot._fetchOnlineBots(500);
@@ -88,14 +90,14 @@ describe("LichessBot - Caching and Throttling", () => {
         
         // No wait on first call
         await bot._throttleGlobalChallenge();
-        expect(bot.lastChallengeTime).toBe(global.Date.now());
+        expect(bot.lastChallengeTime).toBe(Date.now());
         
         // Second call right after should block for 50ms (mocked challengeSpacingMs)
         let resolved = false;
         const p = bot._throttleGlobalChallenge().then(() => { resolved = true; });
         
         // Advance time a little but not enough
-        global.Date.now.advance(20);
+        advanceTime(20);
         await new Promise(r => setTimeout(r, 10)); // Yield to event loop
         expect(resolved).toBe(false);
         
@@ -112,7 +114,7 @@ describe("LichessBot - Caching and Throttling", () => {
         
         // First API call - should have no delay
         await bot._lichessFetch("https://lichess.org/api/test");
-        expect(bot.lastApiTime).toBe(global.Date.now());
+        expect(bot.lastApiTime).toBe(Date.now());
 
         // Second API call right after
         let resolved = false;
