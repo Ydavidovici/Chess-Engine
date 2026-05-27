@@ -1081,7 +1081,23 @@ export class LichessBot {
             throw new LichessRateLimited(this._rateLimitRemainingSec());
         }
 
-        const res = await fetch(url, options);
+        // Add a 15-second timeout to prevent indefinite hangs if Cloudflare/Lichess drops packets
+        const timeoutMs = options.timeoutMs ?? 15000;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(new Error("Lichess timeout")), timeoutMs);
+        
+        // Merge with existing signal if any
+        if (options.signal) {
+            options.signal.addEventListener("abort", () => controller.abort(options.signal.reason), {once: true});
+        }
+
+        let res;
+        try {
+            res = await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+            clearTimeout(timeoutId);
+        }
+
         if (res.status === 429) {
             const retryAfter = parseInt(res.headers?.get?.("Retry-After") ?? "", 10);
             const seconds = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : this.defaultRetryAfterSec;

@@ -186,13 +186,17 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
         const {limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200} = req.body ?? {};
         lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window});
-        res.json({status: "success", autoplay: lichessBotInstance.autoplayStatus()});
+        res.json({
+            status: "success", 
+            message: `Autoplay started (${limit}+${increment} ${rated ? 'rated' : 'casual'}, target=${target})`,
+            autoplay: lichessBotInstance.autoplayStatus()
+        });
     });
 
     app.post("/api/lichess/autoplay/stop", (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
         lichessBotInstance.stopAutoplay();
-        res.json({status: "success"});
+        res.json({status: "success", message: "Autoplay stopped"});
     });
 
     app.get("/api/lichess/autoplay/status", (req, res) => {
