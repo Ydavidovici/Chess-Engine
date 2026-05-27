@@ -12,7 +12,7 @@ export function createApp({
     lichessEngineFactory,
     mainEnginePath,
     maxConcurrentGames = 4,
-    getToken = () => process.env.LICHESS_TOKEN,
+    getToken = () => process.env.lichess_api_token,
     BotClass = LichessBot,
     notifier = nullNotifier,
     analyzer = null
