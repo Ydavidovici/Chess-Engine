@@ -35,7 +35,14 @@ async function main() {
 
     console.log(`Building engine (${buildType}) with ${jobs} jobs...`);
 
-    await run(["cmake", "-S", ENGINE_ROOT, "-B", BUILD_DIR, `-DCMAKE_BUILD_TYPE=${buildType}`]);
+    const cmakeArgs = ["cmake", "-S", ENGINE_ROOT, "-B", BUILD_DIR, `-DCMAKE_BUILD_TYPE=${buildType}`];
+    
+    // Explicitly select the MinGW generator on Windows so it doesn't default to MSVC/NMake
+    if (process.platform === "win32" && !process.env.CMAKE_GENERATOR) {
+        cmakeArgs.push("-G", "MinGW Makefiles");
+    }
+
+    await run(cmakeArgs);
     await run(["cmake", "--build", BUILD_DIR, "--target", "myengine", "-j", jobs]);
 
     if (!(await Bun.file(BUILT_BINARY).exists())) {
