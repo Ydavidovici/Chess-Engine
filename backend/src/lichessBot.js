@@ -273,8 +273,9 @@ export class LichessBot {
 
         if (this._isRateLimited()) {
             this.botProfile = null;
-            console.warn(`[Bot] Restored rate limit state from disk. Starting in rate-limited state for ${this._rateLimitRemainingSec()}s.`);
-            this.streamEvents();
+            const waitSec = this._rateLimitRemainingSec();
+            console.warn(`[Bot] Restored rate limit state from disk. Starting in rate-limited state for ${waitSec}s.`);
+            setTimeout(() => this.streamEvents(), waitSec * 1000);
             return;
         }
 
@@ -1076,6 +1077,10 @@ export class LichessBot {
     }
 
     async _lichessFetch(url, options = {}) {
+        if (this._isRateLimited()) {
+            throw new LichessRateLimited(this._rateLimitRemainingSec());
+        }
+
         const res = await fetch(url, options);
         if (res.status === 429) {
             const retryAfter = parseInt(res.headers?.get?.("Retry-After") ?? "", 10);
