@@ -66,6 +66,7 @@ export class LichessBot {
         // we don't spam an obvious non-responder.
         this.declineCooldownMs = options.declineCooldownMs ?? 15 * 60 * 1000;
         this.apiSpacingMs = options.apiSpacingMs ?? (process.env.NODE_ENV === "test" ? 0 : 1000);
+        this._now = options.now || (() => Date.now());
         this.recentlyDeclined = new Map();
 
         // Minimum gap between consecutive challenge POSTs within one hunt.
@@ -217,7 +218,7 @@ export class LichessBot {
             const file = Bun.file("lichess-rate-limit.json");
             if (await file.exists()) {
                 const data = await file.json();
-                if (data.rateLimitedUntil && data.rateLimitedUntil > Date.now()) {
+                if (data.rateLimitedUntil && data.rateLimitedUntil > this._now()) {
                     this.rateLimitedUntil = data.rateLimitedUntil;
                     // Do NOT restore consecutive-hit counter across restarts.
                     // The counter drives exponential backoff, but after a restart
@@ -226,7 +227,7 @@ export class LichessBot {
                     // the multiplier higher (we saw hit #15 → 16-min backoffs).
                     // The saved rateLimitedUntil already encodes how long to wait;
                     // once that expires we start fresh at 1×.
-                    const remainingSec = Math.ceil((this.rateLimitedUntil - Date.now()) / 1000);
+                    const remainingSec = Math.ceil((this.rateLimitedUntil - this._now()) / 1000);
                     console.log(`[Bot] Restored rate limit state from disk: rate-limited for ${remainingSec}s`);
                 }
             }
@@ -774,7 +775,7 @@ export class LichessBot {
     }
 
     _pruneDeclined() {
-        const now = Date.now();
+        const now = this._now();
         for (const [name, expiresAt] of this.recentlyDeclined) {
             if (expiresAt <= now) this.recentlyDeclined.delete(name);
         }
@@ -782,19 +783,19 @@ export class LichessBot {
 
     _inDeclineCooldown(username) {
         const expiresAt = this.recentlyDeclined.get(username.toLowerCase());
-        return expiresAt != null && expiresAt > Date.now();
+        return expiresAt != null && expiresAt > this._now();
     }
 
     _markDeclined(username) {
-        this.recentlyDeclined.set(username.toLowerCase(), Date.now() + this.declineCooldownMs);
+        this.recentlyDeclined.set(username.toLowerCase(), this._now() + this.declineCooldownMs);
     }
 
     _isRateLimited() {
-        return this.rateLimitedUntil > Date.now();
+        return this.rateLimitedUntil > this._now();
     }
 
     _rateLimitRemainingSec() {
-        const ms = this.rateLimitedUntil - Date.now();
+        const ms = this.rateLimitedUntil - this._now();
         return ms > 0 ? Math.ceil(ms / 1000) : 0;
     }
 
@@ -808,7 +809,7 @@ export class LichessBot {
         const exp = Math.min(this.rateLimitConsecutiveHits - 1, 10);
         const mult = Math.min(Math.pow(2, exp), this.rateLimitMaxMultiplier);
         const totalSec = Math.ceil(retryAfterSec * mult);
-        const candidate = Date.now() + totalSec * 1000;
+        const candidate = this._now() + totalSec * 1000;
         if (candidate > this.rateLimitedUntil) this.rateLimitedUntil = candidate;
         if (mult > 1) {
             console.warn(`[Hunt] Consecutive 429 #${this.rateLimitConsecutiveHits}; backing off ${totalSec}s (${mult}× Retry-After)`);
@@ -899,9 +900,9 @@ export class LichessBot {
                 challengedCandidates.push(acceptedChallenge);
 
                 // Wait up to huntAcceptTimeoutMs for this specific challenge to be accepted
-                const deadline = Date.now() + this.huntAcceptTimeoutMs;
+                const deadline = this._now() + this.huntAcceptTimeoutMs;
                 let accepted = false;
-                while (Date.now() < deadline) {
+                while (this._now() < deadline) {
                     await new Promise(r => setTimeout(r, this.huntPollIntervalMs));
                     if (this.activeGames.has(acceptedChallenge.id)) {
                         accepted = true;
@@ -944,10 +945,10 @@ export class LichessBot {
     }
 
     async _fetchMyRating(perf) {
-        if (!this._profileCache || Date.now() - this._profileCache.time > 60000) {
+        if (!this._profileCache || this._now() - this._profileCache.time > 60000) {
             const res = await this._lichessFetch("https://lichess.org/api/account", {headers: this.authHeader});
             if (!res.ok) throw new Error("Failed to fetch own profile");
-            this._profileCache = { data: await res.json(), time: Date.now() };
+            this._profileCache = { data: await res.json(), time: this._now() };
         }
         const profile = this._profileCache.data;
         const rating = profile.perfs?.[perf]?.rating;
@@ -1072,12 +1073,12 @@ export class LichessBot {
 
 
     async _throttleGlobalChallenge() {
-        const now = Date.now();
+        const now = this._now();
         const elapsedSinceLast = now - this.lastChallengeTime;
         if (this.lastChallengeTime > 0 && elapsedSinceLast < this.challengeSpacingMs) {
             await new Promise(r => setTimeout(r, this.challengeSpacingMs - elapsedSinceLast));
         }
-        this.lastChallengeTime = Date.now();
+        this.lastChallengeTime = this._now();
     }
 
     async _lichessFetch(url, options = {}) {
@@ -1085,12 +1086,12 @@ export class LichessBot {
             throw new LichessRateLimited(this._rateLimitRemainingSec());
         }
 
-        const now = Date.now();
+        const now = this._now();
         const elapsed = now - (this.lastApiTime || 0);
         if (this.lastApiTime && elapsed < this.apiSpacingMs) {
             await new Promise(r => setTimeout(r, this.apiSpacingMs - elapsed));
         }
-        this.lastApiTime = Date.now();
+        this.lastApiTime = this._now();
 
         // Add a 15-second timeout to prevent indefinite hangs if Cloudflare/Lichess drops packets
         const timeoutMs = options.timeoutMs ?? 15000;
@@ -1122,14 +1123,14 @@ export class LichessBot {
     }
 
     async _fetchOnlineBots(nb) {
-        if (!this._onlineBotsCache || Date.now() - this._onlineBotsCache.time > 30000) {
+        if (!this._onlineBotsCache || this._now() - this._onlineBotsCache.time > 30000) {
             const res = await this._lichessFetch(`https://lichess.org/api/bot/online?nb=${nb}`, {
                 headers: {Accept: "application/x-ndjson"},
             });
             if (!res.ok) throw new Error("Failed to fetch online bots");
             const bots = [];
             await this.readNdjsonStream(res.body, null, (bot) => { bots.push(bot); });
-            this._onlineBotsCache = { data: bots, time: Date.now() };
+            this._onlineBotsCache = { data: bots, time: this._now() };
         }
         return this._onlineBotsCache.data;
     }

@@ -1,4 +1,4 @@
-import { mock, describe, it, expect, beforeEach, afterEach, setSystemTime } from "bun:test";
+import { mock, describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { LichessBot, LichessRateLimited } from "../src/lichessBot.js";
 import { nullNotifier } from "../src/notifier.js";
 
@@ -9,25 +9,23 @@ describe("LichessBot - Caching and Throttling", () => {
 
     const advanceTime = (ms) => {
         currentTime += ms;
-        setSystemTime(new Date(currentTime));
     };
     
     beforeEach(() => {
         originalFetch = global.fetch;
         global.fetch = mock();
+        currentTime = 1000000;
+        
         bot = new LichessBot("dummy-token", () => ({}), {
             notifier: nullNotifier,
             challengeSpacingMs: 50, // Keep short for fast tests
             huntAcceptTimeoutMs: 100,
+            now: () => currentTime
         });
-        
-        currentTime = 1000000;
-        setSystemTime(new Date(currentTime));
     });
 
     afterEach(() => {
         global.fetch = originalFetch;
-        setSystemTime(); // Restore real time
     });
 
     it("should cache profile fetches for 60 seconds", async () => {
@@ -90,7 +88,7 @@ describe("LichessBot - Caching and Throttling", () => {
         
         // No wait on first call
         await bot._throttleGlobalChallenge();
-        expect(bot.lastChallengeTime).toBe(Date.now());
+        expect(bot.lastChallengeTime).toBe(currentTime);
         
         // Second call right after should block for 50ms (mocked challengeSpacingMs)
         let resolved = false;
@@ -114,7 +112,7 @@ describe("LichessBot - Caching and Throttling", () => {
         
         // First API call - should have no delay
         await bot._lichessFetch("https://lichess.org/api/test");
-        expect(bot.lastApiTime).toBe(Date.now());
+        expect(bot.lastApiTime).toBe(currentTime);
 
         // Second API call right after
         let resolved = false;
