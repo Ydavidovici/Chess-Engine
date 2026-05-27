@@ -65,6 +65,7 @@ export class LichessBot {
         // online won't be punished for a stale ignore, but long enough that
         // we don't spam an obvious non-responder.
         this.declineCooldownMs = options.declineCooldownMs ?? 15 * 60 * 1000;
+        this.apiSpacingMs = options.apiSpacingMs ?? (process.env.NODE_ENV === "test" ? 0 : 1000);
         this.recentlyDeclined = new Map();
 
         // Minimum gap between consecutive challenge POSTs within one hunt.
@@ -1086,8 +1087,8 @@ export class LichessBot {
 
         const now = Date.now();
         const elapsed = now - (this.lastApiTime || 0);
-        if (this.lastApiTime && elapsed < 1000) {
-            await new Promise(r => setTimeout(r, 1000 - elapsed));
+        if (this.lastApiTime && elapsed < this.apiSpacingMs) {
+            await new Promise(r => setTimeout(r, this.apiSpacingMs - elapsed));
         }
         this.lastApiTime = Date.now();
 

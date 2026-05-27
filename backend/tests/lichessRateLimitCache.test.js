@@ -105,4 +105,25 @@ describe("LichessBot - Caching and Throttling", () => {
         await p;
         expect(resolved).toBe(true);
     });
+
+    it("should globally throttle all API requests to 1000ms", async () => {
+        bot.apiSpacingMs = 1000;
+        global.fetch.mockResolvedValue(new Response("{}", { status: 200 }));
+        
+        // First API call - should have no delay
+        await bot._lichessFetch("https://lichess.org/api/test");
+        expect(bot.lastApiTime).toBe(global.Date.now());
+
+        // Second API call right after
+        let resolved = false;
+        const p = bot._lichessFetch("https://lichess.org/api/test2").then(() => { resolved = true; });
+
+        // Yield to event loop
+        await new Promise(r => setTimeout(r, 10));
+        expect(resolved).toBe(false); // blocked by the 1000ms throttle
+
+        // Await the real setTimeout in _lichessFetch (1000ms wall time since we don't mock setTimeout)
+        await p;
+        expect(resolved).toBe(true);
+    });
 });
