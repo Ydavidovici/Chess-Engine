@@ -1109,6 +1109,9 @@ export class LichessBot {
         }
 
         if (res.status === 429) {
+            let body = "";
+            try { body = await res.text(); } catch (e) {}
+            console.error(`[Lichess API] 429 Rate Limited. Response body: ${body}`);
             const retryAfter = parseInt(res.headers?.get?.("Retry-After") ?? "", 10);
             const seconds = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : this.defaultRetryAfterSec;
             this._setRateLimit(seconds);
