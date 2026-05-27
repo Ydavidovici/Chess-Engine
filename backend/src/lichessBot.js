@@ -392,6 +392,7 @@ export class LichessBot {
         }
 
         console.log(`[Challenge ${challenge.id}] Accepting`);
+        await this._throttleGlobalChallenge();
         await this._lichessFetch(`https://lichess.org/api/challenge/${challenge.id}/accept`, {
             method: "POST",
             headers: this.authHeader,
@@ -399,6 +400,7 @@ export class LichessBot {
     }
 
     async declineChallenge(challengeId, reason = "generic") {
+        await this._throttleGlobalChallenge();
         const body = new URLSearchParams({reason});
         await this._lichessFetch(`https://lichess.org/api/challenge/${challengeId}/decline`, {
             method: "POST",
@@ -763,6 +765,7 @@ export class LichessBot {
     }
 
     async cancelChallenge(challengeId) {
+        await this._throttleGlobalChallenge();
         await this._lichessFetch(`https://lichess.org/api/challenge/${challengeId}/cancel`, {
             method: "POST",
             headers: this.authHeader,
