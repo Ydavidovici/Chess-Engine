@@ -7,7 +7,16 @@ import {Notifier, nullNotifier, wrapConsoleForNotifier} from "./notifier.js";
 import {ApiTransport} from "./apiTransport.js";
 import {GameAnalyzer} from "./gameAnalyzer.js";
 
-export function createApp({manager, lichessEngineFactory, mainEnginePath, maxConcurrentGames = 4, notifier = nullNotifier, getToken = () => process.env.lichess_api_token, analyzer = null} = {}) {
+export function createApp({
+    manager,
+    lichessEngineFactory,
+    mainEnginePath,
+    maxConcurrentGames = 4,
+    getToken = () => process.env.LICHESS_TOKEN,
+    BotClass = LichessBot,
+    notifier = nullNotifier,
+    analyzer = null
+} = {}) {
     const app = express();
 
     app.use(cors({
@@ -104,7 +113,7 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
             return res.status(400).json({error: "Missing Lichess Token"});
         }
 
-        const instance = new LichessBot(token, lichessEngineFactory, {maxConcurrentGames, notifier});
+        const instance = new BotClass(token, lichessEngineFactory, {maxConcurrentGames, notifier});
         try {
             await instance.start();
             lichessBotInstance = instance;
