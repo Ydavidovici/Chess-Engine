@@ -7,10 +7,10 @@ export const BotProvider = ({ children }) => {
     // Determine the active target: 'prod' or 'dev'
     const [botTarget, setBotTarget] = useState("prod");
     
-    // Store the endpoint URLs
+    // Store the endpoint URLs pointing to the remote server
     const [urls, setUrls] = useState({
-        prod: "http://localhost:8000",
-        dev: "http://localhost:8001"
+        prod: "http://45.55.161.47:8000",
+        dev: "http://45.55.161.47:8001"
     });
 
     const activeUrl = urls[botTarget];

@@ -19,7 +19,7 @@ export default function Default() {
             <aside className="w-64 flex flex-col bg-slate-900 border-r border-slate-800 shadow-2xl z-20">
                 <div className="p-6 border-b border-slate-800">
                     <h1 className="text-2xl font-black bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent flex items-center gap-2 tracking-tight">
-                        ♞ Chess Hub
+                        ♞ JewkieBot
                     </h1>
                 </div>
 
