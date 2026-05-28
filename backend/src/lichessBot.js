@@ -108,6 +108,7 @@ export class LichessBot {
 
         this.dbGameIds = new Map();
         this.savedPlies = new Map();
+        this.gameOpenings = new Map();
 
         // Autoplay: when enabled, the bot fills free slots via huntWeakestBot.
         this.autoplay = null; // {limit, increment, rated, target, backoffMs, timer, huntInFlight}
@@ -416,7 +417,18 @@ export class LichessBot {
     async playGame(gameId) {
         if (this.activeGames.has(gameId)) return;
         this.activeGames.add(gameId);
-        console.log(`[${gameId}] Game started.`);
+        
+        let gameOpeningId = this.autoplay?.openingId || "balanced";
+        if (gameOpeningId === "random_tactical" || gameOpeningId === "random_positional") {
+            const targetStyle = gameOpeningId === "random_tactical" ? "tactical" : "positional";
+            const choices = Object.keys(OPENINGS).filter(k => OPENINGS[k].style === targetStyle);
+            if (choices.length > 0) {
+                gameOpeningId = choices[Math.floor(Math.random() * choices.length)];
+            }
+        }
+        this.gameOpenings.set(gameId, gameOpeningId);
+        
+        console.log(`[${gameId}] Game started. (Opening: ${gameOpeningId})`);
         this.notifier.info(`[Game] Game started: ${gameId}`, {active: this.activeGames.size, max: this.maxConcurrentGames});
 
         await this._ensureProfile().catch(() => {});
@@ -458,7 +470,7 @@ export class LichessBot {
         try {
             try {
                 await engine.start();
-                if (this.autoplay?.openingId === "balanced") {
+                if (this.gameOpenings.get(gameId) === "balanced") {
                     await engine.setOption("OwnBook", "true");
                 } else {
                     await engine.setOption("OwnBook", "false");
@@ -560,6 +572,7 @@ export class LichessBot {
             try { await engine.stop(); } catch (e) { console.error(`[${gameId}] Engine stop error:`, e); }
             this.gameEngines.delete(gameId);
             this.activeGames.delete(gameId);
+            this.gameOpenings.delete(gameId);
             this.gameControllers.delete(gameId);
             console.log(`[${gameId}] Cleaned up.`);
             this._tickAutoplay();
@@ -575,8 +588,9 @@ export class LichessBot {
         const movesArray = movesStr.trim() === "" ? [] : movesStr.trim().split(" ");
 
         // Specific Opening Logic for Autoplay
-        if (this.autoplay?.openingId && this.autoplay.openingId !== "balanced" && OPENINGS[this.autoplay.openingId]) {
-            const expectedMoves = OPENINGS[this.autoplay.openingId].moves;
+        const currentOpeningId = this.gameOpenings.get(gameId) || "balanced";
+        if (currentOpeningId !== "balanced" && OPENINGS[currentOpeningId]) {
+            const expectedMoves = OPENINGS[currentOpeningId].moves;
             let matches = true;
             for (let i = 0; i < movesArray.length; i++) {
                 if (movesArray[i] !== expectedMoves[i]) {

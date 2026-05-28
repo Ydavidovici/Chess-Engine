@@ -192,6 +192,8 @@ export default function LichessPage() {
                             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Opening Style</label>
                             <select value={autoplayConfig.openingId} onChange={(e) => setAutoplayConfig({...autoplayConfig, openingId: e.target.value})} className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500" disabled={activeStatus?.lichess?.autoplay?.enabled}>
                                 <option value="balanced">Balanced (Global Book)</option>
+                                <option value="random_tactical">Random Tactical</option>
+                                <option value="random_positional">Random Positional</option>
                                 {Object.entries(openings).map(([id, config]) => (
                                     <option key={id} value={id}>{config.name}</option>
                                 ))}
