@@ -10,7 +10,7 @@ export const BotProvider = ({ children }) => {
     // Store the endpoint URLs pointing to the remote server
     const urls = {
         'prod': 'https://jewkiebot.dev',
-        'dev': 'http://45.55.161.47:8001',
+        'dev': 'https://jewkiebot.dev/dev',
     };
 
     const activeUrl = urls[botTarget];
