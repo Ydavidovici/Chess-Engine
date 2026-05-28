@@ -6,12 +6,22 @@ import {LichessBot} from "./lichessBot.js";
 import {Notifier, nullNotifier, wrapConsoleForNotifier} from "./notifier.js";
 import {ApiTransport} from "./apiTransport.js";
 import {GameAnalyzer} from "./gameAnalyzer.js";
+import {OPENINGS} from "./openings.js";
 
-export function createApp({manager, lichessEngineFactory, mainEnginePath, maxConcurrentGames = 4, notifier = nullNotifier, getToken = () => process.env.lichess_api_token, analyzer = null} = {}) {
+export function createApp({
+    manager,
+    lichessEngineFactory,
+    mainEnginePath,
+    maxConcurrentGames = 4,
+    getToken = () => process.env.lichess_api_token,
+    BotClass = LichessBot,
+    notifier = nullNotifier,
+    analyzer = null
+} = {}) {
     const app = express();
 
     app.use(cors({
-        origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
+        origin: "*",
     }));
     app.use(express.json());
 
@@ -30,6 +40,25 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
             });
         } catch (err) {
             res.status(503).json({status: "degraded", error: err.message});
+        }
+    });
+
+    app.get("/api/openings", (req, res) => {
+        res.json(OPENINGS);
+    });
+
+    app.post("/api/engine/setoption", async (req, res) => {
+        try {
+            const {name, value} = req.body ?? {};
+            if (!name) return res.status(400).json({error: "Option name required"});
+            
+            const mainEngine = manager.getEngine("Main");
+            await mainEngine.setOption(name, value);
+            
+            res.json({status: "success"});
+        } catch (err) {
+            console.error("SetOption Error:", err);
+            res.status(500).json({error: err.message});
         }
     });
 
@@ -104,7 +133,7 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
             return res.status(400).json({error: "Missing Lichess Token"});
         }
 
-        const instance = new LichessBot(token, lichessEngineFactory, {maxConcurrentGames, notifier});
+        const instance = new BotClass(token, lichessEngineFactory, {maxConcurrentGames, notifier});
         try {
             await instance.start();
             lichessBotInstance = instance;
@@ -184,15 +213,19 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
 
     app.post("/api/lichess/autoplay/start", (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-        const {limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200} = req.body ?? {};
-        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window});
-        res.json({status: "success", autoplay: lichessBotInstance.autoplayStatus()});
+        const {limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200, openingId = "balanced"} = req.body ?? {};
+        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window, openingId});
+        res.json({
+            status: "success", 
+            message: `Autoplay started (${limit}+${increment} ${rated ? 'rated' : 'casual'}, target=${target}, opening=${openingId})`,
+            autoplay: lichessBotInstance.autoplayStatus()
+        });
     });
 
     app.post("/api/lichess/autoplay/stop", (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
         lichessBotInstance.stopAutoplay();
-        res.json({status: "success"});
+        res.json({status: "success", message: "Autoplay stopped"});
     });
 
     app.get("/api/lichess/autoplay/status", (req, res) => {
@@ -233,6 +266,16 @@ export function createApp({manager, lichessEngineFactory, mainEnginePath, maxCon
             console.error("[Analysis] getStats failed:", err);
             res.status(500).json({error: err.message});
         }
+    });
+
+    const distPath = path.resolve(import.meta.dir, "../../frontend/dist");
+    app.use(express.static(distPath));
+    app.get(/.*/, (req, res) => {
+        // Only serve index.html for non-API routes (API routes should 404 naturally if not matched above)
+        if (req.path.startsWith('/api/')) {
+            return res.status(404).json({error: "Not found"});
+        }
+        res.sendFile(path.join(distPath, "index.html"));
     });
 
     return {app, getBotInstance: () => lichessBotInstance, getAnalyzer: () => analyzer};
@@ -292,7 +335,13 @@ if (import.meta.main) {
     const LICHESS_MAX_GAMES = parseInt(process.env.LICHESS_MAX_GAMES ?? "4", 10);
     const ENGINE_HARD_CAP = parseInt(process.env.ENGINE_HARD_CAP ?? String(LICHESS_MAX_GAMES + 3), 10);
 
-    const manager = new EngineManager({maxEngines: ENGINE_HARD_CAP, notifier});
+    const manager = new EngineManager({
+        maxEngines: ENGINE_HARD_CAP, 
+        notifier,
+        engineOptions: {
+            bookPath: path.resolve(__dirname, "../../engines/myengine/book.bin")
+        }
+    });
     await manager.registerEngine("Main", MY_ENGINE_PATH);
 
     // Lichess engine factory: route every spawn through the manager's cap.
