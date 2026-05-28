@@ -353,7 +353,11 @@ if (import.meta.main) {
         if (!manager.hasCapacity()) {
             throw new EngineCapReached(manager.maxEngines, manager.count());
         }
-        return new UciEngine(MY_ENGINE_PATH, {notifier, label});
+        return new UciEngine(MY_ENGINE_PATH, {
+            notifier, 
+            label,
+            bookPath: path.resolve(__dirname, "../../engines/myengine/book.bin")
+        });
     };
 
     const STOCKFISH_PATH = path.resolve(import.meta.dir, "../../engines/stockfish/stockfish/stockfish-windows-x86-64-avx2.exe");
