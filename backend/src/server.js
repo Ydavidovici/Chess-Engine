@@ -270,7 +270,7 @@ export function createApp({
 
     const distPath = path.resolve(import.meta.dir, "../../frontend/dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get(/.*/, (req, res) => {
         // Only serve index.html for non-API routes (API routes should 404 naturally if not matched above)
         if (req.path.startsWith('/api/')) {
             return res.status(404).json({error: "Not found"});
