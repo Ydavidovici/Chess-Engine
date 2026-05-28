@@ -61,26 +61,22 @@ export class LichessBot {
 
         // Cool-down for bots that ignored our challenges. We keep a map of
         // username -> expiresAt so the pool builder can skip them on the next
-        // hunt. Without this we re-challenge the same handful of unresponsive
-        // bots on every tick. 15min is short enough that a bot that JUST came
-        // online won't be punished for a stale ignore, but long enough that
-        // we don't spam an obvious non-responder.
-        this.declineCooldownMs = options.declineCooldownMs ?? 15 * 60 * 1000;
-        this.apiSpacingMs = options.apiSpacingMs ?? (process.env.NODE_ENV === "test" ? 0 : 1000);
+        // hunt. Increased to 60 minutes to aggressively prevent spamming unresponsive bots.
+        this.declineCooldownMs = options.declineCooldownMs ?? 60 * 60 * 1000;
+        this.apiSpacingMs = options.apiSpacingMs ?? (process.env.NODE_ENV === "test" ? 0 : 1500);
         this._now = options.now || (() => Date.now());
         this.recentlyDeclined = new Map();
 
         // Minimum gap between consecutive challenge POSTs within one hunt.
-        // 250ms caused bursts of 4 req/s when bots declined instantly; 2s keeps
-        // us well inside Lichess's per-minute challenge rate limit.
-        this.challengeSpacingMs = options.challengeSpacingMs ?? 2000;
+        // Increased to 10 seconds to strictly respect Lichess's burst limits.
+        this.challengeSpacingMs = options.challengeSpacingMs ?? 10000;
         // How long to wait, after all candidates are posted, for any of them
         // to accept before giving up on the whole pool.
-        this.huntAcceptTimeoutMs = options.huntAcceptTimeoutMs ?? 12000;
+        this.huntAcceptTimeoutMs = options.huntAcceptTimeoutMs ?? 15000;
         this.lastChallengeTime = 0;
         // Fallback retry-after when Lichess sends a 429 without a Retry-After
         // header. Kept conservative so we don't immediately re-trigger.
-        this.defaultRetryAfterSec = options.defaultRetryAfterSec ?? 60;
+        this.defaultRetryAfterSec = options.defaultRetryAfterSec ?? 120;
 
         // Cross-call rate-limit memory. When Lichess returns 429, any code
         // path that issues a challenge (autoplay AND manual /api/lichess/...
@@ -201,8 +197,8 @@ export class LichessBot {
                     next = Math.max(err.retryAfterSec * 1000 + 500, this.autoplay.currentBackoffMs || 0);
                     this.notifier.warn("[Hunt] Lichess rate limit", {retryAfterSec: err.retryAfterSec});
                 } else {
-                    // Exponential backoff: 30s, 60s, 120s, ... capped at 5 min.
-                    next = this.autoplay.currentBackoffMs === 0 ? 30_000 : Math.min(this.autoplay.currentBackoffMs * 2, 300_000);
+                    // Exponential backoff: 2m, 4m, 8m, ... capped at 10 min.
+                    next = this.autoplay.currentBackoffMs === 0 ? 120_000 : Math.min(this.autoplay.currentBackoffMs * 2, 600_000);
                 }
                 this.autoplay.currentBackoffMs = next;
                 console.log(`[Autoplay] Hunt failed (${err.message}); retrying in ${next / 1000}s`);
