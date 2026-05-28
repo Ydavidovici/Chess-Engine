@@ -993,7 +993,7 @@ export class LichessBot {
     // Challenge bots within ±window of our own rating for the given TC. Tries
     // up to `maxAttempts` candidates, ordered by closeness in rating; returns
     // the first one that accepts within ~5s.
-    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 4, poolSize = 80, maxWindow = 2000} = {}) {
+    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 1, poolSize = 80, maxWindow = 2000} = {}) {
         if (this._isRateLimited()) {
             throw new LichessRateLimited(this._rateLimitRemainingSec());
         }
@@ -1088,7 +1088,7 @@ export class LichessBot {
         const candidates = eligible
             .filter(b => !this._inDeclineCooldown(b.username))
             .sort((a, b) => a.perfs.blitz.rating - b.perfs.blitz.rating)
-            .slice(0, 4);
+            .slice(0, 1);
 
         if (filteredOut > 0) {
             console.log(`[Hunt] Skipped ${filteredOut} bot(s) in decline cool-down`);
