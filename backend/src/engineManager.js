@@ -33,6 +33,7 @@ export class UciEngine extends EventEmitter {
         this.isShuttingDown = false;
         this.notifier = options.notifier ?? nullNotifier;
         this.label = options.label ?? "engine";
+        this.bookPath = options.bookPath ?? null;
     }
 
     async ensureReady() {
@@ -60,6 +61,11 @@ export class UciEngine extends EventEmitter {
             });
 
             await this._sendCommand("uci", (line) => line === "uciok", null, this.handshakeTimeoutMs);
+            
+            if (this.bookPath) {
+                await this._sendRaw(`setoption name BookFile value ${this.bookPath}`);
+            }
+
             await this._sendCommand("isready", (line) => line === "readyok", null, this.handshakeTimeoutMs);
 
             this.ready = true;

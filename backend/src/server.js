@@ -335,7 +335,13 @@ if (import.meta.main) {
     const LICHESS_MAX_GAMES = parseInt(process.env.LICHESS_MAX_GAMES ?? "4", 10);
     const ENGINE_HARD_CAP = parseInt(process.env.ENGINE_HARD_CAP ?? String(LICHESS_MAX_GAMES + 3), 10);
 
-    const manager = new EngineManager({maxEngines: ENGINE_HARD_CAP, notifier});
+    const manager = new EngineManager({
+        maxEngines: ENGINE_HARD_CAP, 
+        notifier,
+        engineOptions: {
+            bookPath: path.resolve(__dirname, "../../engines/myengine/book.bin")
+        }
+    });
     await manager.registerEngine("Main", MY_ENGINE_PATH);
 
     // Lichess engine factory: route every spawn through the manager's cap.
