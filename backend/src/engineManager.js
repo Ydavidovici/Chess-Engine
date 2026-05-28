@@ -198,6 +198,12 @@ export class UciEngine extends EventEmitter {
         await this._sendCommand("isready", (l) => l === "readyok");
     }
 
+    async setOption(name, value) {
+        await this.ensureReady();
+        const valueStr = value !== undefined && value !== null && value !== "" ? ` value ${value}` : "";
+        await this._sendRaw(`setoption name ${name}${valueStr}`);
+    }
+
     async position(fen, moves = []) {
         await this.ensureReady();
         let cmd = fen === "startpos" ? "position startpos" : `position fen ${fen}`;

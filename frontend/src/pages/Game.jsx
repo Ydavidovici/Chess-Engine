@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
-import { go, resetGame } from "../services/api.js";
+import { go, resetGame, getOpenings, setEngineOption } from "../services/api.js";
 import BenchmarkControl from "./BenchmarkControl";
-import { Play, Activity, RotateCcw, Cpu, Trophy, AlertTriangle } from "lucide-react";
+import { Play, Activity, RotateCcw, Cpu, Trophy, AlertTriangle, BookOpen } from "lucide-react";
 
 export default function Game() {
     const [activeTab, setActiveTab] = useState("play");
@@ -14,6 +14,16 @@ export default function Game() {
     const [engineThinking, setEngineThinking] = useState(false);
     const [lastMove, setLastMove] = useState(null);
     const [engineDepth, setEngineDepth] = useState(10);
+
+    const [openings, setOpenings] = useState({});
+    const [useGlobalBook, setUseGlobalBook] = useState(true);
+    const [selectedOpening, setSelectedOpening] = useState("");
+
+    useEffect(() => {
+        getOpenings().then(setOpenings).catch(console.error);
+        setEngineOption("OwnBook", "true").catch(console.error);
+        setEngineOption("BookFile", "../engines/myengine/book.bin").catch(console.error);
+    }, []);
 
     const checkGameOver = (gameInstance) => {
         if (gameInstance.isCheckmate()) {
@@ -115,7 +125,35 @@ export default function Game() {
         setLastMove(null);
         setGameStatus(null);
         setEngineThinking(false);
+        setSelectedOpening("");
         await resetGame();
+    };
+
+    const handleToggleGlobalBook = async (e) => {
+        const val = e.target.checked;
+        setUseGlobalBook(val);
+        await setEngineOption("OwnBook", val ? "true" : "false");
+    };
+
+    const handleSelectOpening = async (e) => {
+        const key = e.target.value;
+        setSelectedOpening(key);
+        if (!key || !openings[key]) return;
+
+        const op = openings[key];
+        const newGame = new Chess();
+        op.moves.forEach(m => {
+            newGame.move({from: m.substring(0, 2), to: m.substring(2, 4)});
+        });
+        setGame(newGame);
+        setLastMove(null);
+        setGameStatus(null);
+        setEngineThinking(false);
+        await resetGame();
+
+        if (newGame.turn() === 'b') {
+            makeEngineMove(newGame.fen());
+        }
     };
 
     return (
@@ -213,6 +251,41 @@ export default function Game() {
                                             <span className="text-white font-bold">{engineDepth} Ply</span>
                                             <span>Strong (20)</span>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Openings Control */}
+                                <div className="mt-6 pt-6 border-t border-gray-700 space-y-4">
+                                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                                        <BookOpen size={14} /> Openings
+                                    </h3>
+                                    
+                                    <label className="flex items-center gap-3 cursor-pointer">
+                                        <div className="relative">
+                                            <input 
+                                                type="checkbox" 
+                                                className="sr-only" 
+                                                checked={useGlobalBook}
+                                                onChange={handleToggleGlobalBook}
+                                            />
+                                            <div className={`block w-10 h-6 rounded-full transition-colors ${useGlobalBook ? "bg-blue-500" : "bg-gray-600"}`}></div>
+                                            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${useGlobalBook ? "transform translate-x-4" : ""}`}></div>
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-300">Use Global Book</span>
+                                    </label>
+
+                                    <div>
+                                        <label className="text-xs text-gray-500 mb-1 block">Force Specific Opening</label>
+                                        <select 
+                                            value={selectedOpening}
+                                            onChange={handleSelectOpening}
+                                            className="w-full bg-gray-700 text-white text-sm rounded-lg border border-gray-600 p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        >
+                                            <option value="">-- None (Play from start) --</option>
+                                            {Object.entries(openings).map(([k, op]) => (
+                                                <option key={k} value={k}>{op.name}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 

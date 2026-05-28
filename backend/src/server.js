@@ -6,6 +6,7 @@ import {LichessBot} from "./lichessBot.js";
 import {Notifier, nullNotifier, wrapConsoleForNotifier} from "./notifier.js";
 import {ApiTransport} from "./apiTransport.js";
 import {GameAnalyzer} from "./gameAnalyzer.js";
+import {OPENINGS} from "./openings.js";
 
 export function createApp({
     manager,
@@ -39,6 +40,25 @@ export function createApp({
             });
         } catch (err) {
             res.status(503).json({status: "degraded", error: err.message});
+        }
+    });
+
+    app.get("/api/openings", (req, res) => {
+        res.json(OPENINGS);
+    });
+
+    app.post("/api/engine/setoption", async (req, res) => {
+        try {
+            const {name, value} = req.body ?? {};
+            if (!name) return res.status(400).json({error: "Option name required"});
+            
+            const mainEngine = manager.getEngine("Main");
+            await mainEngine.setOption(name, value);
+            
+            res.json({status: "success"});
+        } catch (err) {
+            console.error("SetOption Error:", err);
+            res.status(500).json({error: err.message});
         }
     });
 
