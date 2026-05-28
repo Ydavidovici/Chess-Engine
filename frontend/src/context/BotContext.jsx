@@ -8,10 +8,10 @@ export const BotProvider = ({ children }) => {
     const [botTarget, setBotTarget] = useState("prod");
     
     // Store the endpoint URLs pointing to the remote server
-    const [urls, setUrls] = useState({
-        prod: "http://45.55.161.47:8000",
-        dev: "http://45.55.161.47:8001"
-    });
+    const urls = {
+        'prod': 'https://jewkiebot.dev',
+        'dev': 'http://45.55.161.47:8001',
+    };
 
     const activeUrl = urls[botTarget];
 
@@ -78,7 +78,6 @@ export const BotProvider = ({ children }) => {
         botTarget,
         setBotTarget,
         urls,
-        setUrls,
         activeUrl,
         statuses,
         activeStatus: statuses[botTarget],
