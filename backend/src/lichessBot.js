@@ -62,14 +62,14 @@ export class LichessBot {
         // Cool-down for bots that ignored our challenges. We keep a map of
         // username -> expiresAt so the pool builder can skip them on the next
         // hunt. Increased to 60 minutes to aggressively prevent spamming unresponsive bots.
-        this.declineCooldownMs = options.declineCooldownMs ?? 60 * 60 * 1000;
-        this.apiSpacingMs = options.apiSpacingMs ?? (process.env.NODE_ENV === "test" ? 0 : 1500);
+        this.declineCooldownMs = options.declineCooldownMs ?? 15 * 60 * 1000;
+        this.apiSpacingMs = options.apiSpacingMs ?? (process.env.NODE_ENV === "test" ? 0 : 1000);
         this._now = options.now || (() => Date.now());
         this.recentlyDeclined = new Map();
 
         // Minimum gap between consecutive challenge POSTs within one hunt.
         // Increased to 10 seconds to strictly respect Lichess's burst limits.
-        this.challengeSpacingMs = options.challengeSpacingMs ?? 10000;
+        this.challengeSpacingMs = options.challengeSpacingMs ?? 2000;
         // How long to wait, after all candidates are posted, for any of them
         // to accept before giving up on the whole pool.
         this.huntAcceptTimeoutMs = options.huntAcceptTimeoutMs ?? 15000;
@@ -196,6 +196,7 @@ export class LichessBot {
                     // already backing off for other reasons).
                     next = Math.max(err.retryAfterSec * 1000 + 500, this.autoplay.currentBackoffMs || 0);
                     this.notifier.warn("[Hunt] Lichess rate limit", {retryAfterSec: err.retryAfterSec});
+                } else {
                     // Exponential backoff: 30s, 60s, 120s.
                     next = this.autoplay.currentBackoffMs === 0 ? 30_000 : Math.min(this.autoplay.currentBackoffMs * 2, 120_000);
                 }
@@ -992,7 +993,7 @@ export class LichessBot {
     // Challenge bots within ±window of our own rating for the given TC. Tries
     // up to `maxAttempts` candidates, ordered by closeness in rating; returns
     // the first one that accepts within ~5s.
-    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 1, poolSize = 80, maxWindow = 2000} = {}) {
+    async huntNearRating(limit, increment, rated = true, {window = 200, maxAttempts = 4, poolSize = 80, maxWindow = 2000} = {}) {
         if (this._isRateLimited()) {
             throw new LichessRateLimited(this._rateLimitRemainingSec());
         }
@@ -1087,7 +1088,7 @@ export class LichessBot {
         const candidates = eligible
             .filter(b => !this._inDeclineCooldown(b.username))
             .sort((a, b) => a.perfs.blitz.rating - b.perfs.blitz.rating)
-            .slice(0, 1);
+            .slice(0, 4);
 
         if (filteredOut > 0) {
             console.log(`[Hunt] Skipped ${filteredOut} bot(s) in decline cool-down`);
