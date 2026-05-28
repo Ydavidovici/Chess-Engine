@@ -4,12 +4,19 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const defaultUrl = "https://github.com/gmcheems-org/free-opening-books/raw/master/Titans.bin";
-// Point it directly to where the engine looks for the book
 const targetPath = path.resolve(__dirname, "../../../engines/myengine/book.bin");
 
 async function downloadBook() {
-    const url = process.argv[2] || defaultUrl;
+    const url = process.argv[2];
+    
+    if (!url) {
+        console.error("❌ Error: No download URL provided.");
+        console.error("\nThe default Titans URL is currently down or has moved.");
+        console.error("Please provide a direct link to any Polyglot (.bin) chess opening book.");
+        console.error("\nUsage: bun run download:book <URL>");
+        console.error("Example: bun run download:book https://your-server.com/Titans.bin\n");
+        process.exit(1);
+    }
     
     console.log(`Downloading opening book from: ${url}`);
     console.log(`Target destination: ${targetPath}`);
