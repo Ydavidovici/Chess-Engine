@@ -213,11 +213,11 @@ export function createApp({
 
     app.post("/api/lichess/autoplay/start", (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-        const {limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200} = req.body ?? {};
-        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window});
+        const {limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200, openingId = "balanced"} = req.body ?? {};
+        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window, openingId});
         res.json({
             status: "success", 
-            message: `Autoplay started (${limit}+${increment} ${rated ? 'rated' : 'casual'}, target=${target})`,
+            message: `Autoplay started (${limit}+${increment} ${rated ? 'rated' : 'casual'}, target=${target}, opening=${openingId})`,
             autoplay: lichessBotInstance.autoplayStatus()
         });
     });

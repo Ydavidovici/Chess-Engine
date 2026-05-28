@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useBot } from "../context/BotContext.jsx";
 import {
     startLichessBot, stopLichessBot, createChallenge,
     createOpenChallenge, createAiChallenge, challengeWeakestBot,
-    startAutoplay, stopAutoplay
+    startAutoplay, stopAutoplay, getOpenings
 } from "../services/api.js";
 import { Play, Square, Swords, Bot, Globe, Target, Flame } from "lucide-react";
 
@@ -20,6 +20,14 @@ export default function LichessPage() {
     const [opponent, setOpponent] = useState("maia1");
     const [stockfishLevel, setStockfishLevel] = useState(1);
     
+    const [openings, setOpenings] = useState({});
+
+    useEffect(() => {
+        getOpenings(activeUrl)
+            .then(res => setOpenings(res))
+            .catch(console.error);
+    }, [activeUrl]);
+
     // Comprehensive Autoplay Configuration State
     const [autoplayConfig, setAutoplayConfig] = useState({
         target: 1,           // Concurrent games to maintain
@@ -27,8 +35,24 @@ export default function LichessPage() {
         increment: 2,        // Increment in seconds
         rated: true,         // Rated or Casual
         mode: "near",        // Matchmaking mode
-        window: 200          // Rating window
+        window: 200,         // Rating window
+        openingId: "balanced"
     });
+
+    useEffect(() => {
+        if (activeStatus?.lichess?.autoplay?.enabled) {
+            setAutoplayConfig(prev => ({
+                ...prev,
+                target: activeStatus.lichess.autoplay.target,
+                limit: activeStatus.lichess.autoplay.limit,
+                increment: activeStatus.lichess.autoplay.increment,
+                rated: activeStatus.lichess.autoplay.rated,
+                mode: activeStatus.lichess.autoplay.mode,
+                window: activeStatus.lichess.autoplay.window,
+                openingId: activeStatus.lichess.autoplay.openingId || "balanced"
+            }));
+        }
+    }, [activeStatus?.lichess?.autoplay]);
 
     const executeAction = async (msg, actionFn) => {
         setError(null);
@@ -163,6 +187,15 @@ export default function LichessPage() {
                                 <input type="checkbox" checked={autoplayConfig.rated} onChange={(e) => setAutoplayConfig({...autoplayConfig, rated: e.target.checked})} className="w-5 h-5 accent-yellow-500 rounded" disabled={activeStatus?.lichess?.autoplay?.enabled} />
                                 <span className="text-sm font-bold text-white">Play Rated Games</span>
                             </label>
+                        </div>
+                        <div className="space-y-2 md:col-span-2 lg:col-span-3">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Opening Style</label>
+                            <select value={autoplayConfig.openingId} onChange={(e) => setAutoplayConfig({...autoplayConfig, openingId: e.target.value})} className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500" disabled={activeStatus?.lichess?.autoplay?.enabled}>
+                                <option value="balanced">Balanced (Global Book)</option>
+                                {Object.entries(openings).map(([id, config]) => (
+                                    <option key={id} value={id}>{config.name}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 

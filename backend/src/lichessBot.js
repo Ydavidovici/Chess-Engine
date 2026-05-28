@@ -2,6 +2,7 @@ import {eq} from "drizzle-orm";
 import {db} from "../db/db.js";
 import {players, games, gameMoves} from "../db/schema.js";
 import {nullNotifier} from "./notifier.js";
+import {OPENINGS} from "./openings.js";
 
 export class LichessRateLimited extends Error {
     constructor(retryAfterSec) {
@@ -112,7 +113,7 @@ export class LichessBot {
         this.autoplay = null; // {limit, increment, rated, target, backoffMs, timer, huntInFlight}
     }
 
-    startAutoplay({limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200} = {}) {
+    startAutoplay({limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200, openingId = "balanced"} = {}) {
         this.stopAutoplay();
 
         // target = how many active games we'd like to keep going at once.
@@ -126,13 +127,14 @@ export class LichessBot {
             target: cappedTarget,
             mode,       // "near" (default) or "weakest"
             window,     // only used when mode === "near"
+            openingId,
             currentBackoffMs: 0,
             timer: null,
             huntInFlight: false,
         };
 
-        this.notifier.info("[Autoplay] Autoplay enabled", {limit, increment, rated, target: cappedTarget, mode, window});
-        console.log(`[Autoplay] Enabled (${limit}+${increment} ${rated ? "rated" : "casual"}, target=${cappedTarget}, mode=${mode}${mode === "near" ? `, window=±${window}` : ""})`);
+        this.notifier.info("[Autoplay] Autoplay enabled", {limit, increment, rated, target: cappedTarget, mode, window, openingId});
+        console.log(`[Autoplay] Enabled (${limit}+${increment} ${rated ? "rated" : "casual"}, target=${cappedTarget}, mode=${mode}${mode === "near" ? `, window=±${window}` : ""}, opening=${openingId})`);
         this._tickAutoplay();
     }
 
@@ -146,8 +148,8 @@ export class LichessBot {
 
     autoplayStatus() {
         if (!this.autoplay) return {enabled: false};
-        const {limit, increment, rated, target, mode, window, currentBackoffMs, huntInFlight} = this.autoplay;
-        return {enabled: true, limit, increment, rated, target, mode, window, currentBackoffMs, huntInFlight, active: this.activeGames.size};
+        const {limit, increment, rated, target, mode, window, openingId, currentBackoffMs, huntInFlight} = this.autoplay;
+        return {enabled: true, limit, increment, rated, target, mode, window, openingId, currentBackoffMs, huntInFlight, active: this.activeGames.size};
     }
 
     // Kick the autoplay loop. Idempotent. Called after every game ends and on a
@@ -456,6 +458,11 @@ export class LichessBot {
         try {
             try {
                 await engine.start();
+                if (this.autoplay?.openingId === "balanced") {
+                    await engine.setOption("OwnBook", "true");
+                } else {
+                    await engine.setOption("OwnBook", "false");
+                }
             } catch (startErr) {
                 console.error(`[${gameId}] !! ENGINE START FAILED !! Resigning game.`, startErr);
                 try { await this.resignGame(gameId); } catch (_) {}
@@ -566,6 +573,23 @@ export class LichessBot {
         console.log(`[${gameId}] My turn (${myColor}).`);
 
         const movesArray = movesStr.trim() === "" ? [] : movesStr.trim().split(" ");
+
+        // Specific Opening Logic for Autoplay
+        if (this.autoplay?.openingId && this.autoplay.openingId !== "balanced" && OPENINGS[this.autoplay.openingId]) {
+            const expectedMoves = OPENINGS[this.autoplay.openingId].moves;
+            let matches = true;
+            for (let i = 0; i < movesArray.length; i++) {
+                if (movesArray[i] !== expectedMoves[i]) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches && movesArray.length < expectedMoves.length) {
+                const nextMove = expectedMoves[movesArray.length];
+                console.log(`[${gameId}] Forcing specific opening move: ${nextMove}`);
+                return await this.sendMove(gameId, nextMove);
+            }
+        }
 
         try {
             await engine.position(initialFen, movesArray);
