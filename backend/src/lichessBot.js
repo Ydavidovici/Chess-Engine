@@ -72,7 +72,7 @@ export class LichessBot {
         this.challengeSpacingMs = options.challengeSpacingMs ?? 2000;
         // How long to wait, after all candidates are posted, for any of them
         // to accept before giving up on the whole pool.
-        this.huntAcceptTimeoutMs = options.huntAcceptTimeoutMs ?? 15000;
+        this.huntAcceptTimeoutMs = options.huntAcceptTimeoutMs ?? 5000;
         this.lastChallengeTime = 0;
         // Fallback retry-after when Lichess sends a 429 without a Retry-After
         // header. Kept conservative so we don't immediately re-trigger.
