@@ -11,7 +11,8 @@
         "tourney": "bun run src/scripts/runTourney.js",
         "setup": "bun run src/scripts/setup_cutie.js",
         "db:generate": "drizzle-kit generate",
-        "db:migrate": "bun run src/scripts/migrate.js"
+        "db:migrate": "bun run src/scripts/migrate.js",
+        "download:book": "bun run src/scripts/downloadBook.js"
     },
     "devDependencies": {
         "@types/bun": "latest",
