@@ -3,17 +3,16 @@ import { health, getLichessStatus } from "../services/api.js";
 
 const BotContext = createContext(null);
 
+const URLS = {
+    'prod': 'https://jewkiebot.dev',
+    'dev': 'https://jewkiebot.dev/dev',
+};
+
 export const BotProvider = ({ children }) => {
     // Determine the active target: 'prod' or 'dev'
     const [botTarget, setBotTarget] = useState("prod");
     
-    // Store the endpoint URLs pointing to the remote server
-    const urls = {
-        'prod': 'https://jewkiebot.dev',
-        'dev': 'https://jewkiebot.dev/dev',
-    };
-
-    const activeUrl = urls[botTarget];
+    const activeUrl = URLS[botTarget];
 
     // Store status objects for both environments
     const [statuses, setStatuses] = useState({
@@ -64,20 +63,20 @@ export const BotProvider = ({ children }) => {
     // Background polling effect - pings both targets every 3 seconds
     useEffect(() => {
         const poll = () => {
-            fetchStatusForTarget("prod", urls.prod);
-            fetchStatusForTarget("dev", urls.dev);
+            fetchStatusForTarget("prod", URLS.prod);
+            fetchStatusForTarget("dev", URLS.dev);
         };
 
         poll(); // Trigger initial fetch
         const intervalId = setInterval(poll, 3000);
 
         return () => clearInterval(intervalId); // Cleanup on unmount
-    }, [urls, fetchStatusForTarget]);
+    }, [fetchStatusForTarget]);
 
     const value = {
         botTarget,
         setBotTarget,
-        urls,
+        urls: URLS,
         activeUrl,
         statuses,
         activeStatus: statuses[botTarget],
