@@ -51,10 +51,10 @@ export function createApp({
         try {
             const {name, value} = req.body ?? {};
             if (!name) return res.status(400).json({error: "Option name required"});
-            
+
             const mainEngine = manager.getEngine("Main");
             await mainEngine.setOption(name, value);
-            
+
             res.json({status: "success"});
         } catch (err) {
             console.error("SetOption Error:", err);
@@ -142,7 +142,10 @@ export function createApp({
         } catch (err) {
             console.error("Failed to start Lichess Bot:", err);
             notifier.error("[Server] Lichess bot failed to start", {message: err?.message});
-            try { instance.stop(); } catch (_) {}
+            try {
+                instance.stop();
+            } catch (_) {
+            }
             res.status(500).json({error: err.message});
         }
     });
@@ -166,7 +169,8 @@ export function createApp({
     app.get("/api/lichess/status", (req, res) => {
         const rateLimitedFor = lichessBotInstance ? lichessBotInstance._rateLimitRemainingSec() : 0;
         if (lichessBotInstance && !lichessBotInstance.botProfile) {
-            lichessBotInstance._ensureProfile().catch(() => {});
+            lichessBotInstance._ensureProfile().catch(() => {
+            });
         }
         res.json({
             running: !!lichessBotInstance,
@@ -213,10 +217,20 @@ export function createApp({
 
     app.post("/api/lichess/autoplay/start", (req, res) => {
         if (!lichessBotInstance) return res.status(400).json({error: "Bot not running"});
-        const {limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200, openingId = "balanced"} = req.body ?? {};
-        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window, openingId});
+        const {
+            limit = 180,
+            increment = 2,
+            rated = true,
+            target = 1,
+            mode = "near",
+            window = 200,
+            openingId = "balanced",
+            whiteOpeningId = null,
+            blackOpeningId = null
+        } = req.body ?? {};
+        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window, openingId, whiteOpeningId, blackOpeningId});
         res.json({
-            status: "success", 
+            status: "success",
             message: `Autoplay started (${limit}+${increment} ${rated ? 'rated' : 'casual'}, target=${target}, opening=${openingId})`,
             autoplay: lichessBotInstance.autoplayStatus()
         });
@@ -288,7 +302,6 @@ if (import.meta.main) {
 
     let MY_ENGINE_PATH = null;
 
-    // Explicit override for deployments (e.g. systemd units). Wins over auto-detection.
     if (process.env.ENGINE_PATH) {
         if (await Bun.file(process.env.ENGINE_PATH).exists()) {
             console.log("✅ Using ENGINE_PATH from environment");
@@ -314,11 +327,6 @@ if (import.meta.main) {
     }
     console.log(`♟️  Engine Path: ${MY_ENGINE_PATH}`);
 
-    // --- Notifier ---
-    // Note: no ConsoleTransport here on purpose. wrapConsoleForNotifier below
-    // forwards every console.* call through the notifier (so Discord/etc. see
-    // them) AND still prints to the terminal — adding ConsoleTransport would
-    // double-print every notify call.
     const transports = [];
     const apiTransport = new ApiTransport();
     if (apiTransport.enabled) {
@@ -330,13 +338,11 @@ if (import.meta.main) {
     const notifier = new Notifier({transports});
     const restoreConsole = wrapConsoleForNotifier(notifier);
 
-    // --- Manager (with hard cap independent of LICHESS_MAX_GAMES) ---
-    // Default: one slot for "Main" analysis engine + Lichess game slots. Buffer of 2 for safety.
     const LICHESS_MAX_GAMES = parseInt(process.env.LICHESS_MAX_GAMES ?? "4", 10);
     const ENGINE_HARD_CAP = parseInt(process.env.ENGINE_HARD_CAP ?? String(LICHESS_MAX_GAMES + 3), 10);
 
     const manager = new EngineManager({
-        maxEngines: ENGINE_HARD_CAP, 
+        maxEngines: ENGINE_HARD_CAP,
         notifier,
         engineOptions: {
             bookPath: path.resolve(__dirname, "../../engines/myengine/book.bin")
@@ -344,9 +350,6 @@ if (import.meta.main) {
     });
     await manager.registerEngine("Main", MY_ENGINE_PATH);
 
-    // Lichess engine factory: route every spawn through the manager's cap.
-    // Game engines aren't long-lived registered engines (they're per-game), so we
-    // build them through reserveEngine and track them ourselves via gameEngines.
     const lichessEngineFactory = () => {
         // The reservation check is what enforces the cap. Existing engines are untouched.
         const label = `game-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -354,7 +357,7 @@ if (import.meta.main) {
             throw new EngineCapReached(manager.maxEngines, manager.count());
         }
         return new UciEngine(MY_ENGINE_PATH, {
-            notifier, 
+            notifier,
             label,
             bookPath: path.resolve(__dirname, "../../engines/myengine/book.bin")
         });
@@ -367,15 +370,26 @@ if (import.meta.main) {
         : null;
     if (!stockfishExists) console.warn("[Server] Stockfish not found — analysis endpoints disabled.");
 
-    const {app} = createApp({manager, lichessEngineFactory, mainEnginePath: MY_ENGINE_PATH, maxConcurrentGames: LICHESS_MAX_GAMES, notifier, analyzer});
-
-    const PORT = process.env.PORT || 8000;
-    const server = app.listen(PORT, () => {
-        console.log(`Backend listening on http://localhost:${PORT}`);
-        notifier.info("[Server] Backend started", {port: PORT, engineCap: ENGINE_HARD_CAP, lichessMax: LICHESS_MAX_GAMES});
+    const {app} = createApp({
+        manager,
+        lichessEngineFactory,
+        mainEnginePath: MY_ENGINE_PATH,
+        maxConcurrentGames: LICHESS_MAX_GAMES,
+        notifier,
+        analyzer
     });
 
-    // --- Discord bot (opt-in) ---
+    const PORT = process.env.PORT || 8000;
+
+    const server = app.listen(PORT, () => {
+        console.log(`Backend listening on http://localhost:${PORT}`);
+        notifier.info("[Server] Backend started", {
+            port: PORT,
+            engineCap: ENGINE_HARD_CAP,
+            lichessMax: LICHESS_MAX_GAMES
+        });
+    });
+
     let discordBot = null;
     if (process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_CHANNEL_ID) {
         try {
@@ -396,33 +410,47 @@ if (import.meta.main) {
         console.log("[Server] Discord disabled (set DISCORD_BOT_TOKEN + DISCORD_CHANNEL_ID to enable).");
     }
 
-    // --- Shutdown path used by signals and fatal errors ---
     let shuttingDown = false;
+
     const shutdown = async (reason, exitCode = 0) => {
         if (shuttingDown) return;
+
         shuttingDown = true;
+
         console.log(`\n[Server] Shutting down (${reason})...`);
         try { await notifier.flush(); } catch (_) {}
         try { server.close(); } catch (_) {}
         try { if (analyzer) await analyzer.stop(); } catch (_) {}
         try { await manager.shutdownAll(); } catch (e) { console.error("[Server] shutdownAll error:", e); }
         if (discordBot) {
-            try { await discordBot.stop(); } catch (e) { console.error("[Server] Discord stop error:", e); }
+            try {
+                await discordBot.stop();
+            } catch (e) {
+                console.error("[Server] Discord stop error:", e);
+            }
         }
-        try { restoreConsole(); } catch (_) {}
+        try {
+            restoreConsole();
+        } catch (_) {
+        }
         process.exit(exitCode);
     };
 
-    process.on("SIGINT",  () => shutdown("SIGINT",  0));
+    process.on("SIGINT", () => shutdown("SIGINT", 0));
     process.on("SIGTERM", () => shutdown("SIGTERM", 0));
 
-    // --- Global error handlers: log + notify + exit (supervisor restarts) ---
     const handleFatal = async (kind, err) => {
         console.error(`[Server] !! ${kind} !!`, err);
-        try { await notifier.fatal(`[Server] ${kind}: process exiting`, {message: err?.message, stack: err?.stack?.split("\n").slice(0, 5).join("\n")}); } catch (_) {}
+        try {
+            await notifier.fatal(`[Server] ${kind}: process exiting`, {
+                message: err?.message,
+                stack: err?.stack?.split("\n").slice(0, 5).join("\n")
+            });
+        } catch (_) {
+        }
         await shutdown(kind, 1);
     };
 
-    process.on("uncaughtException",  (err)    => handleFatal("uncaughtException",  err));
+    process.on("uncaughtException", (err) => handleFatal("uncaughtException", err));
     process.on("unhandledRejection", (reason) => handleFatal("unhandledRejection", reason instanceof Error ? reason : new Error(String(reason))));
 }

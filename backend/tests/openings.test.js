@@ -48,6 +48,7 @@ describe("Opening Book Features", () => {
         it("should force specific opening move if openingId matches OPENINGS dict", async () => {
             // Sicilian is defined as: e2e4 c7c5
             bot.startAutoplay({ openingId: "sicilian" });
+            bot.gameOpenings.set("game123", "sicilian");
             
             // Scenario: We are black. White just played e2e4.
             // Expected: Bot skips engine and instantly plays c7c5
@@ -59,6 +60,7 @@ describe("Opening Book Features", () => {
 
         it("should fallback to engine if moves diverge from forced opening", async () => {
             bot.startAutoplay({ openingId: "sicilian" }); // e2e4 c7c5
+            bot.gameOpenings.set("game123", "sicilian");
             
             // Scenario: White played d2d4 (diverged from e2e4)
             await bot.makeMove(fakeEngine, "game123", "startpos", "d2d4", "black", {}, 1000);
@@ -71,12 +73,27 @@ describe("Opening Book Features", () => {
 
         it("should fallback to engine if the specific opening is over", async () => {
             bot.startAutoplay({ openingId: "sicilian" }); // e2e4 c7c5
+            bot.gameOpenings.set("game123", "sicilian");
             
             // Scenario: Both e2e4 and c7c5 have been played. Next move is White's. Then Black's turn again.
             await bot.makeMove(fakeEngine, "game123", "startpos", "e2e4 c7c5 g1f3", "black", {}, 1000);
             
             expect(bot.sendMove).toHaveBeenCalledWith("game123", "a1a2");
             expect(fakeEngine.position).toHaveBeenCalledWith("startpos", ["e2e4", "c7c5", "g1f3"]);
+        });
+
+        it("should apply whiteOpeningId when playing as white and blackOpeningId when playing as black", async () => {
+            bot.startAutoplay({ whiteOpeningId: "c4", blackOpeningId: "sicilian" });
+            
+            // White game (movesStr is empty initially)
+            await bot.makeMove(fakeEngine, "gameW", "startpos", "", "white", {}, 1000);
+            expect(bot.gameOpenings.get("gameW")).toBe("c4");
+            expect(bot.sendMove).toHaveBeenCalledWith("gameW", "c2c4");
+            
+            // Black game (white played e2e4)
+            await bot.makeMove(fakeEngine, "gameB", "startpos", "e2e4", "black", {}, 1000);
+            expect(bot.gameOpenings.get("gameB")).toBe("sicilian");
+            expect(bot.sendMove).toHaveBeenCalledWith("gameB", "c7c5");
         });
     });
 });

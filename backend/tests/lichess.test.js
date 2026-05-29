@@ -69,6 +69,7 @@ class MockEngine extends EventEmitter {
         this.start = mock(async () => {});
         this.uciNewGame = mock(async () => {});
         this.position = mock(async () => {});
+        this.setOption = mock(async () => {});
         this.go = mock(async () => "e2e4");
         this.stop = mock(async () => {});
     }
@@ -2544,7 +2545,7 @@ describe("Lichess 429 rate-limit handling", () => {
         const b = makeBot();
         // The pool is shuffled, so we can't predict which bot trips it. Just
         // verify: after a 429, the loop stops (tried.length <= position of 429).
-        await expect(b.huntNearRating(180, 0, true)).rejects.toBeInstanceOf(LichessRateLimited);
+        await expect(b.huntNearRating(180, 0, true, { maxAttempts: 3 })).rejects.toBeInstanceOf(LichessRateLimited);
         expect(tried.length).toBeLessThanOrEqual(3);
         // No bot should be in cool-down (we either accepted them, or got 429).
         expect(b.recentlyDeclined.size).toBe(0);
@@ -2635,7 +2636,7 @@ describe("Lichess 429 rate-limit handling", () => {
             return { ok: false };
         });
         const b = makeBot({ apiSpacingMs: 0, challengeSpacingMs: 80 });
-        await expect(b.huntNearRating(180, 0, true)).rejects.toThrow("Hunt failed");
+        await expect(b.huntNearRating(180, 0, true, { maxAttempts: 2 })).rejects.toThrow("Hunt failed");
         expect(gaps.length).toBeGreaterThanOrEqual(1);
         // Allow some scheduler slop; we just want to confirm the delay fired.
         for (const g of gaps) expect(g).toBeGreaterThanOrEqual(70);

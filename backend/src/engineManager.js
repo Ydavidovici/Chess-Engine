@@ -40,6 +40,7 @@ export class UciEngine extends EventEmitter {
         if (!this.ready) await this.start();
     }
 
+    // start spawns an engine
     async start() {
         if (this.process) return;
         this.isShuttingDown = false;
@@ -63,6 +64,7 @@ export class UciEngine extends EventEmitter {
             await this._sendCommand("uci", (line) => line === "uciok", null, this.handshakeTimeoutMs);
             
             if (this.bookPath) {
+                await this._sendRaw(`setoption name OwnBook value true`);
                 await this._sendRaw(`setoption name BookFile value ${this.bookPath}`);
             }
 
@@ -79,6 +81,45 @@ export class UciEngine extends EventEmitter {
         }
     }
 
+    // go tells the engine to start calculating
+    async go(options = {}) {
+        await this.ensureReady();
+
+        const parts = ["go"];
+        if (options.depth) parts.push(`depth ${options.depth}`);
+
+        if (options.moveTime) {
+            parts.push(`movetime ${options.moveTime}`);
+        } else {
+            if (options.whiteTime) parts.push(`wtime ${options.whiteTime}`);
+            if (options.blackTime) parts.push(`btime ${options.blackTime}`);
+            if (options.whiteInc  != null) parts.push(`winc ${options.whiteInc}`);
+            if (options.blackInc  != null) parts.push(`binc ${options.blackInc}`);
+        }
+
+        let safeTimeout = options.moveTime ? options.moveTime + this.commandTimeoutBufferMs : (options.whiteTime ? 60000 * 5 : 60000);
+        let currentBestMove = "(none)";
+
+        try {
+            const response = await this._sendCommand(
+                parts.join(" "),
+                (line) => line.startsWith("bestmove"),
+                (line) => {
+                    if (line.startsWith("info") && line.includes(" pv ")) {
+                        const moves = line.split(" pv ")[1]?.split(" ");
+                        if (moves && moves[0]) currentBestMove = moves[0];
+                    }
+                },
+                safeTimeout,
+            );
+            return response.split(" ")[1];
+        } catch (e) {
+            console.error("[Engine] Error during 'go':", e);
+            return currentBestMove !== "(none)" ? currentBestMove : "0000";
+        }
+    }
+
+    // stop shuts down an engine
     async stop() {
         this.isShuttingDown = true;
         this.ready = false;
@@ -201,7 +242,7 @@ export class UciEngine extends EventEmitter {
     async uciNewGame() {
         await this.ensureReady();
         await this._sendRaw("ucinewgame");
-        await this._sendCommand("isready", (l) => l === "readyok");
+        await this._sendCommand("isready", (line) => line === "readyok");
     }
 
     async setOption(name, value) {
@@ -215,47 +256,6 @@ export class UciEngine extends EventEmitter {
         let cmd = fen === "startpos" ? "position startpos" : `position fen ${fen}`;
         if (moves.length > 0) cmd += ` moves ${moves.join(" ")}`;
         await this._sendRaw(cmd);
-    }
-
-    async go(options = {}) {
-        await this.ensureReady();
-
-        const parts = ["go"];
-        if (options.depth) parts.push(`depth ${options.depth}`);
-
-        // UCI: movetime and clock params (wtime/btime/winc/binc) are mutually
-        // exclusive search modes. Sending both is undefined behavior — some
-        // engines ignore movetime and use their own (shorter) clock budget.
-        // When moveTime is provided it is the authoritative search limit.
-        if (options.moveTime) {
-            parts.push(`movetime ${options.moveTime}`);
-        } else {
-            if (options.whiteTime) parts.push(`wtime ${options.whiteTime}`);
-            if (options.blackTime) parts.push(`btime ${options.blackTime}`);
-            if (options.whiteInc  != null) parts.push(`winc ${options.whiteInc}`);
-            if (options.blackInc  != null) parts.push(`binc ${options.blackInc}`);
-        }
-
-        let safeTimeout = options.moveTime ? options.moveTime + this.commandTimeoutBufferMs : (options.whiteTime ? 60000 * 5 : 60000);
-        let currentBestMove = "(none)";
-
-        try {
-            const response = await this._sendCommand(
-                parts.join(" "),
-                (line) => line.startsWith("bestmove"),
-                (line) => {
-                    if (line.startsWith("info") && line.includes(" pv ")) {
-                        const moves = line.split(" pv ")[1]?.split(" ");
-                        if (moves && moves[0]) currentBestMove = moves[0];
-                    }
-                },
-                safeTimeout,
-            );
-            return response.split(" ")[1];
-        } catch (e) {
-            console.error("[Engine] Error during 'go':", e);
-            return currentBestMove !== "(none)" ? currentBestMove : "0000";
-        }
     }
 
     async goWithEval(options = {}) {
@@ -437,4 +437,3 @@ export class EngineManager {
         console.log("[Manager] All engines shut down successfully.");
     }
 }
-

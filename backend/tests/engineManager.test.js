@@ -62,9 +62,10 @@ async function tick(ms = 5) {
 
 async function quickStart(engine, spawnFn) {
     const startP = engine.start();
-    await tick();
+    await tick(5);
     const proc = spawnFn.processes[spawnFn.processes.length - 1];
     proc._pushLine("uciok");
+    await tick(10);
     proc._pushLine("readyok");
     await startP;
     return proc;
@@ -79,6 +80,15 @@ describe("UciEngine.start()", () => {
         expect(spawnFn).toHaveBeenCalledTimes(1);
         expect(engine.ready).toBe(true);
         expect(proc._stdinWrites).toEqual(["uci\n", "isready\n"]);
+    });
+
+    it("sends 'setoption name OwnBook value true' and 'setoption name BookFile value <bookPath>' if bookPath is configured", async () => {
+        const spawnFn = makeSpawnFn();
+        const engine = new UciEngine("/fake/engine", { spawnFn, handshakeTimeoutMs: 200, bookPath: "/some/book.bin" });
+        const proc = await quickStart(engine, spawnFn);
+
+        expect(proc._stdinWrites).toContain("setoption name OwnBook value true\n");
+        expect(proc._stdinWrites).toContain("setoption name BookFile value /some/book.bin\n");
     });
 
     it("throws when the spawned process has no pid", async () => {
