@@ -586,7 +586,7 @@ export class LichessBot {
         // Specific Opening Logic for Autoplay
         let currentOpeningId = this.gameOpenings.get(gameId);
         if (!currentOpeningId) {
-            currentOpeningId = myColor === "white" 
+            currentOpeningId = myColor === "w" || myColor === "white"
                 ? (this.autoplay?.whiteOpeningId || "balanced")
                 : (this.autoplay?.blackOpeningId || "balanced");
 
