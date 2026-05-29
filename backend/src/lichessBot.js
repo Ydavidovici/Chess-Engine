@@ -105,7 +105,7 @@ export class LichessBot {
         this.autoplay = null; // {limit, increment, rated, target, backoffMs, timer, huntInFlight}
     }
 
-    startAutoplay({limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200, openingId = "balanced", whiteOpeningId = null, blackOpeningId = null} = {}) {
+    startAutoplay({limit = 180, increment = 2, rated = true, target = 1, mode = "near", window = 200, whiteOpeningId = null, blackOpeningId = null} = {}) {
         this.stopAutoplay();
 
         // target = how many active games we'd like to keep going at once.
@@ -119,7 +119,6 @@ export class LichessBot {
             target: cappedTarget,
             mode,       // "near" (default) or "weakest"
             window,     // only used when mode === "near"
-            openingId,
             whiteOpeningId,
             blackOpeningId,
             currentBackoffMs: 0,
@@ -127,10 +126,11 @@ export class LichessBot {
             huntInFlight: false,
         };
 
-        this.notifier.info("[Autoplay] Autoplay enabled", {limit, increment, rated, target: cappedTarget, mode, window, openingId, whiteOpeningId, blackOpeningId});
-        const wStr = whiteOpeningId ? `, white=${whiteOpeningId}` : "";
-        const bStr = blackOpeningId ? `, black=${blackOpeningId}` : "";
-        console.log(`[Autoplay] Enabled (${limit}+${increment} ${rated ? "rated" : "casual"}, target=${cappedTarget}, mode=${mode}${mode === "near" ? `, window=±${window}` : ""}, opening=${openingId}${wStr}${bStr})`);
+        this.notifier.info("[Autoplay] Autoplay enabled", {limit, increment, rated, target: cappedTarget, mode, window, whiteOpeningId, blackOpeningId});
+        const wStr = whiteOpeningId ? `white=${whiteOpeningId}` : "";
+        const bStr = blackOpeningId ? `${wStr ? ", " : ""}black=${blackOpeningId}` : "";
+        const optStr = wStr || bStr ? `, ${wStr}${bStr}` : "";
+        console.log(`[Autoplay] Enabled (${limit}+${increment} ${rated ? "rated" : "casual"}, target=${cappedTarget}, mode=${mode}${mode === "near" ? `, window=±${window}` : ""}${optStr})`);
         this._tickAutoplay();
     }
 
@@ -144,8 +144,8 @@ export class LichessBot {
 
     autoplayStatus() {
         if (!this.autoplay) return {enabled: false};
-        const {limit, increment, rated, target, mode, window, openingId, currentBackoffMs, huntInFlight} = this.autoplay;
-        return {enabled: true, limit, increment, rated, target, mode, window, openingId, currentBackoffMs, huntInFlight, active: this.activeGames.size};
+        const {limit, increment, rated, target, mode, window, whiteOpeningId, blackOpeningId, currentBackoffMs, huntInFlight} = this.autoplay;
+        return {enabled: true, limit, increment, rated, target, mode, window, whiteOpeningId, blackOpeningId, currentBackoffMs, huntInFlight, active: this.activeGames.size};
     }
 
     // Kick the autoplay loop. Idempotent. Called after every game ends and on a
@@ -587,8 +587,8 @@ export class LichessBot {
         let currentOpeningId = this.gameOpenings.get(gameId);
         if (!currentOpeningId) {
             currentOpeningId = myColor === "white" 
-                ? (this.autoplay?.whiteOpeningId || this.autoplay?.openingId || "balanced")
-                : (this.autoplay?.blackOpeningId || this.autoplay?.openingId || "balanced");
+                ? (this.autoplay?.whiteOpeningId || "balanced")
+                : (this.autoplay?.blackOpeningId || "balanced");
 
             if (currentOpeningId === "random_tactical" || currentOpeningId === "random_positional") {
                 const targetStyle = currentOpeningId === "random_tactical" ? "tactical" : "positional";

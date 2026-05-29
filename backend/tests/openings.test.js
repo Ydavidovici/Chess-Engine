@@ -50,9 +50,9 @@ describe("Opening Book Features", () => {
             bot.sendMove = mock(async () => true);
         });
 
-        it("should force specific opening move if openingId matches OPENINGS dict", async () => {
+        it("should force specific opening move if whiteOpeningId/blackOpeningId matches OPENINGS dict", async () => {
             // Sicilian is defined as: e2e4 c7c5
-            bot.startAutoplay({ openingId: "sicilian" });
+            bot.startAutoplay({ blackOpeningId: "sicilian" });
             bot.gameOpenings.set("game123", "sicilian");
             
             // Scenario: We are black. White just played e2e4.
@@ -64,7 +64,7 @@ describe("Opening Book Features", () => {
         });
 
         it("should fallback to engine if moves diverge from forced opening", async () => {
-            bot.startAutoplay({ openingId: "sicilian" }); // e2e4 c7c5
+            bot.startAutoplay({ blackOpeningId: "sicilian" }); // e2e4 c7c5
             bot.gameOpenings.set("game123", "sicilian");
             
             // Scenario: White played d2d4 (diverged from e2e4)
@@ -77,14 +77,15 @@ describe("Opening Book Features", () => {
         });
 
         it("should fallback to engine if the specific opening is over", async () => {
-            bot.startAutoplay({ openingId: "sicilian" }); // e2e4 c7c5
+            bot.startAutoplay({ blackOpeningId: "sicilian" }); // Najdorf
             bot.gameOpenings.set("game123", "sicilian");
             
-            // Scenario: Both e2e4 and c7c5 have been played. Next move is White's. Then Black's turn again.
-            await bot.makeMove(fakeEngine, "game123", "startpos", "e2e4 c7c5 g1f3", "black", {}, 1000);
+            // Scenario: All moves of Najdorf have been played. Next move is White's. Then Black's turn again.
+            const fullNajdorf = "e2e4 c7c5 g1f3 d7d6 d2d4 c5d4 f3d4 g8f6 b1c3 a7a6 c1e3";
+            await bot.makeMove(fakeEngine, "game123", "startpos", fullNajdorf, "black", {}, 1000);
             
             expect(bot.sendMove).toHaveBeenCalledWith("game123", "a1a2");
-            expect(fakeEngine.position).toHaveBeenCalledWith("startpos", ["e2e4", "c7c5", "g1f3"]);
+            expect(fakeEngine.position).toHaveBeenCalledWith("startpos", fullNajdorf.split(" "));
         });
 
         it("should apply whiteOpeningId when playing as white and blackOpeningId when playing as black", async () => {

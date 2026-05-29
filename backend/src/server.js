@@ -224,14 +224,13 @@ export function createApp({
             target = 1,
             mode = "near",
             window = 200,
-            openingId = "balanced",
             whiteOpeningId = null,
             blackOpeningId = null
         } = req.body ?? {};
-        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window, openingId, whiteOpeningId, blackOpeningId});
+        lichessBotInstance.startAutoplay({limit, increment, rated, target, mode, window, whiteOpeningId, blackOpeningId});
         res.json({
             status: "success",
-            message: `Autoplay started (${limit}+${increment} ${rated ? 'rated' : 'casual'}, target=${target}, opening=${openingId})`,
+            message: `Autoplay started (${limit}+${increment} ${rated ? 'rated' : 'casual'}, target=${target})`,
             autoplay: lichessBotInstance.autoplayStatus()
         });
     });
