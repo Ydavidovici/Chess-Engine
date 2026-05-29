@@ -15,8 +15,10 @@ describe("Opening Book Features", () => {
             const fakeUrl = "https://raw.githubusercontent.com/gmcheems-org/free-opening-books/master/README.md";
             const scriptPath = path.resolve(__dirname, "../src/scripts/downloadBook.js");
             
+            const testOutPath = path.resolve(__dirname, "test-book-output.bin");
             const proc = spawn({
                 cmd: ["bun", "run", scriptPath, fakeUrl],
+                env: { ...process.env, BOOK_OUT_PATH: testOutPath },
                 stdout: "pipe",
                 stderr: "pipe"
             });
@@ -26,6 +28,9 @@ describe("Opening Book Features", () => {
             
             const stdout = await new Response(proc.stdout).text();
             expect(stdout).toContain("Successfully downloaded and saved");
+            
+            // Clean up the test artifact
+            await Bun.file(testOutPath).delete().catch(() => {});
         }, 10000);
     });
 

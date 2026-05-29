@@ -33,3 +33,7 @@ engines/stockfish
 /engines/stash/
 /engines/ethereal/
 /tools/
+
+# Ignore large opening books
+engines/myengine/*.bin
+engines/myengine/*.7z

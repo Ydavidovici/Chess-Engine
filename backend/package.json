@@ -12,7 +12,11 @@
         "setup": "bun run src/scripts/setup_cutie.js",
         "db:generate": "drizzle-kit generate",
         "db:migrate": "bun run src/scripts/migrate.js",
-        "download:book": "bun run src/scripts/downloadBook.js"
+        "download:book": "bun run src/scripts/downloadBook.js",
+        "download:book:gm2001": "bun run src/scripts/downloadBook.js https://github.com/gmcheems-org/free-opening-books/raw/main/books/bin/gm2001.bin",
+        "download:book:titans": "bun run src/scripts/downloadBook.js https://github.com/gmcheems-org/free-opening-books/raw/main/books/bin/Titans.bin",
+        "download:book:human": "bun run src/scripts/downloadBook.js https://github.com/gmcheems-org/free-opening-books/raw/main/books/bin/Human.bin",
+        "download:book:cerebellum": "bun run src/scripts/downloadCerebellum.js"
     },
     "devDependencies": {
         "@types/bun": "latest",
