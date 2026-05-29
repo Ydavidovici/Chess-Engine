@@ -17,7 +17,13 @@ private:
     int evaluateMaterial(const Board& board) const;
     int evaluatePositional(const Board& board) const;
 
-    const int pieceValues[PST_COUNT] = {100, 320, 330, 500, 900, 20000};
+    int pieceValues[PST_COUNT] = {100, 320, 330, 500, 900, 20000};
+
+    // For Texel Tuning
+    int getParameterCount() const;
+    int getParameter(int index) const;
+    void setParameter(int index, int value);
+    void updateBlackTables();
 
     std::vector<int> whitePawnTable;
     std::vector<int> whiteKnightTable;

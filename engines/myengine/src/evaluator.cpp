@@ -168,6 +168,47 @@ void Evaluator::initializePieceSquareTables() {
         -50, -30, -30, -30, -30, -30, -30, -50
     };
 
+    updateBlackTables();
+}
+
+int Evaluator::getParameterCount() const {
+    return 6 + 6 * 64; // 6 piece values + 6 tables (P, N, B, R, Q, K_MG)
+}
+
+int Evaluator::getParameter(int index) const {
+    if (index < 6) return pieceValues[index];
+    index -= 6;
+    if (index < 64) return whitePawnTable[index];
+    index -= 64;
+    if (index < 64) return whiteKnightTable[index];
+    index -= 64;
+    if (index < 64) return whiteBishopTable[index];
+    index -= 64;
+    if (index < 64) return whiteRookTable[index];
+    index -= 64;
+    if (index < 64) return whiteQueenTable[index];
+    index -= 64;
+    if (index < 64) return whiteKingTableMG[index];
+    return 0;
+}
+
+void Evaluator::setParameter(int index, int value) {
+    if (index < 6) { pieceValues[index] = value; return; }
+    index -= 6;
+    if (index < 64) { whitePawnTable[index] = value; return; }
+    index -= 64;
+    if (index < 64) { whiteKnightTable[index] = value; return; }
+    index -= 64;
+    if (index < 64) { whiteBishopTable[index] = value; return; }
+    index -= 64;
+    if (index < 64) { whiteRookTable[index] = value; return; }
+    index -= 64;
+    if (index < 64) { whiteQueenTable[index] = value; return; }
+    index -= 64;
+    if (index < 64) { whiteKingTableMG[index] = value; return; }
+}
+
+void Evaluator::updateBlackTables() {
     auto mirror = [](const std::vector<int>& white, std::vector<int>& black) {
         black.resize(64);
         for (int i = 0; i < 64; ++i) {
