@@ -592,7 +592,7 @@ export class LichessBot {
 
             if (currentOpeningId === "random_tactical" || currentOpeningId === "random_positional") {
                 const targetStyle = currentOpeningId === "random_tactical" ? "tactical" : "positional";
-                const choices = Object.keys(OPENINGS).filter(k => OPENINGS[k].style === targetStyle);
+                const choices = Object.keys(OPENINGS).filter(k => OPENINGS[k].style === targetStyle && OPENINGS[k].type !== "category");
                 if (choices.length > 0) {
                     currentOpeningId = choices[Math.floor(Math.random() * choices.length)];
                 }
