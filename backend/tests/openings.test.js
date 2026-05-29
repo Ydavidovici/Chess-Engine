@@ -2,6 +2,7 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { LichessBot } from "../src/lichessBot.js";
+import { OPENINGS } from "../src/openings.js";
 import { spawn } from "bun";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -101,5 +102,44 @@ describe("Opening Book Features", () => {
             expect(bot.gameOpenings.get("gameB")).toBe("sicilian");
             expect(bot.sendMove).toHaveBeenCalledWith("gameB", "c7c5");
         });
+    });
+
+    describe("All Configured Openings", () => {
+        let fakeEngine;
+        let bot;
+
+        beforeEach(() => {
+            fakeEngine = {
+                position: mock(async () => {}),
+                setOption: mock(async () => {}),
+                start: mock(async () => {}),
+                go: mock(async () => "a1a2"),
+                goWithEval: mock(async () => ({ bestMove: "a1a2" }))
+            };
+            bot = new LichessBot("fake_token", () => fakeEngine, { maxConcurrentGames: 1 });
+            bot.sendMove = mock(async () => true);
+        });
+
+        for (const [id, config] of Object.entries(OPENINGS)) {
+            if (config.type === "category") continue;
+
+            it(`should correctly play the first move for ${id} as white`, async () => {
+                bot.startAutoplay({ whiteOpeningId: id });
+                await bot.makeMove(fakeEngine, "test_w", "startpos", "", "white", {}, 1000);
+                
+                // If it's a valid opening, it should send the very first move
+                expect(bot.sendMove).toHaveBeenCalledWith("test_w", config.moves[0]);
+            });
+
+            it(`should correctly play the first move for ${id} as black (if white plays book)`, async () => {
+                // To test black, we assume white played the first move of the book.
+                // If the book is only 1 move long, black's response falls back to engine.
+                if (config.moves.length > 1) {
+                    bot.startAutoplay({ blackOpeningId: id });
+                    await bot.makeMove(fakeEngine, "test_b", "startpos", config.moves[0], "black", {}, 1000);
+                    expect(bot.sendMove).toHaveBeenCalledWith("test_b", config.moves[1]);
+                }
+            });
+        }
     });
 });
