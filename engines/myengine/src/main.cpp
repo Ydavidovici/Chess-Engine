@@ -79,6 +79,13 @@ static bool dispatch_uci(const std::string& rawLine, Engine& engine) {
 }
 
 static void handle_uci(const std::string& line, Engine& engine) {
+    #ifndef ENGINE_VERSION
+    #define ENGINE_VERSION "dev"
+    #endif
+
+    std::cout << "id name Chess-Engine v" << ENGINE_VERSION << "\n";
+    std::cout << "id author Antigravity\n";
+
     // TODO: OwnBook advertises "default true" but is effectively off until a BookFile is
     // loaded. Consider advertising "default false" to match actual behaviour, or set
     // use_book=true only after a successful load (see TODO in main.h).
