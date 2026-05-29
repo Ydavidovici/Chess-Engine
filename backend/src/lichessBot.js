@@ -668,16 +668,36 @@ export class LichessBot {
 
     // Returns true if Lichess accepted the move, false otherwise. Caller
     // decides what to do with repeated failures (typically: resign).
-    async sendMove(gameId, move) {
-        const res = await this._lichessFetch(`https://lichess.org/api/bot/game/${gameId}/move/${move}`, {
-            method: "POST",
-            headers: this.authHeader,
-        });
-        if (!res.ok) {
-            console.warn(`[${gameId}] Move rejected (${move}): ${await res.text()}`);
-            return false;
+    async sendMove(gameId, move, retries = 2) {
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+                const res = await this._lichessFetch(`https://lichess.org/api/bot/game/${gameId}/move/${move}`, {
+                    method: "POST",
+                    headers: this.authHeader,
+                    timeoutMs: 5000,
+                });
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.warn(`[${gameId}] Move rejected (${move}): HTTP ${res.status} ${text}`);
+                    if (res.status >= 500) {
+                        if (attempt < retries) {
+                            await new Promise(r => setTimeout(r, 1000));
+                            continue;
+                        }
+                    }
+                    return false;
+                }
+                return true;
+            } catch (err) {
+                console.warn(`[${gameId}] Move API failed (${move}): ${err.message} (attempt ${attempt + 1}/${retries + 1})`);
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, 1000));
+                    continue;
+                }
+                return false;
+            }
         }
-        return true;
+        return false;
     }
 
     async resignGame(gameId) {
