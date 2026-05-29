@@ -36,7 +36,8 @@ export default function LichessPage() {
         rated: true,         // Rated or Casual
         mode: "near",        // Matchmaking mode
         window: 200,         // Rating window
-        openingId: "balanced"
+        whiteOpeningId: "balanced",
+        blackOpeningId: "balanced"
     });
 
     useEffect(() => {
@@ -49,7 +50,8 @@ export default function LichessPage() {
                 rated: activeStatus.lichess.autoplay.rated,
                 mode: activeStatus.lichess.autoplay.mode,
                 window: activeStatus.lichess.autoplay.window,
-                openingId: activeStatus.lichess.autoplay.openingId || "balanced"
+                whiteOpeningId: activeStatus.lichess.autoplay.whiteOpeningId || "balanced",
+                blackOpeningId: activeStatus.lichess.autoplay.blackOpeningId || "balanced"
             }));
         }
     }, [activeStatus?.lichess?.autoplay]);
@@ -188,9 +190,20 @@ export default function LichessPage() {
                                 <span className="text-sm font-bold text-white">Play Rated Games</span>
                             </label>
                         </div>
-                        <div className="space-y-2 md:col-span-2 lg:col-span-3">
-                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Opening Style</label>
-                            <select value={autoplayConfig.openingId} onChange={(e) => setAutoplayConfig({...autoplayConfig, openingId: e.target.value})} className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500" disabled={activeStatus?.lichess?.autoplay?.enabled}>
+                        <div className="space-y-2 lg:col-span-1">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">White Opening Style</label>
+                            <select value={autoplayConfig.whiteOpeningId || "balanced"} onChange={(e) => setAutoplayConfig({...autoplayConfig, whiteOpeningId: e.target.value})} className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500" disabled={activeStatus?.lichess?.autoplay?.enabled}>
+                                <option value="balanced">Balanced (Global Book)</option>
+                                <option value="random_tactical">Random Tactical</option>
+                                <option value="random_positional">Random Positional</option>
+                                {Object.entries(openings).map(([id, config]) => (
+                                    <option key={id} value={id}>{config.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-2 lg:col-span-1">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Black Opening Style</label>
+                            <select value={autoplayConfig.blackOpeningId || "balanced"} onChange={(e) => setAutoplayConfig({...autoplayConfig, blackOpeningId: e.target.value})} className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-yellow-500" disabled={activeStatus?.lichess?.autoplay?.enabled}>
                                 <option value="balanced">Balanced (Global Book)</option>
                                 <option value="random_tactical">Random Tactical</option>
                                 <option value="random_positional">Random Positional</option>
